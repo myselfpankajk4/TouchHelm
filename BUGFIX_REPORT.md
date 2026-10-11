@@ -51,7 +51,17 @@ After the rename, fresh verification passed 80 Python tests, 50 JavaScript tests
 
 ## Verification
 
-Fresh verification passed **80/80 safe Python tests, 49/49 JavaScript tests, and 38/38 real-DOM browser scenarios**, including the final explicit disclosure-chevron repair. Focused provider coverage includes actual PowerShell functions with mocked session/queue objects and mocked native mutation boundaries. The initial independent review matched the approved interface except for disclosures. The final scored review covered that sole repair: resolved, remaining findings clear, disposition **ship**.
+### Icon restoration and shortcut repair
+
+Restored local SVG icons across the phone's trackpad controls, presenter commands, timer, media controls/library, keyboard keys and editing shortcuts, Windows shortcuts, and typing dock. The original mouse mark is visible in the phone header and now matches the desktop header, window, tray, and shortcut. Send/Enter and Start/Pause update their label and glyph without deleting the icon.
+
+Fresh verification passed 82 Python tests, 51 JavaScript tests, and the 39-scenario browser matrix. Four desktop fixture previews were rendered. The final catalog alignment adjustment received a focused confirmation across six viewport sizes and all five themes. Tests substitute native effects; this does not claim a physical phone or live media/presentation smoke test.
+
+The local TouchHelm (Latest) shortcut now has normal window style and the app's ICO asset. Launching it produced a visible, non-minimized desktop window and a listening host; a read-only HTTP check confirmed the updated logo/icon HTML with `Cache-Control: no-store`. It continues to run source from `D:/Mouse/run.bat`. A running host must be closed before relaunching Python changes.
+
+### Previous redesign verification
+
+The earlier redesign verification passed **80/80 safe Python tests, 49/49 JavaScript tests, and 38/38 real-DOM browser scenarios**, including the final explicit disclosure-chevron repair. Focused provider coverage includes actual PowerShell functions with mocked session/queue objects and mocked native mutation boundaries. The initial independent review matched the approved interface except for disclosures. The final scored review covered that sole repair: resolved, remaining findings clear, disposition **ship**.
 
 The fresh browser matrix passed narrow-phone, landscape, keyboard-reduced, and desktop-browser checks at 320×568, 360×640, 390×844, 844×390, 390×420, and 1440×900, with all five themes, populated metadata, and offline/PIN/settings-error screens. Empty/missing metadata and unavailable providers were covered by logic/provider tests, not an empty-context screenshot. Transparent Tk previews passed for pairing/settings at normal 880×700 and minimum 820×620 sizes, producing four images. Fresh artifacts are saved under `tests/artifacts`.
 

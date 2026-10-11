@@ -130,6 +130,7 @@ Controls use gently rounded corners, with smaller radii for dense keys and large
 
 ## Components
 
+- **Brand and icons:** use the existing mouse, cyan wheel, and red laser-dot mark in the phone header, desktop header, window, tray, and shortcut. Local SVG control icons sit beside labels; changing action labels preserves their icon. Catalog icons align with their text, and compact tool glyphs preserve movement space.
 - **Buttons:** solid accent for primary actions, tonal secondary controls, quiet icon/text actions. Disabled remote controls use reduced opacity; held keys use the accent fill and contrast text. Focus-visible uses a 2px accent outline offset by 3px.
 - **Navigation:** five equal destinations with icon and label. Selected state combines accent text, a tonal background, and semantic selection state.
 - **Typing dock:** rounded bordered surface, compact at rest, expanding on focus. Send/Enter is primary; Clear and Done are secondary. Collapsing preserves the text.

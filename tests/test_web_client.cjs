@@ -554,6 +554,27 @@ test('native chords, nested numpad, timer reset, current context and catalogs wo
   assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='launch_app' && p.app_id==='app-notes')));
 });
 
+test('restored app mark and control icons remain visible through action-state changes', async page => {
+  assert.ok(await page.locator('.brand-logo').evaluate(el=>el.complete && el.naturalWidth>0));
+  for (const view of ['Trackpad','Presenter','Media','Keyboard','Apps']) {
+    await page.locator(`.nav-tab[data-view="view${view}"]`).click();
+    assert.ok(await page.locator('.brand-logo').isVisible());
+    const unresolved=await page.locator(`#view${view} svg use`).evaluateAll(uses=>uses.map(use=>use.getAttribute('href')).filter(ref=>!document.querySelector(ref)));
+    assert.deepEqual(unresolved,[], `${view} icons resolve locally`);
+    assert.ok(await page.locator(`#view${view} .ui-icon`).count()>0);
+  }
+  await typingView(page);
+  assert.equal(await page.locator('#btnSendText use').getAttribute('href'),'#th-icon-enter');
+  await page.locator('#chkRealtimeTyping').uncheck();
+  assert.equal(await page.locator('#btnSendText use').getAttribute('href'),'#th-icon-send');
+  await page.locator('.nav-tab[data-view="viewPresenter"]').click();
+  await page.locator('.timer-details summary').click();
+  await page.locator('#btnTimerStart').click();
+  assert.equal(await page.locator('#btnTimerStart use').getAttribute('href'),'#th-icon-pause');
+  await page.locator('#btnTimerReset').click();
+  assert.equal(await page.locator('#btnTimerStart use').getAttribute('href'),'#th-icon-play');
+});
+
 test('server update reloads the latest UI and restores an unsent draft', async page => {
   await typingView(page); await page.locator('#chkRealtimeTyping').uncheck();
   await input(page,'saved across update','insertText','saved across update');

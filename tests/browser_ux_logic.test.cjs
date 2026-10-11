@@ -96,6 +96,18 @@ test('typing mode names the existing Send/Enter action', () => {
   assert.match(client.typingHint.textContent, /send|draft/i);
 });
 
+test('dynamic button labels retain their icon and update its action', () => {
+  const {client}=fixture();
+  const label={textContent:'Send'}, use={setAttribute(name,value){this[name]=value;}};
+  const button={querySelector(selector){return selector==='.button-label'?label:use;},
+    set textContent(_) {throw new Error('Button icon was removed');}};
+  client.setButtonLabel(button,'Enter','enter');
+  assert.equal(label.textContent,'Enter');
+  assert.equal(use.href,'#th-icon-enter');
+  client.setButtonLabel(button,'Pause','pause');
+  assert.equal(use.href,'#th-icon-pause');
+});
+
 test('settings failures preserve connected status and recover on a successful update', async () => {
   let success = false;
   const { client } = fixture({ fetch: async () => ({ ok: success, status: 500 }) });

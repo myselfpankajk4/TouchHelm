@@ -52,6 +52,13 @@
       const element = document.createElement(tag); if (text != null) element.textContent = String(text);
       if (className) element.className = className; return element;
     }
+    icon(name) {
+      if (!document.createElementNS) return null;
+      const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+      for (const [key,value] of Object.entries({class:'ui-icon',viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'1.8','stroke-linecap':'round','stroke-linejoin':'round','aria-hidden':'true',focusable:'false'})) svg.setAttribute(key,value);
+      const use=document.createElementNS('http://www.w3.org/2000/svg','use');
+      use.setAttribute('href',`#th-icon-${name}`); svg.appendChild(use); return svg;
+    }
     text(id, value) { if (this.ids[id]) this.ids[id].textContent = String(value ?? ''); }
 
     buildKeyboard() {
@@ -68,6 +75,9 @@
     }
     makeKey(key, label) {
       const button = this.node('button', label, `native-key${modifiers.has(key) ? ' modifier-key' : ''}`);
+      const keyIcon={lshift:'shift',win:'windows',backspace:'backspace',enter:'enter',numpadenter:'enter',left:'left',right:'right',up:'up',down:'down'}[key];
+      const glyph=keyIcon && this.icon(keyIcon);
+      if (glyph) { button.textContent=''; button.append(glyph,this.node('span',label)); button.classList.add('has-key-icon'); }
       button.type = 'button'; button.dataset.key = key;
       button.setAttribute('aria-label', `${label}${key.startsWith('numpad') ? ' on numpad' : ''}`);
       button.setAttribute('aria-pressed', 'false');
@@ -232,6 +242,7 @@
         const text=this.node('span',null,'catalog-text'); text.appendChild(this.node('strong',app.name));
         text.appendChild(this.node('span',app.running ? 'Running' : number(app.launches)>0 ? `${app.launches} TouchHelm launches` : 'Installed app'));
         button.append(mark,text);
+        const launchGlyph=this.icon('right'); if (launchGlyph) button.appendChild(launchGlyph);
         button.addEventListener('click',() => {
           if (!this.connected || this.pendingApps.has(app.id)) return;
           if (this.send({type:'launch_app',app_id:app.id})) {
@@ -265,6 +276,8 @@
         const button=this.node('button',null,'catalog-item media-item'); button.type='button'; button.dataset.itemId=item.id; button.disabled=!this.connected;
         const text=this.node('span',null,'catalog-text'); text.appendChild(this.node('strong',item.title || 'Untitled media'));
         text.appendChild(this.node('span',item.subtitle || (item.kind==='local'?'Local file':item.kind==='queue'?'Player queue':'Media session')));
+        const mediaGlyph=this.icon(/\.(mp4|mkv|avi|mov|wmv|webm)$/i.test(item.title || '')?'video':'music');
+        if (mediaGlyph) button.appendChild(mediaGlyph);
         button.appendChild(text); button.addEventListener('click',() => {
           if (!this.connected) return;
           const message={type:'play_media',item_id:item.id}; if (this.client.selectedMediaSession) message.session_id=this.client.selectedMediaSession;

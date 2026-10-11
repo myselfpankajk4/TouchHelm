@@ -15,7 +15,7 @@ import tkinter as tk
 from tkinter import ttk
 import qrcode
 import pystray
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageTk
 
 from server.config import ConfigManager
 from server.discovery import get_local_ip_addresses
@@ -52,21 +52,29 @@ except Exception:
     pass
 
 
+def create_brand_image(size=64):
+    """Native raster of web/icons/icon.svg: mouse, cyan wheel and red laser dot."""
+    image = Image.new("RGBA", (512, 512))
+    draw = ImageDraw.Draw(image)
+    for y in range(512):
+        blend = y / 511
+        color = tuple(round(start + (end - start) * blend)
+                      for start, end in zip((15, 23, 42), (2, 6, 23)))
+        draw.line((0, y, 511, y), fill=(*color, 255))
+    mask = Image.new("L", (512, 512))
+    ImageDraw.Draw(mask).rounded_rectangle((0, 0, 511, 511), radius=128, fill=255)
+    image.putalpha(mask)
+    draw.rounded_rectangle((2, 2, 509, 509), radius=126, outline="#253047", width=4)
+    draw.rounded_rectangle((134, 84, 378, 428), radius=122, outline="#3b82f6", width=24)
+    draw.line((256, 96, 256, 210), fill="#3b82f6", width=20)
+    draw.ellipse((246, 86, 266, 106), fill="#3b82f6")
+    draw.rounded_rectangle((236, 140, 276, 210), radius=20, fill="#38bdf8")
+    draw.ellipse((240, 314, 272, 346), fill="#ef4444")
+    return image.resize((size, size), Image.Resampling.LANCZOS)
+
+
 def create_tray_image():
-    """Generates a high-contrast 64x64 icon for the system tray in RGB mode.
-    Ensures crisp visibility on both dark and light Windows taskbars/trays."""
-    img = Image.new("RGB", (64, 64), color=(14, 165, 233))  # Vibrant Sky Blue
-    d = ImageDraw.Draw(img)
-    # Inner contrast card
-    d.rounded_rectangle([4, 4, 59, 59], radius=12, fill=(15, 23, 42), outline=(255, 255, 255), width=2)
-    # Trackpad surface
-    d.rounded_rectangle([12, 10, 51, 53], radius=6, fill=(30, 41, 59), outline=(56, 189, 248), width=2)
-    # Center touch divider lines
-    d.line([32, 12, 32, 28], fill=(56, 189, 248), width=2)
-    d.line([14, 28, 49, 28], fill=(56, 189, 248), width=2)
-    # Vibrant Lime touch point
-    d.ellipse([25, 34, 38, 47], fill=(74, 222, 128))
-    return img
+    return create_brand_image(64)
 
 
 
@@ -95,12 +103,20 @@ class TouchHelmDesktopApp:
         self.port = self.config.get("port", 8765)
         self.tray_icon = None
 
+        self._init_brand_images()
         self._init_styles()
         self._build_ui()
         self._refresh_network_info()
         self._start_periodic_updates()
         self._init_tray_icon()
         self.root.protocol("WM_DELETE_WINDOW", self._exit_app)
+
+    def _init_brand_images(self):
+        # Tk images need Python owners for their entire visible lifetime.
+        self.brand_photo = ImageTk.PhotoImage(create_brand_image(48), master=self.root)
+        self.window_icons = [ImageTk.PhotoImage(create_brand_image(size), master=self.root)
+                             for size in (256, 64, 32)]
+        self.root.iconphoto(True, *self.window_icons)
 
     def _init_styles(self):
         style = ttk.Style(self.root)
@@ -137,6 +153,8 @@ class TouchHelmDesktopApp:
     def _build_ui(self):
         header = tk.Frame(self.root, bg=BG_CARD, padx=24, pady=16)
         header.pack(fill="x")
+        self.brand_label = tk.Label(header, image=self.brand_photo, bg=BG_CARD, bd=0)
+        self.brand_label.pack(side="left", padx=(0, 12))
         title = tk.Frame(header, bg=BG_CARD)
         title.pack(side="left")
         tk.Label(title, text="TouchHelm", font=("Segoe UI", 19, "bold"),

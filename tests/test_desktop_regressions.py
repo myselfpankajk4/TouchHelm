@@ -10,12 +10,42 @@ import threading
 import tempfile
 import types
 import unittest
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 from server import discovery
 from server.config import ConfigManager
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
+
+
+class DesktopBrandingTests(unittest.TestCase):
+    def gui_module(self):
+        from PIL import Image, ImageDraw
+        return load_module("desktop_brand_under_test", "gui/app_window.py", {
+            "pystray": types.SimpleNamespace(),
+            "PIL": types.SimpleNamespace(Image=Image, ImageDraw=ImageDraw,
+                                         ImageTk=types.SimpleNamespace(PhotoImage=Mock())),
+            "qrcode": types.SimpleNamespace(QRCode=object),
+        })
+
+    def test_window_icon_and_header_photo_remain_owned_by_app(self):
+        gui = self.gui_module()
+        app = gui.TouchHelmDesktopApp.__new__(gui.TouchHelmDesktopApp)
+        app.root = Mock()
+        app._init_brand_images()
+        app.root.iconphoto.assert_called_once_with(True, *app.window_icons)
+        self.assertIsNotNone(app.brand_photo)
+        self.assertTrue(all(icon is not None for icon in app.window_icons))
+
+    def test_tray_uses_the_same_mouse_wheel_laser_artwork(self):
+        gui = self.gui_module()
+        expected = gui.create_brand_image(64)
+        self.assertEqual(gui.create_tray_image().tobytes(), expected.tobytes())
+        self.assertEqual(expected.size, (64, 64))
+        # The laser dot distinguishes this mark from the removed trackpad icon.
+        red, green, blue, *_ = expected.getpixel((32, 41))
+        self.assertGreater(red, green * 2)
+        self.assertGreater(red, blue * 2)
 
 
 class InMemoryLoop(asyncio.AbstractEventLoop):
@@ -274,7 +304,7 @@ class TrayTests(unittest.TestCase):
 
         self.gui = load_module("desktop_gui_under_test", "gui/app_window.py", {
             "pystray": types.SimpleNamespace(Menu=Menu, MenuItem=MenuItem, Icon=Icon),
-            "PIL": types.SimpleNamespace(Image=object, ImageDraw=object),
+            "PIL": types.SimpleNamespace(Image=object, ImageDraw=object, ImageTk=object),
             "qrcode": types.SimpleNamespace(QRCode=object),
         })
 

@@ -72,7 +72,7 @@ Use your own four-digit PIN; `1234` is an example. Changing/enabling a PIN revok
 
 Pull changes, quit the existing host completely, then launch `run.bat` again. Minimizing to the tray keeps the old Python process running. The QR carries the current web build; the phone checks the server version on open/focus and can refresh a confirmed changed build while keeping a draft.
 
-Browser preferences and saved update drafts migrate from the former app name. This workspace's desktop shortcut is **TouchHelm (Latest)** and points to the source launcher.
+Browser preferences and saved update drafts migrate from the former app name. This workspace's desktop shortcut is **TouchHelm (Latest)** and points to the source launcher, opens in a normal window, and uses the TouchHelm icon. Close the running host before relaunching to load Python changes.
 
 ## App compatibility
 

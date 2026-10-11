@@ -694,9 +694,17 @@ class TouchHelmClient {
     this.updateTypingUi();
   }
 
+  setButtonLabel(button, text, icon) {
+    if (!button) return;
+    const label = button.querySelector?.('.button-label');
+    if (label) label.textContent = text;
+    else button.textContent = text;
+    if (icon) button.querySelector?.('use')?.setAttribute('href', `#th-icon-${icon}`);
+  }
+
   updateTypingUi() {
     const live = !!this.chkRealtimeTyping?.checked;
-    if (this.btnSendText) this.btnSendText.textContent = live ? "Enter" : "Send";
+    this.setButtonLabel(this.btnSendText, live ? "Enter" : "Send", live ? "enter" : "send");
     if (this.typeInput) this.typeInput.setAttribute?.("enterkeyhint", live ? "enter" : "send");
     if (this.typingHint) this.typingHint.textContent = !this.isConnected
       ? "Offline. Your draft stays here until you reconnect."
@@ -1564,7 +1572,7 @@ class TouchHelmClient {
       if (this.timerSeconds <= 0) this.timerSeconds = this.timerInitial;
       this.timerRunning = true;
       this.timerDeadline = Date.now() + this.timerSeconds * 1000;
-      if (this.btnTimerStart) this.btnTimerStart.textContent = "Pause";
+      this.setButtonLabel(this.btnTimerStart, "Pause", "pause");
       this.vibrate(20);
       this.timerInterval = setInterval(() => this.tickTimer(), 250);
       this.updateTimerDisplay();
@@ -1576,7 +1584,7 @@ class TouchHelmClient {
     this.timerInterval = null;
     this.timerRunning = false;
     this.timerDeadline = null;
-    if (this.btnTimerStart) this.btnTimerStart.textContent = "Start";
+    this.setButtonLabel(this.btnTimerStart, "Start", "play");
   }
 
   tickTimer() {
@@ -1941,7 +1949,7 @@ class TouchHelmClient {
         this.timerSeconds = Math.max(0, Math.min(state.timerSeconds || 0, 86400));
         this.timerRunning = !!state.timerRunning && Number.isFinite(state.timerDeadline);
         this.timerDeadline = this.timerRunning ? state.timerDeadline : null;
-        if (this.btnTimerStart) this.btnTimerStart.textContent = this.timerRunning ? "Pause" : "Start";
+        this.setButtonLabel(this.btnTimerStart, this.timerRunning ? "Pause" : "Start", this.timerRunning ? "pause" : "play");
         this.presetBtns?.forEach(button => {
           const seconds = Number(button.getAttribute("data-time")) || Number(button.getAttribute("data-mins")) * 60;
           const selected = seconds === this.timerInitial;

@@ -1,6 +1,6 @@
 {
   "schemaVersion": 2,
-  "generatedAt": "2026-10-11T17:34:52.4937767Z",
+  "generatedAt": "2026-10-11T18:43:56.2307492Z",
   "title": "Design System: TouchHelm",
   "extensions": {
     "colorMeta": {
@@ -119,7 +119,8 @@
     ],
     "dos": [
       "Preserve 44px command targets, focus, safe areas and reduced motion.",
-      "Use context before actions and retain offline drafts."
+      "Use context before actions and retain offline drafts.",
+      "Keep the mouse mark visible across desktop and phone; preserve local control icons when action labels change."
     ],
     "donts": [
       "Do not fabricate slide counts, playlists or ready states.",
