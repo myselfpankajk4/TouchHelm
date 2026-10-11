@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="cyber">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+  <meta name="touchhelm-build" content="__TOUCHHELM_BUILD__">
+  <meta name="theme-color" content="#0d141c">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="mobile-web-app-capable" content="yes">
+  <title>TouchHelm · Control your PC</title>
+  <link rel="manifest" href="/manifest.json">
+  <link rel="icon" type="image/svg+xml" href="/icons/icon.svg">
+  <link rel="stylesheet" href="/style.css?v=__TOUCHHELM_BUILD__">
+  <link rel="stylesheet" href="/ui.css?v=__TOUCHHELM_BUILD__">
+</head>
+<body>
+<div id="app" class="app-container">
+  <header class="top-bar">
+    <div class="brand"><svg class="brand-logo" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="7"/><path d="M12 6v4"/></svg><span class="brand-text">TouchHelm</span></div>
+    <button type="button" class="status-pill" id="statusPill" aria-label="Connection status. Activate to reconnect"><span class="status-dot disconnected" id="statusDot"></span><span class="status-label" id="statusLabel">Connecting…</span><span class="status-ping" id="statusPing">—</span></button>
+    <button class="icon-btn" id="btnSettings" title="Settings" aria-label="Open settings">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+        </button>
+  </header>
+  <div id="uiFeedback" class="ui-feedback" role="status" aria-live="polite" aria-atomic="true" hidden></div>
+  <main class="main-content">
+    <section id="viewTrackpad" class="view active" role="tabpanel" aria-labelledby="tabTrackpad">
+      <div class="trackpad-wrapper">
+        <div id="touchSurface" class="touch-surface" tabindex="0" aria-label="Trackpad. Move with one finger, scroll with two, hold then drag">
+          <div class="trackpad-hints"><svg viewBox="0 0 32 38" fill="none" stroke="currentColor" stroke-width="1.4" aria-hidden="true"><rect x="5" y="2" width="22" height="33" rx="11"/><path d="M16 7v7"/></svg><strong>Move with one finger</strong><span>Tap to click. Two fingers to scroll.</span><span>Two-finger tap for right click. Hold to drag.</span></div>
+          <div class="touch-indicator" id="touchIndicator"></div><div class="drag-lock-badge" id="dragLockBadge">Dragging</div>
+        </div>
+        <div id="scrollStrip" class="scroll-strip" aria-label="Slide up and down to scroll"><div class="scroll-handle"></div></div>
+      </div>
+      <div class="trackpad-bottom-bar" aria-label="Mouse controls">
+        <button class="trackpad-btn click-btn" id="btnLeftClick">Left click</button>
+        <button class="trackpad-btn middle-btn" id="btnMiddleClick" aria-label="Middle click">Middle</button>
+        <button class="trackpad-btn gyro-btn" id="btnGyro" aria-label="Air mouse. Tilt your phone to move the pointer" aria-pressed="false">Air mouse</button>
+        <button class="trackpad-btn click-btn" id="btnRightClick">Right click</button>
+      </div>
+      <div id="typingDock" class="typing-dock">
+        <div class="typing-field-row"><textarea id="typeInput" class="text-field" rows="1" aria-label="Text to send to your PC" aria-describedby="typingHint" placeholder="Type on your PC…" autocomplete="off" autocapitalize="off" enterkeyhint="send"></textarea></div>
+        <div id="typingActions" class="typing-actions"><button id="btnSendText" class="send-btn">Send</button><button id="btnClearText" class="quick-clear-btn">Clear</button><button id="btnTypingDone" class="dock-done" aria-expanded="false">Done</button></div>
+        <div class="input-toggles"><label class="toggle-label"><input id="chkRealtimeTyping" type="checkbox" checked><span>Live typing</span></label><p id="typingHint" class="input-hint">Text appears on your PC as you type.</p></div>
+      </div>
+    </section>
+    <section id="viewPresenter" class="view" role="tabpanel" aria-labelledby="tabPresenter">
+      <div class="presenter-container console-page">
+        <div class="desktop-context presentation-context"><span id="presentationApp" class="context-app">Presentation</span><h1 id="presentationTitle">No presentation in focus</h1><p id="presentationStatus" class="context-status">Connect to your PC for presentation details.</p><div class="slide-context"><strong id="presentationSlide">Slide details unavailable</strong><span id="presentationSlideTitle" hidden></span></div></div>
+        <div class="slide-nav-grid"><button id="btnSlidePrev" class="slide-btn btn-prev"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m15 5-7 7 7 7"/></svg><span>Previous</span></button><button id="btnSlideNext" class="slide-btn btn-next"><span>Next slide</span><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><path d="m9 5 7 7-7 7"/></svg></button></div>
+        <div class="slide-tools-row"><button id="btnSlideStart" class="tool-btn">Start show</button><button id="btnSlideCurrent" class="tool-btn">From current</button><button id="btnSlideEnd" class="tool-btn danger">End show</button><button id="btnSlideBlack" class="tool-btn">Black screen</button><button id="btnSlideWhite" class="tool-btn">White screen</button></div>
+        <details class="timer-details"><summary><span>Presentation timer</span><output id="timerDisplay">15:00</output></summary><div class="timer-body"><div class="timer-presets"><button class="preset-btn" data-time="300" data-mins="5">5 min</button><button class="preset-btn active" data-time="900" data-mins="15">15 min</button><button class="preset-btn" data-time="1800" data-mins="30">30 min</button><button class="preset-btn" data-time="2700" data-mins="45">45 min</button></div><div class="timer-controls"><button id="btnTimerStart" class="timer-btn">Start</button><button id="btnTimerReset" class="timer-btn">Reset</button></div></div></details>
+        <div class="laser-card"><div class="laser-card-header"><span class="laser-title"><span id="laserColorIndicator" class="laser-dot red"></span>Laser pointer</span><div class="laser-colors"><button class="color-dot red active" data-color="red" aria-label="Red laser" aria-pressed="true"></button><button class="color-dot green" data-color="green" aria-label="Green laser" aria-pressed="false"></button><button class="color-dot blue" data-color="blue" aria-label="Blue laser" aria-pressed="false"></button><button class="color-dot amber" data-color="amber" aria-label="Amber laser" aria-pressed="false"></button></div></div><div id="laserSurface" class="laser-surface" aria-label="Laser pointer surface"><span class="laser-hint">Touch and drag to point on your PC</span><div id="laserReticle" class="laser-reticle"></div></div></div>
+      </div>
+    </section>
+    <section id="viewMedia" class="view" role="tabpanel" aria-labelledby="tabMedia">
+      <div class="media-container console-page">
+        <div class="player-toolbar"><label for="mediaSessionSelect">Player</label><select id="mediaSessionSelect"><option value="">Active player</option></select></div>
+        <div class="desktop-context media-context"><p id="mediaStatus" class="context-status">Connect to your PC for playback details.</p><h1 id="mediaTitle">Nothing playing</h1><p id="mediaArtist">Choose a player or open media on your PC.</p><div id="mediaProgress" class="playback-progress" role="img" hidden><span></span></div><div class="playback-time"><span id="mediaPosition">—</span><span id="mediaDuration">—</span></div></div>
+        <div class="playback-controls"><button id="btnMediaPrev" class="media-btn" aria-label="Previous track"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M5 4h2v16H5zm15 0v16L9 12z"/></svg></button><button id="btnMediaPlay" class="media-btn play-btn" aria-label="Play or pause"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="m6 3 15 9-15 9z"/></svg><span>Play / pause</span></button><button id="btnMediaNext" class="media-btn" aria-label="Next track"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M17 4h2v16h-2zM4 4v16l11-8z"/></svg></button></div>
+        <div class="system-levels"><div class="level-header"><label for="sliderVol">Volume</label><output id="lblVolLevel">—</output></div><div class="level-controls volume-controls"><button id="btnVolDown" class="media-btn" aria-label="Volume down">−</button><input id="sliderVol" class="slider volume-slider" type="range" min="0" max="100" step="1" value="50" aria-label="PC volume"><button id="btnVolMute" class="media-btn mute-btn" aria-label="Mute" aria-pressed="false"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M10 5 5 9H2v6h3l5 4zM16 8l6 8m0-8-6 8"/></svg></button><button id="btnVolUp" class="media-btn" aria-label="Volume up">+</button></div><div class="level-header"><label for="sliderBright">Brightness</label><output id="lblBrightLevel">—</output></div><div class="level-controls brightness-controls"><button id="btnBrightDown" class="media-btn" aria-label="Brightness down">−</button><input id="sliderBright" class="slider" type="range" min="0" max="100" step="1" value="80" aria-label="PC brightness"><button id="btnBrightUp" class="media-btn" aria-label="Brightness up">+</button></div></div>
+        <section class="catalog-section"><div class="section-toolbar"><h2>Media library</h2><button id="btnRefreshMedia" class="text-button">Refresh</button></div><p id="mediaLibraryMessage" class="catalog-status" role="status">Load the player's queue or local media from your PC.</p><div id="mediaLibrary" class="catalog-list"></div></section>
+      </div>
+    </section>
+    <section id="viewKeyboard" class="view" role="tabpanel" aria-labelledby="tabKeyboard">
+      <div class="keyboard-container console-page">
+        <div class="section-toolbar"><h1>Keyboard</h1><button id="btnKeyViewStart" class="win-start-bar-btn" title="Windows Start Menu"><svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.5v6l8-.5V4zm0 7v6l8 1.5v-7zm10-8.9v7.3l8-.6V2zm0 9.2v7.4L21 22v-9.6z"/></svg><span>Windows Start</span></button></div>
+        <div class="segmented-control" role="tablist" aria-label="Keyboard layout"><button id="keyboardModeKeys" role="tab" aria-controls="keyboardKeys" aria-selected="true">Keys</button><button id="keyboardModeNumpad" role="tab" aria-controls="viewNumpad" aria-selected="false">Numpad</button></div>
+        <div class="held-toolbar"><p id="heldKeys" role="status">Tap a modifier to latch it for the next key.</p><button id="btnReleaseKeys" class="text-button">Release all</button></div>
+        <div id="keyboardKeys" class="key-panel" role="tabpanel" aria-labelledby="keyboardModeKeys"><div id="nativeKeyboard"></div><details class="shortcut-details"><summary>Editing shortcuts</summary><div class="macro-grid"><button class="macro-btn" data-hotkey="ctrl,a">Select all</button><button class="macro-btn" data-hotkey="ctrl,c">Copy</button><button class="macro-btn" data-hotkey="ctrl,v">Paste</button><button class="macro-btn" data-hotkey="ctrl,x">Cut</button><button class="macro-btn" data-hotkey="ctrl,z">Undo</button><button class="macro-btn" data-hotkey="ctrl,y">Redo</button><button class="macro-btn" data-hotkey="ctrl,s">Save</button><button class="macro-btn" data-hotkey="alt,f4">Close window</button></div></details></div>
+        <div id="viewNumpad" class="key-panel" role="tabpanel" aria-labelledby="keyboardModeNumpad" hidden><div id="nativeNumpad" class="native-numpad"></div></div>
+      </div>
+    </section>
+    <section id="viewApps" class="view" role="tabpanel" aria-labelledby="tabApps">
+      <div class="apps-container console-page"><div class="section-toolbar"><h1>Apps</h1><button id="btnRefreshApps" class="text-button">Refresh</button></div><label class="search-field" for="appSearch"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><circle cx="10" cy="10" r="6"/><path d="m15 15 6 6"/></svg><input id="appSearch" type="search" placeholder="Find an app…" autocomplete="off" aria-label="Search PC apps"></label><p id="appsStatus" class="catalog-status" role="status">Connect to your PC to load installed apps.</p><div id="appsList" class="catalog-list"></div><details class="shortcut-details"><summary>Windows shortcuts</summary><div class="desktop-shortcuts-grid shortcuts-grid"><button id="btnShowDesktop" class="shortcut-btn" data-shortcut="desktop">Show desktop</button><button id="btnAppSwitch" class="shortcut-btn" data-shortcut="app_switch">Switch app</button><button id="btnTaskView" class="shortcut-btn" data-shortcut="task_view">Task view</button><button id="btnLockPc" class="shortcut-btn danger" data-shortcut="lock">Lock PC</button><button id="btnWinSearch" class="shortcut-btn" data-shortcut="search">Search Windows</button><button id="btnSnipTool" class="shortcut-btn" data-shortcut="screenshot">Screenshot</button></div></details></div>
+    </section>
+  </main>
+  <nav class="bottom-nav" role="tablist" aria-label="Remote controls">
+    <button class="nav-tab active" id="tabTrackpad" role="tab" aria-controls="viewTrackpad" aria-selected="true" data-view="viewTrackpad"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="5" y="2" width="14" height="20" rx="7"/><path d="M12 6v4"/></svg><span class="nav-label">Trackpad</span></button>
+    <button class="nav-tab" id="tabPresenter" role="tab" aria-controls="viewPresenter" aria-selected="false" data-view="viewPresenter"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M3 4h18v12H3zm9 12v5m-5 0h10M9 8l6 3-6 3z"/></svg><span class="nav-label">Presenter</span></button>
+    <button class="nav-tab" id="tabMedia" role="tab" aria-controls="viewMedia" aria-selected="false" data-view="viewMedia"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M9 5v13m0-10 11-3v10M9 5l11-3M9 18c0 2-2 3-4 3s-3-1-3-2 2-3 4-3 3 1 3 2zm11-3c0 2-2 3-4 3s-3-1-3-2 2-3 4-3 3 1 3 2z"/></svg><span class="nav-label">Media</span></button>
+    <button class="nav-tab" id="tabKeyboard" role="tab" aria-controls="viewKeyboard" aria-selected="false" data-view="viewKeyboard"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="2" y="5" width="20" height="14" rx="2"/><path d="M6 9h1m3 0h1m3 0h1m3 0h1M6 13h1m3 0h1m3 0h1m3 0h1M7 16h10"/></svg><span class="nav-label">Keyboard</span></button>
+    <button class="nav-tab" id="tabApps" role="tab" aria-controls="viewApps" aria-selected="false" data-view="viewApps"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg><span class="nav-label">Apps</span></button>
+  </nav>
+<div class="modal-backdrop" id="themeModal" role="dialog" aria-modal="true" aria-labelledby="themeTitle" aria-hidden="true">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2 class="modal-title" id="themeTitle">Choose a theme</h2>
+          <button class="modal-close-btn" id="btnCloseTheme" aria-label="Close theme chooser">&times;</button>
+        </div>
+        <div class="theme-list">
+          <button type="button" class="theme-option" data-theme-id="cyber" aria-pressed="true">
+            <div class="theme-swatch cyber-swatch">
+              <span class="swatch-pri"></span>
+              <span class="swatch-sec"></span>
+            </div>
+            <div class="theme-meta">
+              <strong>Cyber</strong>
+              <span>Cool charcoal with cyan accents</span>
+            </div>
+            <span class="theme-check">✓</span>
+          </button>
+
+          <button type="button" class="theme-option" data-theme-id="oled" aria-pressed="false">
+            <div class="theme-swatch oled-swatch">
+              <span class="swatch-pri"></span>
+              <span class="swatch-sec"></span>
+            </div>
+            <div class="theme-meta">
+              <strong>Midnight OLED</strong>
+              <span>True black with blue accents</span>
+            </div>
+            <span class="theme-check">✓</span>
+          </button>
+
+          <button type="button" class="theme-option" data-theme-id="matrix" aria-pressed="false">
+            <div class="theme-swatch matrix-swatch">
+              <span class="swatch-pri"></span>
+              <span class="swatch-sec"></span>
+            </div>
+            <div class="theme-meta">
+              <strong>Matrix</strong>
+              <span>Deep green with emerald accents</span>
+            </div>
+            <span class="theme-check">✓</span>
+          </button>
+
+          <button type="button" class="theme-option" data-theme-id="nordic" aria-pressed="false">
+            <div class="theme-swatch nordic-swatch">
+              <span class="swatch-pri"></span>
+              <span class="swatch-sec"></span>
+            </div>
+            <div class="theme-meta">
+              <strong>Nordic Frost</strong>
+              <span>Slate blue with soft blue accents</span>
+            </div>
+            <span class="theme-check">✓</span>
+          </button>
+
+          <button type="button" class="theme-option" data-theme-id="light" aria-pressed="false">
+            <div class="theme-swatch light-swatch">
+              <span class="swatch-pri"></span>
+              <span class="swatch-sec"></span>
+            </div>
+            <div class="theme-meta">
+              <strong>Light</strong>
+              <span>Bright surfaces with blue accents</span>
+            </div>
+            <span class="theme-check">✓</span>
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- SETTINGS & PAIRING MODAL -->
+    <div class="modal-backdrop" id="settingsModal" role="dialog" aria-modal="true" aria-labelledby="settingsTitle" aria-hidden="true">
+      <div class="modal-card">
+        <div class="modal-header">
+          <h2 class="modal-title" id="settingsTitle">Settings</h2>
+          <button class="modal-close-btn" id="btnCloseSettings" aria-label="Close settings">&times;</button>
+        </div>
+
+        <div class="modal-body"><div class="settings-actions"><button class="icon-btn" id="btnTheme" title="Theme" aria-label="Choose theme">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="9"/>
+            <path d="M12 3a9 9 0 0 0 0 18v-9"/>
+          </svg>
+        <span>Theme</span></button><button class="icon-btn" id="btnWakeLock" title="Keep screen awake" aria-label="Keep screen awake" aria-pressed="false">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="5"/>
+            <line x1="12" y1="1" x2="12" y2="3"/>
+            <line x1="12" y1="21" x2="12" y2="23"/>
+            <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/>
+            <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/>
+            <line x1="1" y1="12" x2="3" y2="12"/>
+            <line x1="21" y1="12" x2="23" y2="12"/>
+          </svg>
+        <span>Keep awake</span></button><button class="icon-btn" id="btnFullscreen" title="Fullscreen" aria-label="Toggle fullscreen" aria-pressed="false">
+          <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3m0 18h3a2 2 0 0 0 2-2v-3M3 16v3a2 2 0 0 0 2 2h3"/>
+          </svg>
+        <span>Fullscreen</span></button></div>
+          <p id="settingsFeedback" class="settings-feedback" role="status" aria-live="polite" hidden></p>
+          <form class="setting-group" id="hostForm">
+            <label class="setting-label" for="settingHost">PC address</label>
+            <div class="input-with-button">
+              <input type="text" id="settingHost" class="setting-input" placeholder="192.168.1.100:8765" autocomplete="off" autocapitalize="off" spellcheck="false" enterkeyhint="go" aria-describedby="hostHint" required>
+              <button class="btn-sm" id="btnReconnect" type="submit">Connect</button>
+            </div>
+            <small class="setting-hint" id="hostHint">Filled automatically when you scan the PC's QR code.</small>
+          </form>
+
+          <div class="setting-group">
+            <div class="setting-slider-header">
+              <label class="setting-label" for="sliderSensitivity">Pointer speed</label>
+              <span class="setting-val" id="valSensitivity">1.3x</span>
+            </div>
+            <input type="range" id="sliderSensitivity" min="0.4" max="3.5" step="0.1" value="1.3" class="slider" aria-describedby="valSensitivity">
+          </div>
+
+          <div class="setting-group">
+            <div class="setting-slider-header">
+              <label class="setting-label" for="sliderAccel">Pointer acceleration</label>
+              <span class="setting-val" id="valAccel">1.25x</span>
+            </div>
+            <input type="range" id="sliderAccel" min="1.0" max="2.5" step="0.05" value="1.25" class="slider" aria-describedby="valAccel">
+            <small class="setting-hint">Move faster to travel farther across the screen.</small>
+          </div>
+
+          <div class="setting-group">
+            <div class="setting-slider-header">
+              <label class="setting-label" for="sliderScroll">Scroll speed</label>
+              <span class="setting-val" id="valScroll">1.0x</span>
+            </div>
+            <input type="range" id="sliderScroll" min="0.3" max="2.5" step="0.1" value="1.0" class="slider" aria-describedby="valScroll">
+          </div>
+
+          <div class="setting-row">
+            <label class="setting-label" for="chkInvertScroll">Natural scrolling</label>
+            <input type="checkbox" id="chkInvertScroll" class="switch">
+          </div>
+
+          <div class="setting-row">
+            <label class="setting-label" for="chkHaptics">Touch vibration</label>
+            <input type="checkbox" id="chkHaptics" class="switch" checked>
+          </div>
+
+          <div class="setting-row">
+            <label class="setting-label" for="chkTapToClick">Tap to click</label>
+            <input type="checkbox" id="chkTapToClick" class="switch" checked>
+          </div>
+
+          <div class="install-pwa-box" id="pwaInstallBox">
+            <p>Add TouchHelm to your home screen for quick access.</p>
+            <button class="btn-primary" id="btnInstallPwa">Install TouchHelm</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="modal-backdrop" id="pinModal" role="dialog" aria-modal="true" aria-labelledby="pinTitle" aria-hidden="true">
+      <div class="modal-card">
+        <div class="modal-header"><h2 class="modal-title" id="pinTitle">Connect to PC</h2></div>
+        <form id="pinForm" class="modal-body">
+          <label class="setting-label" for="pinInput">Enter the 4-digit PIN shown on your PC</label>
+          <div class="input-row">
+            <input id="pinInput" class="text-field" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" required>
+            <button class="send-btn" type="submit">Connect</button>
+          </div>
+          <p id="pinError" role="alert"></p>
+        </form>
+      </div>
+    </div>
+  </div>
+
+<script src="/controls.js?v=__TOUCHHELM_BUILD__"></script><script src="/app.js?v=__TOUCHHELM_BUILD__"></script></body></html>

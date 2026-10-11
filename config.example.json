@@ -1,0 +1,13 @@
+{
+  "server_name": "TouchHelm",
+  "port": 8765,
+  "mouse_sensitivity": 1.3,
+  "mouse_acceleration": 1.25,
+  "scroll_speed": 1.0,
+  "invert_scroll": false,
+  "require_pin": false,
+  "pin_code": "",
+  "laser_color": "red",
+  "theme": "cyber",
+  "haptics_enabled": true
+}

@@ -1,0 +1,13 @@
+{
+  "name": "touchhelm",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TouchHelm browser client regression tooling",
+  "engines": { "node": ">=20" },
+  "scripts": {
+    "test": "node --test tests/browser_ux_logic.test.cjs tests/controls_logic.test.cjs tests/web_logic.test.cjs tests/service_worker.test.cjs",
+    "test:browser": "node tests/test_web_client.cjs",
+    "test:visual": "node tests/test_web_client.cjs --visual"
+  },
+  "devDependencies": { "playwright": "1.62.1" }
+}

@@ -1,0 +1,53 @@
+# Python environments and generated files
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+*.egg-info/
+dist/
+build/
+*.spec
+
+# Local settings, history, credentials and logs
+/config.json
+/config_test.json
+/.phonepad_usage.json
+/.touchhelm_usage.json
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.pfx
+*.p12
+*.log
+*.tmp
+.tmp/
+
+# Browser tooling and local QA captures
+node_modules/
+playwright-report/
+test-results/
+tests/artifacts/
+.impeccable/review/
+.impeccable/config.local.json
+
+# Android build/machine/signing configuration
+.gradle/
+.idea/
+local.properties
+*.iml
+*.apk
+*.aab
+*.jks
+*.keystore
+keystore.properties
+
+# Editor/assistant state
+.vscode/
+.codex/
+.agents/
+.DS_Store
+Thumbs.db
+Desktop.ini

@@ -1,0 +1,129 @@
+{
+  "schemaVersion": 2,
+  "generatedAt": "2026-10-11T17:34:52.4937767Z",
+  "title": "Design System: TouchHelm",
+  "extensions": {
+    "colorMeta": {
+      "primary": {
+        "role": "primary",
+        "displayName": "Pale cyan"
+      },
+      "background": {
+        "role": "neutral",
+        "displayName": "Blue-black"
+      },
+      "surface": {
+        "role": "neutral",
+        "displayName": "Slate surface"
+      }
+    },
+    "typographyMeta": {
+      "context-title": {
+        "displayName": "Context title",
+        "purpose": "Current deck, player, or media title."
+      },
+      "nav-label": {
+        "displayName": "Navigation label",
+        "purpose": "Five compact phone destinations."
+      }
+    },
+    "shadows": [],
+    "motion": [
+      {
+        "name": "navigation-state",
+        "value": "color .15s ease, background-color .15s ease",
+        "purpose": "Selected navigation feedback; disabled for reduced motion."
+      }
+    ],
+    "breakpoints": [
+      {
+        "name": "narrow-phone",
+        "value": "max-width:359px"
+      },
+      {
+        "name": "wide-console",
+        "value": "min-width:700px"
+      },
+      {
+        "name": "reduced-height",
+        "value": "max-height:560px"
+      }
+    ],
+    "focus": {
+      "outline": "2px solid var(--primary)",
+      "outlineOffset": "3px"
+    },
+    "layout": {
+      "maximumShellWidth": "980px",
+      "headerHeight": "56px",
+      "navigationHeight": "60px",
+      "desktopInitial": "880x700",
+      "desktopMinimum": "820x620"
+    }
+  },
+  "components": [
+    {
+      "name": "Primary action",
+      "kind": "button",
+      "refersTo": "button-primary",
+      "description": "Send and other prominent commands.",
+      "html": "<button class=\"pp-primary\">Send</button>",
+      "css": ".pp-primary { font:600 14px \"Segoe UI\",sans-serif; min-height:44px; min-width:44px; border:0; border-radius:8px; padding:7px 12px; background:var(--primary,#72d8e6); color:var(--primary-contrast,#06131a); cursor:pointer; } .pp-primary:focus-visible { outline:2px solid var(--primary,#72d8e6); outline-offset:3px; } .pp-primary:disabled { opacity:.46; cursor:default; }"
+    },
+    {
+      "name": "Native held key",
+      "kind": "button",
+      "refersTo": "native-key-held",
+      "description": "Accent state for a pressed or latched physical key.",
+      "html": "<button class=\"pp-key\" aria-pressed=\"true\">Ctrl</button>",
+      "css": ".pp-key { font:14px \"Segoe UI\",sans-serif; height:44px; min-width:44px; border:1px solid var(--primary,#72d8e6); border-radius:7px; padding:4px 8px; color:var(--primary-contrast,#06131a); background:var(--primary,#72d8e6); touch-action:none; } .pp-key:focus-visible { outline:2px solid var(--primary,#72d8e6); outline-offset:3px; }"
+    },
+    {
+      "name": "Labelled field",
+      "kind": "input",
+      "description": "Reachable composition and pairing fields.",
+      "html": "<label class=\"pp-label\">Host address<input class=\"pp-field\" value=\"192.168.1.20:8765\"></label>",
+      "css": ".pp-label { display:grid; gap:6px; font:13px \"Segoe UI\",sans-serif; color:var(--text-main,#eef7fa); } .pp-field { box-sizing:border-box; min-height:44px; width:100%; padding:10px 12px; border:1px solid var(--border-color,#344957); border-radius:8px; font:16px \"Segoe UI\",sans-serif; color:var(--text-main,#eef7fa); background:var(--bg-surface,#1a2a37); } .pp-field:focus-visible { outline:2px solid var(--primary,#72d8e6); outline-offset:3px; }"
+    },
+    {
+      "name": "Disclosure",
+      "kind": "custom",
+      "description": "Timer, keyboard groups, and shortcuts show a trailing chevron that reverses on expansion.",
+      "html": "<details class=\"pp-disclosure\"><summary>Function keys</summary><p>F1 to F12</p></details>",
+      "css": ".pp-disclosure { font:14px \"Segoe UI\",sans-serif; color:var(--text-main,#eef7fa); border-top:1px solid var(--border-color,#344957); } .pp-disclosure summary { display:flex; justify-content:space-between; align-items:center; min-height:44px; cursor:pointer; gap:12px; } .pp-disclosure summary::-webkit-details-marker { display:none; } .pp-disclosure summary::after { content:\"\"; width:7px; height:7px; flex-shrink:0; border:solid var(--text-muted,#b4c8d2); border-width:0 1.5px 1.5px 0; transform:rotate(45deg); margin-right:4px; } .pp-disclosure[open] summary::after { transform:rotate(225deg); } .pp-disclosure summary:focus-visible { outline:2px solid var(--primary,#72d8e6); outline-offset:3px; }"
+    },
+    {
+      "name": "Touch marker",
+      "kind": "custom",
+      "description": "Hidden at rest, visible only during active touch.",
+      "html": "<div class=\"pp-touch\"><span class=\"pp-marker active\"></span></div>",
+      "css": ".pp-touch { position:relative; height:90px; background:var(--bg-surface,#1a2a37); border:1px solid var(--border-color,#344957); border-radius:16px; } .pp-marker { position:absolute; top:27px; left:calc(50% - 18px); width:36px; height:36px; border-radius:50%; background:var(--primary,#72d8e6); opacity:0; pointer-events:none; } .pp-marker.active { opacity:.18; }"
+    }
+  ],
+  "narrative": {
+    "northStar": "Compact control console",
+    "overview": "Slate surfaces, readable desktop context, and precise accent states. Large usable movement space and clear task feedback lead; system typography, five themes, and the mouse mark preserve TouchHelm identity.",
+    "keyCharacteristics": [
+      "Large movement space",
+      "Compact expanding typing",
+      "Real context and capability messages",
+      "Tactile native press/latch states",
+      "Quiet tonal surfaces"
+    ],
+    "rules": [
+      {
+        "name": "Real context",
+        "body": "Unknown provider values remain unknown; capability messages describe available actions.",
+        "section": "colors"
+      }
+    ],
+    "dos": [
+      "Preserve 44px command targets, focus, safe areas and reduced motion.",
+      "Use context before actions and retain offline drafts."
+    ],
+    "donts": [
+      "Do not fabricate slide counts, playlists or ready states.",
+      "Do not duplicate Windows Start or move typing out of Trackpad."
+    ]
+  }
+}

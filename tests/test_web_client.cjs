@@ -1,0 +1,776 @@
+/* Browser regressions with only network boundaries mocked. No real PC input.
+ * Run: node tests/test_web_client.cjs
+ * PLAYWRIGHT_MODULE / CHROMIUM_EXECUTABLE can select an existing installation.
+ */
+const assert = require('node:assert/strict');
+const http = require('node:http');
+const fs = require('node:fs');
+const path = require('node:path');
+const { chromium } = require(process.env.PLAYWRIGHT_MODULE || 'playwright');
+
+const root = path.resolve(__dirname, '..');
+const artifactDir = path.join(__dirname, 'artifacts');
+const captureScreenshots = process.argv.includes('--visual');
+const behaviorOnly = process.argv.includes('--behavior-only');
+const nameFilter = process.argv.find(arg => arg.startsWith('--filter='))?.slice('--filter='.length);
+const serverConfig = {
+  theme: 'nordic', mouse_sensitivity: 2.1, mouse_acceleration: 1.6,
+  scroll_speed: 1.8, invert_scroll: true, laser_color: 'blue',
+  volume: 37, muted: false, brightness: 62, auth_required: false,
+};
+const posts = [];
+const desktopState = {presentation: {available:true,active:true,app:'PowerPoint',title:'Quarterly review',slide:3,total:12,slide_title:'Results'},
+  media:{available:true,app:'Music',title:'Morning light',artist:'Test artist',status:'Playing',position:65,duration:240,
+    sessions:[{id:'player-one',available:true,app:'Music',title:'Morning light',artist:'Test artist',status:'Playing',position:65,duration:240},
+      {id:'player-two',available:true,app:'Video',title:'Design talk',status:'Paused',position:12,duration:600}]}};
+const catalog = {sessions:desktopState.media.sessions,items:[{id:'track-one',title:'Morning light',kind:'queue'},{id:'file-one',title:'Demo video',kind:'local'}],playlist_supported:true,playlist_message:'Player queue and local files'};
+const apps = [{id:'app-editor',name:'Code Editor',running:true,launches:8},{id:'app-music',name:'Music',running:false,launches:3},{id:'app-notes',name:'Notes',running:false,launches:0}];
+const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
+  '.json': 'application/json', '.svg': 'image/svg+xml' };
+const server = http.createServer((req, res) => {
+  const name = new URL(req.url, 'http://127.0.0.1').pathname;
+  if (name === '/api/info') {
+    res.writeHead(200, {'Content-Type': 'application/json'});
+    return res.end(JSON.stringify(serverConfig));
+  }
+  if (name === '/api/version') { res.writeHead(200, {'Content-Type':'application/json','Cache-Control':'no-store'}); return res.end(JSON.stringify({build:'test-build'})); }
+  if (name === '/api/config') {
+    let body = '';
+    req.on('data', chunk => body += chunk);
+    req.on('end', () => {
+      posts.push(JSON.parse(body || '{}'));
+      res.writeHead(200, {'Content-Type': 'application/json'});
+      res.end('{}');
+    });
+    return;
+  }
+  const relative = `web${name === '/' ? '/index.html' : name}`;
+  const filename = path.resolve(root, relative);
+  if (!filename.startsWith(path.join(root, 'web') + path.sep)) {
+    res.writeHead(403); return res.end();
+  }
+  try {
+    const body = fs.readFileSync(filename, 'utf8').replaceAll('__TOUCHHELM_BUILD__', 'test-build');
+    res.writeHead(200, {'Content-Type': types[path.extname(filename)] || 'application/octet-stream'});
+    res.end(body);
+  } catch { res.writeHead(404); res.end(); }
+});
+
+// The socket double exposes controllable transport events and records wire packets.
+function installSocketDouble({config,state,catalog,apps}) {
+  window.__sockets = [];
+  window.__packets = [];
+  class Socket {
+    static CONNECTING = 0; static OPEN = 1; static CLOSING = 2; static CLOSED = 3;
+    constructor(url) {
+      this.url = url; this.readyState = Socket.CONNECTING;
+      window.__sockets.push(this);
+      queueMicrotask(() => {
+        if (window.__offline) { this.readyState = Socket.CLOSED; return; }
+        this.readyState = Socket.OPEN;
+        this.onopen?.({target: this});
+      });
+    }
+    send(raw) {
+      if (this.readyState !== Socket.OPEN) throw new Error('Socket is closed');
+      const packet = JSON.parse(raw);
+      window.__packets.push(packet);
+      if (packet.type === 'auth') queueMicrotask(() => {
+        const success = !window.__expectedPin || packet.pin === window.__expectedPin;
+        this.onmessage?.({data: JSON.stringify(success
+          ? {type: 'auth_res', success: true, config, ...config}
+          : {type: 'auth_res', success: false, message: 'Invalid PIN'})});
+      });
+      const responses = {get_desktop_state:{type:'desktop_state',...state},get_apps:{type:'apps_sync',apps},get_media_library:{type:'media_library',...catalog}};
+      if (responses[packet.type]) queueMicrotask(() => this.onmessage?.({data:JSON.stringify(responses[packet.type])}));
+      if (['launch_app','play_media','presentation','media'].includes(packet.type)) queueMicrotask(() => this.onmessage?.({data:JSON.stringify({type:'command_result',command:packet.type,success:true,message:'Done'})}));
+    }
+    close() { this.readyState = Socket.CLOSED; }
+  }
+  window.WebSocket = Socket;
+}
+
+let browser, origin;
+async function fixture(viewport = {width: 390, height: 844}) {
+  const context = await browser.newContext({viewport, hasTouch: true, serviceWorkers: 'block'});
+  await context.addInitScript(installSocketDouble, {config:serverConfig,state:desktopState,catalog,apps});
+  const page = await context.newPage();
+  page.setDefaultTimeout(3000);
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.goto(origin, {waitUntil: 'networkidle'});
+  assert.deepEqual(errors, [], 'client loads without uncaught browser errors');
+  await page.waitForFunction(() => window.touchhelm && window.__sockets.length);
+  await page.evaluate(() => window.__packets.length = 0);
+  return {page, context, errors};
+}
+async function typingView(page) {
+  const view = await page.locator('#typeInput').evaluate(el => el.closest('.view').id);
+  await page.locator(`.nav-tab[data-view="${view}"]`).click();
+  await page.locator('#typeInput').focus();
+  await page.evaluate(() => window.__packets.length = 0);
+}
+async function openTheme(page) {
+  if (!await page.locator('#settingsModal').isVisible()) await page.locator('#btnSettings').click();
+  await page.locator('#btnTheme').click();
+}
+async function input(page, value, inputType = 'insertText', data = null, isComposing = false) {
+  await page.locator('#typeInput').evaluate((el, event) => {
+    el.value = event.value;
+    el.dispatchEvent(new InputEvent('input', {bubbles: true, ...event}));
+  }, {value, inputType, data, isComposing});
+}
+async function packets(page) {
+  return page.evaluate(() => window.__packets.filter(p => p.type === 'text' || p.type === 'key'));
+}
+const graphemes = text => [...new Intl.Segmenter(undefined, {granularity: 'grapheme'}).segment(text)].map(p => p.segment);
+function remoteText(messages) {
+  let text = '';
+  for (const message of messages) {
+    if (message.type === 'text') text += message.text;
+    if (message.type === 'key' && message.key === 'backspace') text = graphemes(text).slice(0, -1).join('');
+  }
+  return text;
+}
+async function touch(page, type, points = [{x: 110, y: 190}]) {
+  await page.locator('#touchSurface').evaluate((el, event) => {
+    const touches = event.points.map((p, index) => new Touch({identifier: index + 1,
+      target: el, clientX: p.x, clientY: p.y, pageX: p.x, pageY: p.y}));
+    el.dispatchEvent(new TouchEvent(event.type, {bubbles: true, cancelable: true,
+      touches, targetTouches: touches, changedTouches: touches}));
+  }, {type, points});
+}
+async function tap(page) { await touch(page, 'touchstart'); await touch(page, 'touchend', []); }
+const tests = [];
+function test(name, run, visual = false) { tests.push({name, run, visual}); }
+
+async function disconnect(page) {
+  await page.evaluate(() => {
+    window.__offline = true;
+    const ws = window.__sockets.at(-1); ws.readyState = 3; ws.onclose?.({});
+  });
+}
+async function assertDialogFocus(page, id) {
+  const dialog = page.locator(`#${id}`);
+  assert.equal(await dialog.getAttribute('role'), 'dialog');
+  assert.equal(await dialog.getAttribute('aria-modal'), 'true');
+  assert.ok(await dialog.getAttribute('aria-labelledby'), 'dialog has an accessible heading');
+  for (let i = 0; i < 12; i++) {
+    await page.keyboard.press(i < 6 ? 'Tab' : 'Shift+Tab');
+    assert.equal(await dialog.evaluate(el => el.contains(document.activeElement)), true,
+      `${id} must contain keyboard focus`);
+  }
+}
+
+test('navigation exposes selected tabs and keyboard theme choices are native controls', async page => {
+  assert.equal(await page.locator('#statusPill').evaluate(el => el.tagName), 'BUTTON');
+  const tabs = page.locator('.nav-tab');
+  assert.equal(await tabs.count(), 5);
+  for (let i = 0; i < 5; i++) {
+    const tab = tabs.nth(i), view = await tab.getAttribute('data-view');
+    assert.equal(await tab.getAttribute('role'), 'tab');
+    assert.equal(await tab.getAttribute('aria-controls'), view);
+    await tab.focus(); await page.keyboard.press('Enter');
+    assert.equal(await tab.getAttribute('aria-selected'), 'true');
+    assert.equal(await page.locator('.nav-tab[aria-selected="true"]').count(), 1);
+    assert.ok(await page.locator(`#${view}`).isVisible());
+  }
+  await openTheme(page);
+  const choice = page.locator('.theme-option[data-theme-id="light"]');
+  assert.equal(await choice.evaluate(el => el.tagName), 'BUTTON');
+  await choice.focus(); await page.keyboard.press('Space');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light');
+  assert.equal(await choice.getAttribute('aria-pressed'), 'true');
+  assert.equal(await page.locator('#themeModal').isVisible(), false);
+  assert.equal(await page.locator('#btnTheme').evaluate(el => el === document.activeElement), true);
+});
+
+test('theme and settings dialogs contain focus, Escape closes, and focus returns to their trigger', async page => {
+  for (const [trigger, dialog] of [['btnTheme', 'themeModal'], ['btnSettings', 'settingsModal']]) {
+    if (trigger === 'btnTheme') await page.locator('#btnSettings').click();
+    await page.locator(`#${trigger}`).focus(); await page.keyboard.press('Enter');
+    assert.ok(await page.locator(`#${dialog}`).isVisible());
+    await assertDialogFocus(page, dialog);
+    await page.keyboard.press('Escape');
+    assert.equal(await page.locator(`#${dialog}`).isVisible(), false);
+    assert.equal(await page.locator(`#${trigger}`).evaluate(el => el === document.activeElement), true);
+    if (trigger === 'btnTheme') await page.keyboard.press('Escape');
+  }
+});
+
+test('PIN dialog contains focus and remains required after Escape or backdrop interaction', async page => {
+  await page.evaluate(() => {
+    window.__expectedPin = '1234';
+    window.__sockets.at(-1).onmessage({data: JSON.stringify({type: 'auth_required'})});
+  });
+  await assertDialogFocus(page, 'pinModal');
+  await page.keyboard.press('Escape');
+  assert.equal(await page.locator('#pinModal').isVisible(), true);
+  await page.locator('#pinModal').dispatchEvent('click');
+  assert.equal(await page.locator('#pinModal').isVisible(), true);
+  assert.equal(await page.evaluate(() => window.touchhelm.isConnected), false);
+  await screenshot(page, 'pin-required');
+});
+
+test('Send and Clear restore typing focus for continued phone input', async page => {
+  await typingView(page);
+  await input(page, 'focus me', 'insertText', 'focus me');
+  await page.locator('#btnSendText').click();
+  assert.equal(await page.locator('#typeInput').evaluate(el => el === document.activeElement), true);
+  await input(page, 'clear me', 'insertText', 'clear me');
+  await page.locator('#btnClearText').click();
+  assert.equal(await page.locator('#typeInput').inputValue(), '');
+  assert.equal(await page.locator('#typeInput').evaluate(el => el === document.activeElement), true);
+});
+
+test('disconnected remote controls are disabled while drafts, local timer and navigation remain usable', async page => {
+  await disconnect(page);
+  for (const id of ['btnLeftClick', 'btnRightClick', 'btnMiddleClick', 'btnGyro',
+    'btnKeyViewStart', 'btnSlideNext', 'btnSlidePrev', 'btnSlideStart', 'btnVolUp', 'btnVolMute',
+    'btnMediaPlay', 'btnLockPc', 'sliderVol', 'sliderBright', 'sliderSensitivity',
+    'sliderAccel', 'sliderScroll', 'chkInvertScroll']) {
+    assert.ok(await page.locator(`#${id}`).isDisabled(), `${id} should reflect the disconnected state`);
+  }
+  for (const selector of ['.key-btn', '.macro-btn', '.num-btn']) {
+    assert.equal(await page.locator(selector).evaluateAll(elements => elements.every(el => el.disabled)), true);
+  }
+  assert.equal(await page.locator('#typeInput').isDisabled(), false);
+  assert.equal(await page.locator('#btnClearText').isDisabled(), false);
+  await typingView(page);
+  await input(page, 'local draft', 'insertText', 'local draft');
+  assert.equal(await page.locator('#btnSendText').isDisabled(), false, 'Send can explain how to reconnect');
+  await page.locator('#btnSendText').click();
+  assert.equal(await page.locator('#typeInput').inputValue(), 'local draft');
+  assert.ok(await page.locator('#uiFeedback').isVisible());
+  assert.match(await page.locator('#uiFeedback').textContent(), /connect|offline/i);
+  await screenshot(page, 'offline-trackpad');
+  await page.locator('#typeInput').press('Enter');
+  assert.equal(await page.locator('#typeInput').inputValue(), 'local draft');
+  await page.locator('.nav-tab[data-view="viewPresenter"]').click();
+  await page.locator('.timer-details summary').click();
+  assert.equal(await page.locator('#btnTimerStart').isDisabled(), false);
+  await page.locator('#btnTimerStart').click();
+  assert.equal(await page.evaluate(() => window.touchhelm.timerRunning), true);
+  await page.locator('#btnTimerStart').click();
+  await page.locator('.nav-tab[data-view="viewTrackpad"]').click();
+  await page.locator('#typeInput').focus();
+  await page.locator('#btnClearText').click();
+  assert.equal(await page.locator('#typeInput').inputValue(), '');
+});
+
+test('settings errors remain visible without falsely reporting a disconnected PC', async page => {
+  const connectedLabel = await page.locator('#statusLabel').textContent();
+  await page.route('**/api/config', route => route.fulfill({status: 403,
+    contentType: 'application/json', body: JSON.stringify({error: 'Settings could not be saved'})}));
+  await page.locator('#btnSettings').click();
+  const response = page.waitForResponse(res => res.url().endsWith('/api/config'));
+  await page.locator('#sliderSensitivity').evaluate(el => {
+    el.value = '1.8'; el.dispatchEvent(new Event('input', {bubbles: true}));
+  });
+  await response;
+  await page.waitForFunction(() => document.querySelector('#uiFeedback')?.textContent.trim());
+  assert.ok(await page.locator('#uiFeedback').isVisible());
+  assert.equal(await page.locator('#uiFeedback').getAttribute('role'), 'status');
+  assert.equal(await page.locator('#uiFeedback').getAttribute('aria-live'), 'polite');
+  assert.equal(await page.evaluate(() => window.touchhelm.isConnected), true);
+  assert.equal(await page.locator('#statusLabel').textContent(), connectedLabel);
+  await page.evaluate(() => window.touchhelm.clearFeedback('settings'));
+  assert.equal(await page.locator('#uiFeedback').isVisible(), false);
+  assert.ok(await page.locator('#settingsFeedback').isVisible());
+  assert.match(await page.locator('#settingsFeedback').textContent(), /Pointer speed/);
+  await screenshot(page, 'settings-error');
+});
+
+test('host form handles Enter and invalid PC addresses give an actionable visible error', async page => {
+  await page.locator('#btnSettings').click();
+  assert.equal(await page.locator('#settingHost').evaluate(el => el.closest('form')?.id), 'hostForm');
+  const initialHost = await page.evaluate(() => window.touchhelm.host);
+  await page.locator('#settingHost').fill('http://');
+  await page.locator('#settingHost').press('Enter');
+  assert.equal(await page.locator('#settingsModal').isVisible(), true);
+  assert.equal(await page.evaluate(() => window.touchhelm.host), initialHost);
+  assert.ok(await page.locator('#uiFeedback').isVisible());
+  assert.match(await page.locator('#uiFeedback').textContent(), /address|host|PC/i);
+  await page.locator('#settingHost').fill(new URL(origin).host);
+  await page.locator('#settingHost').press('Enter');
+  await page.waitForFunction(() => window.__sockets.length === 2 && window.touchhelm.isConnected);
+  assert.equal(await page.locator('#settingsModal').isVisible(), false);
+});
+
+test('one Windows Start button, located in keyboard; typing controls located in trackpad', async page => {
+  const controls = await page.locator('button').evaluateAll(buttons => buttons.filter(button =>
+    button.dataset.shortcut === 'start' ||
+    /Windows Start Menu/.test(button.title)).map(button => ({id: button.id, view: button.closest('.view')?.id})));
+  assert.deepEqual(controls, [{id: 'btnKeyViewStart', view: 'viewKeyboard'}]);
+  for (const id of ['typeInput', 'btnSendText', 'btnClearText', 'chkRealtimeTyping']) {
+    assert.equal(await page.locator(`#${id}`).count(), 1);
+    assert.equal(await page.locator(`#${id}`).evaluate(el => el.closest('.view').id), 'viewTrackpad');
+  }
+  await page.locator('.nav-tab[data-view="viewKeyboard"]').click();
+  await page.locator('#btnKeyViewStart').click();
+  const starts = await page.evaluate(() => window.__packets.filter(p => p.type === 'shortcut' && p.name === 'start'));
+  assert.equal(starts.length, 1, 'one action per Start button click');
+});
+
+test('live typing sends null-data paste and replaces selected or autocorrected suffix', async page => {
+  await typingView(page);
+  await input(page, 'hello world', 'insertFromPaste');
+  assert.equal(remoteText(await packets(page)), 'hello world');
+  await input(page, 'hello friend', 'insertReplacementText', 'friend');
+  assert.equal(remoteText(await packets(page)), 'hello friend');
+  await input(page, 'hey friend', 'insertReplacementText', 'hey');
+  assert.equal(remoteText(await packets(page)), 'hey friend');
+  await input(page, 'hey ', 'deleteContentBackward');
+  assert.equal(remoteText(await packets(page)), 'hey ');
+});
+
+test('live typing deletes a whole emoji grapheme, not UTF-16 code units', async page => {
+  await typingView(page);
+  await input(page, 'a👨‍👩‍👧‍👦b', 'insertFromPaste');
+  await input(page, 'ab', 'deleteContentBackward');
+  assert.equal(remoteText(await packets(page)), 'ab');
+  assert.equal((await packets(page)).filter(p => p.key === 'backspace').length, 2);
+});
+
+test('composition remains local until compositionend', async page => {
+  await typingView(page);
+  await page.locator('#typeInput').dispatchEvent('compositionstart');
+  await input(page, 'に', 'insertCompositionText', 'に', true);
+  await input(page, '日本', 'insertCompositionText', '日本', true);
+  assert.deepEqual(await packets(page), []);
+  await page.locator('#typeInput').dispatchEvent('compositionend', {data: '日本'});
+  assert.equal(remoteText(await packets(page)), '日本');
+  await input(page, '日本', 'insertText', '日本');
+  assert.equal(remoteText(await packets(page)), '日本', 'final input does not duplicate composition');
+});
+
+test('buffered draft syncs once when live is enabled; Clear resets only local baseline', async page => {
+  await typingView(page);
+  await page.locator('#chkRealtimeTyping').uncheck();
+  await input(page, 'draft', 'insertFromPaste');
+  assert.deepEqual(await packets(page), []);
+  await page.locator('#chkRealtimeTyping').check();
+  assert.equal(remoteText(await packets(page)), 'draft');
+  await input(page, 'draft!', 'insertText', '!');
+  assert.equal(remoteText(await packets(page)), 'draft!');
+  await page.locator('#btnClearText').click();
+  assert.equal(await page.locator('#typeInput').inputValue(), '');
+  assert.equal(remoteText(await packets(page)), 'draft!');
+  await input(page, 'next', 'insertText', 'next');
+  assert.equal(remoteText(await packets(page)), 'draft!next');
+});
+
+test('live Send emits Enter once and resets draft; buffered Send emits text once', async page => {
+  await typingView(page);
+  await input(page, 'live', 'insertText', 'live');
+  await page.locator('#btnSendText').click();
+  assert.equal(await page.locator('#typeInput').inputValue(), '');
+  assert.deepEqual(await packets(page), [{type: 'text', text: 'live'}, {type: 'key', key: 'enter'}]);
+  await page.locator('#chkRealtimeTyping').uncheck();
+  await input(page, 'buffer', 'insertFromPaste');
+  await page.locator('#typeInput').press('Enter');
+  assert.deepEqual((await packets(page)).slice(2), [{type: 'text', text: 'buffer'}]);
+  assert.equal(await page.locator('#typeInput').inputValue(), '');
+});
+
+test('live off and on preserves the sent baseline; buffered edits update that draft once', async page => {
+  await typingView(page);
+  await input(page, 'already', 'insertText', 'already');
+  await page.locator('#chkRealtimeTyping').uncheck();
+  await page.locator('#chkRealtimeTyping').check();
+  assert.deepEqual(await packets(page), [{type: 'text', text: 'already'}], 'mode toggle must not duplicate sent text');
+  await page.locator('#chkRealtimeTyping').uncheck();
+  await input(page, 'already edited', 'insertText', ' edited');
+  assert.equal(remoteText(await packets(page)), 'already', 'buffered edits wait for Send');
+  await page.locator('#btnSendText').click();
+  assert.equal(remoteText(await packets(page)), 'already edited');
+  assert.equal((await packets(page)).filter(packet => packet.key === 'enter').length, 0);
+  assert.equal(await page.locator('#typeInput').inputValue(), '');
+});
+
+test('offline Send and Enter preserve buffered and live drafts', async page => {
+  await typingView(page);
+  await disconnect(page);
+  await input(page, 'keep me', 'insertText', 'keep me');
+  await page.locator('#btnSendText').dispatchEvent('click');
+  assert.equal(await page.locator('#typeInput').inputValue(), 'keep me');
+  await page.locator('#typeInput').press('Enter');
+  assert.equal(await page.locator('#typeInput').inputValue(), 'keep me');
+  await page.locator('#chkRealtimeTyping').uncheck();
+  await page.locator('#btnSendText').dispatchEvent('click');
+  assert.equal(await page.locator('#typeInput').inputValue(), 'keep me');
+  assert.deepEqual(await packets(page), []);
+});
+
+test('startup reads server settings without posting phone defaults', async page => {
+  assert.deepEqual(posts, [], 'startup must not write /api/config');
+  assert.equal(await page.evaluate(() => window.touchhelm.sensitivity), serverConfig.mouse_sensitivity);
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), serverConfig.theme);
+});
+
+test('stale socket callbacks cannot mark a newer socket offline or reconnect it', async page => {
+  await page.evaluate(() => {
+    const ws = window.__sockets[0];
+    window.__oldCallbacks = {close: ws.onclose, error: ws.onerror, open: ws.onopen, message: ws.onmessage};
+  });
+  await page.locator('#statusPill').click();
+  await page.waitForFunction(() => window.__sockets.length === 2 && window.touchhelm.isConnected);
+  const connectedLabel = await page.locator('#statusLabel').textContent();
+  await page.evaluate(() => {
+    window.__oldCallbacks.close?.({}); window.__oldCallbacks.error?.({});
+    window.__oldCallbacks.message?.({data: JSON.stringify({type: 'auth_res', success: false})});
+  });
+  assert.equal(await page.evaluate(() => window.touchhelm.isConnected), true);
+  assert.equal(await page.locator('#statusLabel').textContent(), connectedLabel);
+  await page.waitForTimeout(2700);
+  assert.equal(await page.evaluate(() => window.__sockets.length), 2);
+});
+
+test('PIN challenge blocks input, rejects an invalid PIN, and connects after a valid PIN', async page => {
+  assert.equal(await page.locator('#pinModal').isVisible(), false, 'closed PIN dialog must be hidden');
+  await page.evaluate(() => {
+    window.__expectedPin = '1234';
+    window.__sockets.at(-1).onmessage({data: JSON.stringify({type: 'auth_required'})});
+  });
+  assert.equal(await page.evaluate(() => window.touchhelm.isConnected), false);
+  assert.equal(await page.locator('#pinModal').isVisible(), true);
+  await page.evaluate(() => window.__packets.length = 0);
+  await page.locator('#btnRightClick').dispatchEvent('click');
+  await input(page, 'unauthenticated draft', 'insertText', 'unauthenticated draft');
+  assert.deepEqual(await page.evaluate(() => window.__packets), [], 'input stays blocked until authenticated');
+  await page.locator('#pinInput').fill('9999');
+  await page.locator('#pinForm button').click();
+  await page.waitForFunction(() => document.querySelector('#pinError').textContent === 'Invalid PIN');
+  assert.equal(await page.evaluate(() => window.touchhelm.isConnected), false);
+  assert.equal(await page.locator('#pinModal').isVisible(), true);
+  await page.locator('#pinInput').fill('1234');
+  await page.locator('#pinInput').press('Enter');
+  await page.waitForFunction(() => window.touchhelm.isConnected);
+  assert.equal(await page.locator('#pinModal').isVisible(), false);
+  const settingResponse = page.waitForResponse(response =>
+    response.url().endsWith('/api/config') && response.request().method() === 'POST');
+  await page.locator('#sliderSensitivity').evaluate(el => {
+    el.value = '1.9'; el.dispatchEvent(new Event('input', {bubbles: true}));
+  });
+  const response = await settingResponse;
+  assert.equal(response.request().headers()['x-touchhelm-pin'], '1234');
+  assert.deepEqual(posts, [{mouse_sensitivity: 1.9}]);
+});
+
+test('server config broadcasts update UI without writing settings back', async page => {
+  await page.evaluate(() => window.__sockets.at(-1).onmessage({data: JSON.stringify({
+    type: 'config_sync', config: {mouse_sensitivity: 1.7, theme: 'matrix', laser_color: 'green'},
+  })}));
+  assert.equal(await page.evaluate(() => window.touchhelm.sensitivity), 1.7);
+  assert.equal(await page.locator('#sliderSensitivity').inputValue(), '1.7');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'matrix');
+  assert.deepEqual(posts, []);
+});
+
+test('failed wake lock cannot leave an active button or a dummy playback loop', async page => {
+  await page.locator('#btnSettings').click();
+  await page.evaluate(() => {
+    Object.defineProperty(navigator, 'wakeLock', {configurable: true, value: {
+      request: () => Promise.reject(new Error('Wake lock unavailable')),
+    }});
+    HTMLMediaElement.prototype.play = () => Promise.reject(new Error('Unsupported media'));
+  });
+  await page.locator('#btnWakeLock').click();
+  await page.waitForTimeout(30);
+  assert.equal(await page.evaluate(() => window.touchhelm.wakeLockRequested), false);
+  assert.equal(await page.locator('video').count(), 0, 'failed wake lock must not create dummy media');
+  assert.equal(await page.evaluate(() => document.querySelector('#btnWakeLock').style.color === 'var(--primary)'), false);
+  assert.ok(await page.locator('#uiFeedback').isVisible(), 'touch users need visible capability feedback');
+  assert.match(await page.locator('#uiFeedback').textContent(), /awake|wake|https|browser/i);
+  assert.equal(await page.evaluate(() => window.touchhelm.isConnected), true);
+});
+
+test('unsupported fullscreen API is handled without a browser exception', async page => {
+  await page.locator('#btnSettings').click();
+  const errors = [];
+  page.on('pageerror', error => errors.push(error.message));
+  await page.evaluate(() => Object.defineProperty(document.documentElement, 'requestFullscreen', {
+    configurable: true, value: undefined,
+  }));
+  await page.locator('#btnFullscreen').click();
+  await page.waitForTimeout(30);
+  assert.deepEqual(errors, []);
+  assert.ok(await page.locator('#uiFeedback').isVisible(), 'fullscreen failure needs visible feedback');
+  assert.match(await page.locator('#uiFeedback').textContent(), /fullscreen|browser/i);
+  assert.equal(await page.evaluate(() => window.touchhelm.isConnected), true);
+});
+
+test('double tap produces exactly two effective clicks', async page => {
+  await tap(page); await page.waitForTimeout(40); await tap(page);
+  const clicks = await page.evaluate(() => window.__packets.filter(p => p.type === 'click' || p.type === 'double_click'));
+  assert.equal(clicks.reduce((count, p) => count + (p.type === 'double_click' ? 2 : 1), 0), 2,
+    JSON.stringify(clicks));
+});
+
+test('view change, blur and cancelled gestures clear drag timers and pressed buttons', async page => {
+  await touch(page, 'touchstart');
+  await page.locator('.nav-tab[data-view="viewKeyboard"]').click();
+  await page.waitForTimeout(390);
+  assert.equal(await page.evaluate(() => window.touchhelm.isDragging), false);
+  assert.equal(await page.evaluate(() => window.__packets.some(p => p.type === 'mousedown')), false);
+  await page.locator('.nav-tab[data-view="viewTrackpad"]').click();
+  await touch(page, 'touchstart'); await page.waitForTimeout(390);
+  assert.equal(await page.evaluate(() => window.touchhelm.isDragging), true);
+  await page.evaluate(() => window.dispatchEvent(new Event('blur')));
+  assert.equal(await page.evaluate(() => window.touchhelm.isDragging), false);
+  await touch(page, 'touchcancel', []);
+  await page.evaluate(() => window.__packets.length = 0);
+  await tap(page);
+  assert.equal(await page.evaluate(() => window.__packets.filter(p => p.type === 'click').length), 1);
+});
+
+test('native chords, nested numpad, timer reset, current context and catalogs work together', async page => {
+  await page.locator('.nav-tab[data-view="viewKeyboard"]').click();
+  for (const key of ['lctrl','lshift','a']) await page.locator(`.native-key[data-key="${key}"]`).tap();
+  assert.deepEqual(await page.evaluate(() => window.__packets.filter(p=>['keydown','keyup'].includes(p.type))), [
+    {type:'keydown',key:'lctrl'},{type:'keydown',key:'lshift'},{type:'keydown',key:'a'},
+    {type:'keyup',key:'a'},{type:'keyup',key:'lctrl'},{type:'keyup',key:'lshift'}]);
+  await page.locator('#keyboardModeNumpad').click();
+  await page.locator('.native-key[data-key="numpadenter"]').tap();
+  await page.locator('.nav-tab[data-view="viewPresenter"]').click();
+  assert.equal(await page.locator('#presentationTitle').textContent(),'Quarterly review');
+  assert.equal(await page.locator('#presentationSlide').textContent(),'Slide 3 of 12');
+  await page.locator('.timer-details summary').click();
+  await page.locator('#btnTimerStart').click(); await page.locator('#btnTimerReset').click();
+  await page.locator('#btnSlideNext').click();
+  assert.equal(await page.evaluate(()=>window.touchhelm.timerRunning),false);
+  assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='presentation' && p.action==='next')));
+  await page.locator('.nav-tab[data-view="viewMedia"]').click();
+  await page.locator('#mediaSessionSelect').selectOption('player-two');
+  assert.equal(await page.locator('#mediaTitle').textContent(),'Design talk');
+  await page.locator('#btnMediaPlay').click();
+  assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='media' && p.session_id==='player-two')));
+  await page.locator('[data-item-id="file-one"]').click();
+  assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='play_media' && p.item_id==='file-one')));
+  await page.locator('.nav-tab[data-view="viewApps"]').click();
+  await page.locator('#appSearch').fill('notes');
+  assert.equal(await page.locator('#appsList button').count(),1);
+  await page.locator('#appsList button').click();
+  assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='launch_app' && p.app_id==='app-notes')));
+});
+
+test('server update reloads the latest UI and restores an unsent draft', async page => {
+  await typingView(page); await page.locator('#chkRealtimeTyping').uncheck();
+  await input(page,'saved across update','insertText','saved across update');
+  await page.route('**/api/version', route=>route.fulfill({contentType:'application/json',body:JSON.stringify({build:'next-build'})}));
+  await page.route('**/?build=next-build', route=>route.fulfill({contentType:'text/html',body:fs.readFileSync(path.join(root,'web/index.html'),'utf8').replaceAll('__TOUCHHELM_BUILD__','next-build')}));
+  await page.evaluate(()=>{ window.touchhelm.checkServerVersion(); });
+  await page.waitForURL('**/?build=next-build');
+  await page.waitForFunction(()=>window.touchhelm?.buildId==='next-build');
+  assert.equal(await page.locator('#typeInput').inputValue(),'saved across update');
+  assert.equal(await page.locator('#chkRealtimeTyping').isChecked(),false);
+  assert.deepEqual(await packets(page),[], 'restoring draft never sends PC text');
+});
+
+test('keyboard disclosures visibly expand and expose advanced native keys', async page => {
+  await page.locator('.nav-tab[data-view="viewKeyboard"]').click();
+  const group=page.locator('details.keyboard-group').filter({has:page.locator('summary', {hasText:'Advanced keys'})});
+  const summary=group.locator('summary');
+  const closed=await summary.evaluate(el=>({content:getComputedStyle(el,'::after').content,transform:getComputedStyle(el,'::after').transform}));
+  assert.notEqual(closed.content,'none', 'disclosure has a visible cue');
+  await summary.click();
+  assert.equal(await group.getAttribute('open'),'');
+  assert.notEqual(await summary.evaluate(el=>getComputedStyle(el,'::after').transform),closed.transform);
+  await group.locator('[data-key="f24"]').tap();
+  assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='keydown' && p.key==='f24')));
+  await screenshot(page,'keyboard-disclosure-open');
+});
+
+for (const [width, height] of [[360, 640], [390, 844], [844, 390], [320, 568], [390, 420]]) {
+  test(`trackpad layout stays usable at ${width}x${height}`, async (page, context) => {
+    await page.setViewportSize({width, height});
+    await page.locator('.nav-tab[data-view="viewTrackpad"]').click();
+    if (captureScreenshots) {
+      fs.mkdirSync(artifactDir, {recursive: true});
+      await page.screenshot({path: path.join(artifactDir, `trackpad-${width}x${height}.png`), animations: 'disabled'});
+    }
+    const layout = await page.evaluate(() => {
+      const selectors = ['.top-bar', '.bottom-nav', '#btnSettings', '#typeInput', '#touchSurface'];
+      return {width: innerWidth, height: innerHeight, scrollWidth: document.documentElement.scrollWidth,
+        boxes: selectors.map(selector => {
+          const el = document.querySelector(selector), rect = el.getBoundingClientRect();
+          return {selector, x: rect.x, y: rect.y, right: rect.right, bottom: rect.bottom,
+            width: rect.width, height: rect.height, visible: !!el.getClientRects().length};
+        })};
+    });
+    assert.ok(layout.scrollWidth <= width, `horizontal overflow: ${JSON.stringify(layout)}`);
+    assert.equal(await page.locator('#pinModal').isVisible(), false, 'closed PIN dialog must be hidden');
+    for (const box of layout.boxes) {
+      assert.ok(box.visible && box.width > 0 && box.height > 0, `${box.selector} hidden`);
+      assert.ok(box.x >= -1 && box.right <= width + 1 && box.y >= -1 && box.bottom <= height + 1,
+        `control outside viewport: ${JSON.stringify(box)}`);
+    }
+    const nav = layout.boxes.find(box => box.selector === '.bottom-nav');
+    assert.ok(Math.abs(nav.bottom - height) <= 1, `navigation must stay at viewport bottom: ${JSON.stringify(nav)}`);
+    for (const box of layout.boxes.filter(box => ['#typeInput', '#btnSendText', '#btnClearText', '#touchSurface'].includes(box.selector))) {
+      assert.ok(box.bottom <= nav.y + 1, `navigation covers ${box.selector}: ${JSON.stringify({box, nav})}`);
+    }
+    await page.locator('#typeInput').focus();
+    await settleVisual(page);
+    for (const id of ['btnSendText','btnClearText','btnTypingDone']) {
+      const box = await page.locator(`#${id}`).boundingBox();
+      assert.ok(box && box.y >= 0 && box.y+box.height <= nav.y+1, `expanded typing control ${id} remains reachable`);
+    }
+    const pad = layout.boxes.find(box => box.selector === '#touchSurface');
+    const controlBudget = height <= 560 ? 240 : 260; // Header, navigation, two 44px control rows and their spacing.
+    assert.ok(pad.height >= height - controlBudget, `collapsed pad leaves only compact controls: ${pad.height}/${height}`);
+    if (height >= 568) assert.ok(pad.height >= height * 0.50, 'normal portrait reserves most of screen for movement');
+    await screenshot(page, `typing-${width}x${height}`);
+    await page.locator('.nav-tab[data-view="viewKeyboard"]').click();
+    await page.locator('#btnKeyViewStart').scrollIntoViewIfNeeded();
+    assert.ok(await page.locator('#btnKeyViewStart').isVisible());
+    if (captureScreenshots) await page.screenshot({path: path.join(artifactDir, `keyboard-${width}x${height}.png`), animations: 'disabled'});
+  }, true);
+}
+
+const views = ['Trackpad', 'Presenter', 'Media', 'Keyboard', 'Apps'];
+async function settleVisual(page) {
+  await page.evaluate(async () => {
+    const finite = document.getAnimations().filter(animation =>
+      animation.effect?.getComputedTiming().iterations !== Infinity);
+    await Promise.all(finite.map(animation => animation.finished.catch(() => {})));
+  });
+}
+async function inspectUsability(page, label) {
+  await settleVisual(page);
+  return page.evaluate(label => {
+    const issues = [];
+    const rgba = value => {
+      const parts = (value.match(/[\d.]+/g) || []).map(Number);
+      return [parts[0] || 0, parts[1] || 0, parts[2] || 0, parts.length > 3 ? parts[3] : 1];
+    };
+    const blend = (front, back) => front.slice(0, 3).map((channel, i) => channel * front[3] + back[i] * (1 - front[3])).concat(1);
+    const luminance = color => color.slice(0, 3).map(channel => {
+      const c = channel / 255; return c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+    }).reduce((sum, c, i) => sum + c * [0.2126, 0.7152, 0.0722][i], 0);
+    const name = el => el.id || el.getAttribute('aria-label') || el.textContent.trim().replace(/\s+/g, ' ').slice(0, 60) || el.className;
+    const visible = el => !!el.getClientRects().length && getComputedStyle(el).visibility !== 'hidden';
+    const modal = document.querySelector('.modal-backdrop.open');
+    const scope = modal || document.querySelector('.view.active');
+    const elements = [...scope.querySelectorAll('button,input[type="range"],input[type="checkbox"],.theme-option')];
+    if (!modal) elements.push(...document.querySelectorAll('.top-bar button,.bottom-nav button'));
+    for (const el of elements.filter(visible)) {
+      let target = el;
+      if (el.type === 'checkbox') {
+        const candidates = [el, el.closest('label'),
+          [...document.querySelectorAll('label')].find(label => label.htmlFor === el.id)].filter(Boolean);
+        target = candidates.find(candidate => {
+          const box = candidate.getBoundingClientRect(); return box.width >= 43.5 && box.height >= 43.5;
+        }) || el;
+      }
+      const rect = target.getBoundingClientRect();
+      if (rect.width < 43.5 || rect.height < 43.5) issues.push(`${label}: small touch target ${name(el)} ${rect.width.toFixed(1)}×${rect.height.toFixed(1)}`);
+      if (rect.x < -1 || rect.right > innerWidth + 1) issues.push(`${label}: horizontal clipping ${name(el)} [${rect.x.toFixed(1)},${rect.right.toFixed(1)}]`);
+    }
+    const textSelectors = '.nav-label,.hint-item,.card-title,.timer-title,.laser-title,.setting-label,.setting-hint,.theme-meta strong,.theme-meta span,.toggle-label,.laser-hint,#typingHint,.status-label,.macro-btn,.native-key,.key-group-label,.context-status,.context-app,.catalog-text strong,.catalog-text span,.catalog-status,.console-page h1,.volume-level-label span,.brightness-level-label span';
+    const texts = [...scope.querySelectorAll(textSelectors)];
+    if (!modal) texts.push(...document.querySelectorAll('.nav-label,.status-label'));
+    for (const el of texts.filter(visible)) {
+      if (el.closest(':disabled') || !el.textContent.trim()) continue;
+      const chain = [];
+      let opacity = 1;
+      for (let ancestor = el; ancestor; ancestor = ancestor.parentElement) {
+        const style = getComputedStyle(ancestor);
+        chain.push(rgba(style.backgroundColor));
+        opacity *= Number(style.opacity);
+      }
+      let background = [255, 255, 255, 1];
+      for (const layer of chain.reverse()) background = blend(layer, background);
+      const style = getComputedStyle(el), color = rgba(style.color);
+      color[3] *= opacity;
+      const foreground = blend(color, background), a = luminance(foreground), b = luminance(background);
+      const ratio = (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05);
+      const size = parseFloat(style.fontSize), bold = Number(style.fontWeight) >= 700;
+      const minimum = size >= 24 || (bold && size >= 18.66) ? 3 : 4.5;
+      if (ratio + 0.02 < minimum) issues.push(`${label}: contrast ${name(el)} ${ratio.toFixed(2)}:1 (needs ${minimum}:1)`);
+    }
+    const app = document.querySelector('#app').getBoundingClientRect();
+    if (innerWidth >= 1100 && app.width > 1000) issues.push(`${label}: desktop remote stretches to ${app.width.toFixed(0)}px`);
+    return issues;
+  }, label);
+}
+async function screenshot(page, name) {
+  if (!captureScreenshots) return;
+  await settleVisual(page);
+  fs.mkdirSync(artifactDir, {recursive: true});
+  await page.screenshot({path: path.join(artifactDir, `${name}.png`), animations: 'disabled'});
+}
+for (const [width, height] of [[360, 640], [390, 844], [844, 390], [320, 568], [390, 420], [1440, 900]]) {
+  test(`all remote views and dialogs have readable text and touch targets at ${width}x${height}`, async page => {
+    await page.setViewportSize({width, height});
+    const issues = [];
+    for (const view of views) {
+      await page.locator(`.nav-tab[data-view="view${view}"]`).click();
+      await screenshot(page, `${view.toLowerCase()}-${width}x${height}`);
+      issues.push(...await inspectUsability(page, `${width}x${height}/${view}`));
+      if (view === 'Keyboard') {
+        await page.locator('#keyboardModeNumpad').click();
+        await screenshot(page, `numpad-${width}x${height}`);
+        issues.push(...await inspectUsability(page, `${width}x${height}/Numpad`));
+        await page.locator('#keyboardModeKeys').click();
+      }
+    }
+    for (const [trigger, id] of [['btnTheme', 'themeModal'], ['btnSettings', 'settingsModal']]) {
+      if (trigger === 'btnTheme') await openTheme(page); else await page.locator(`#${trigger}`).click();
+      await screenshot(page, `${id}-${width}x${height}`);
+      issues.push(...await inspectUsability(page, `${width}x${height}/${id}`));
+      await page.keyboard.press('Escape');
+      if (trigger === 'btnTheme') await page.keyboard.press('Escape');
+    }
+    assert.deepEqual(issues, [], 'responsive, contrast and touch target audit');
+  }, true);
+}
+
+test('all five themes keep control text readable on every remote view and settings dialog', async page => {
+  const issues = [];
+  for (const theme of ['cyber', 'oled', 'matrix', 'nordic', 'light']) {
+    await openTheme(page);
+    await page.locator(`.theme-option[data-theme-id="${theme}"]`).click();
+    await page.keyboard.press('Escape');
+    for (const view of views) {
+      await page.locator(`.nav-tab[data-view="view${view}"]`).click();
+      if (view === 'Trackpad') await screenshot(page, `theme-${theme}-trackpad`);
+      issues.push(...await inspectUsability(page, `${theme}/${view}`));
+    }
+    await page.locator('#btnSettings').click();
+    await screenshot(page, `theme-${theme}-settings`);
+    issues.push(...await inspectUsability(page, `${theme}/settings`));
+    await page.keyboard.press('Escape');
+  }
+  assert.deepEqual(issues, [], 'five-theme accessibility audit');
+}, true);
+
+(async () => {
+  await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
+  origin = `http://127.0.0.1:${server.address().port}`;
+  let failed = 0;
+  const selectedTests = tests.filter(test => (!behaviorOnly || !test.visual)
+    && (!nameFilter || new RegExp(nameFilter, 'i').test(test.name)));
+  assert.ok(selectedTests.length, 'test filter must match at least one check');
+  try {
+    const executablePath = process.env.CHROMIUM_EXECUTABLE ||
+      (fs.existsSync(chromium.executablePath()) ? chromium.executablePath() : 'C:/Program Files/Google/Chrome/Application/chrome.exe');
+    browser = await chromium.launch({executablePath, headless: true});
+    for (const {name, run} of selectedTests) {
+      posts.length = 0;
+      let context;
+      try {
+        const fixtureResult = await fixture(); context = fixtureResult.context;
+        await run(fixtureResult.page, context);
+        assert.deepEqual(fixtureResult.errors, [], 'no uncaught browser errors during interaction');
+        console.log(`PASS ${name}`);
+      } catch (error) {
+        failed++; console.error(`FAIL ${name}\n  ${error.stack || error}`);
+      } finally { await context?.close(); }
+    }
+    console.log(`${selectedTests.length - failed}/${selectedTests.length} passed; ${failed} failed`);
+  } finally {
+    await browser?.close(); await new Promise(resolve => server.close(resolve));
+  }
+  process.exitCode = failed ? 1 : 0;
+})().catch(error => { console.error(error); server.close(); process.exitCode = 1; });

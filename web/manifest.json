@@ -1,0 +1,18 @@
+{
+  "name": "TouchHelm Remote",
+  "short_name": "TouchHelm",
+  "description": "Turn your Android phone into a precision trackpad, keyboard, and presentation remote for Windows PC.",
+  "start_url": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#070a0e",
+  "theme_color": "#070a0e",
+  "icons": [
+    {
+      "src": "/icons/icon.svg",
+      "sizes": "192x192 512x512",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
