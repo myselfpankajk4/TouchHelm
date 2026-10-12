@@ -5,6 +5,7 @@ connected Android devices, live activity stream, and sensitivity settings.
 """
 
 import sys
+import os
 import time
 import socket
 import webbrowser
@@ -12,7 +13,7 @@ import threading
 import queue
 import asyncio
 import tkinter as tk
-from tkinter import ttk
+from tkinter import ttk, messagebox
 import qrcode
 import pystray
 from PIL import Image, ImageDraw, ImageTk
@@ -313,6 +314,15 @@ class TouchHelmDesktopApp:
                         fg=TEXT_PRIMARY, bg=BG_CARD, selectcolor=BG_CARD_ALT, activebackground=BG_CARD,
                         activeforeground=TEXT_PRIMARY, highlightcolor=ACCENT_BLUE,
                         command=self._on_invert_change).pack(anchor="w", pady=(0, 2))
+        remote_section = section("Remote screen", "Trusted HTTPS and a host PIN are required. Streaming is optional.")
+        self.var_remote = tk.BooleanVar(value=self.config.get('remote_enabled', False))
+        tk.Checkbutton(remote_section,text='Enable Remote screen access',variable=self.var_remote,
+            fg=TEXT_PRIMARY,bg=BG_CARD,selectcolor=BG_CARD_ALT,
+            command=self._toggle_remote).pack(anchor='w')
+        self.lbl_remote_status=tk.Label(remote_section,text='No remote session.',bg=BG_CARD,fg=TEXT_SECONDARY,wraplength=360,justify='left')
+        self.lbl_remote_status.pack(anchor='w',pady=8)
+        ttk.Button(remote_section,text='Stop remote session',command=self._stop_remote).pack(anchor='w')
+        ttk.Button(remote_section,text='Wireless Display setup',command=lambda:os.startfile('ms-settings:project')).pack(anchor='w',pady=6)
         presentation = section("Presentation", "Choose the laser pointer color shown on this PC.")
         self.var_laser_color = tk.StringVar(value=self.config.get("laser_color", "red"))
         colors = tk.Frame(presentation, bg=BG_CARD)
@@ -439,6 +449,19 @@ class TouchHelmDesktopApp:
                 asyncio.run_coroutine_threadsafe(coroutine, self.server_loop)
             except RuntimeError:
                 coroutine.close()
+
+    def _toggle_remote(self):
+        try:
+            self.config.set('remote_enabled',bool(self.var_remote.get()))
+            if self.server and self.server_loop:
+                asyncio.run_coroutine_threadsafe(self.server.remote_settings_changed(),self.server_loop)
+        except Exception as error:
+            self.var_remote.set(bool(self.config.get('remote_enabled')))
+            messagebox.showerror('Remote screen access',str(error))
+
+    def _stop_remote(self):
+        if self.server and self.server_loop:
+            asyncio.run_coroutine_threadsafe(self.server.stop_remote(),self.server_loop)
 
     def _refresh_settings(self):
         self._syncing_settings = True
@@ -645,6 +668,9 @@ class TouchHelmDesktopApp:
             self._refresh_build_url()
             self._flush_activity()
             self._refresh_devices()
+            if hasattr(self,'lbl_remote_status') and self.server and hasattr(self.server,'remote'):
+                remote=self.server.remote.snapshot()
+                self.lbl_remote_status.configure(text=(remote.get('device') or '')+' · '+remote['state']+' · '+remote['message'])
             self.root.after(300, loop)
 
         self.root.after(300, loop)

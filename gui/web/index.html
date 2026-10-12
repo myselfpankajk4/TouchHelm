@@ -18,6 +18,7 @@
     <div class="host-status"><span class="status-dot" aria-hidden="true"></span><span id="hostStatus">Starting host…</span></div>
     <button id="minimize" class="quiet-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg><span>Minimize to tray</span></button>
   </header>
+  <aside id="desktopRemoteBanner" class="remote-session-banner" hidden><span id="desktopRemoteBannerText" role="status"></span><button id="desktopRemoteBannerStop" type="button">Stop remote session</button></aside>
   <p id="previewBanner" class="preview-banner" hidden>Interface preview · sample data. Native actions are disabled.</p>
   <div class="desktop-body">
     <nav class="desktop-nav" aria-label="Desktop pages">
@@ -67,12 +68,14 @@
             <label class="check-label"><input id="invertScroll" type="checkbox" name="invert_scroll">Natural scrolling</label>
           </fieldset>
           <fieldset class="control-group"><legend>Security & presentation</legend>
+            <label class="check-label"><input id="remoteEnabled" type="checkbox" name="remote_enabled">Enable Remote screen access</label><p class="muted">Requires a host PIN and trusted HTTPS. Your authenticated phone can start viewing or control while you are away. One remote stream at a time.</p>
             <label class="check-label"><input id="requirePIN" type="checkbox" name="require_pin">Require a four-digit PIN</label>
             <label for="pinInput">Connection PIN</label><input id="pinInput" name="pin_code" type="text" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" aria-describedby="pinHelp"><p id="pinHelp" class="muted">A change asks connected phones to authenticate again.</p>
             <label for="laserColor">Laser color</label><select id="laserColor" name="laser_color"><option value="red">Red</option><option value="green">Green</option><option value="blue">Blue</option><option value="amber">Amber</option></select>
           </fieldset>
           <p id="saveError" class="save-error" role="alert" hidden></p><div class="button-row"><button class="primary-button" id="saveSettings" type="submit">Save settings</button><span id="saveStatus" class="muted" role="status"></span></div>
         </form>
+        <section class="surface" aria-labelledby="desktopRemoteTitle"><h2 id="desktopRemoteTitle">Remote screen &amp; casting</h2><p id="desktopRemoteStatus" role="status">No remote session.</p><div class="button-row"><button id="desktopStopRemote" type="button">Stop remote session</button><button id="desktopCastingSettings" type="button">Wireless Display setup</button></div><p class="muted">Windows Wireless Display receives compatible Miracast phones. Install its optional feature in Windows Settings; Google Cast and AirPlay are different protocols.</p></section>
         <div id="themePicker" class="surface theme-picker" aria-label="Desktop appearance"></div>
       </section>
       <section class="desktop-panel" data-page="diagnostics" hidden>

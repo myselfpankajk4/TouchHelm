@@ -383,8 +383,8 @@ async function assertDialogFocus(page, id) {
 test('navigation exposes selected tabs and keyboard theme choices are native controls', async page => {
   assert.equal(await page.locator('#statusPill').evaluate(el => el.tagName), 'BUTTON');
   const tabs = page.locator('.nav-tab');
-  assert.equal(await tabs.count(), 5);
-  for (let i = 0; i < 5; i++) {
+  assert.equal(await tabs.count(), 6);
+  for (let i = 0; i < 6; i++) {
     const tab = tabs.nth(i), view = await tab.getAttribute('data-view');
     assert.equal(await tab.getAttribute('role'), 'tab');
     assert.equal(await tab.getAttribute('aria-controls'), view);
@@ -697,7 +697,8 @@ test('failed wake lock cannot leave an active button or a dummy playback loop', 
   await page.locator('#btnWakeLock').click();
   await page.waitForTimeout(30);
   assert.equal(await page.evaluate(() => window.touchhelm.wakeLockRequested), false);
-  assert.equal(await page.locator('video').count(), 0, 'failed wake lock must not create dummy media');
+  assert.equal(await page.locator('video:not(#remoteVideo)').count(), 0, 'failed wake lock must not create dummy media');
+  assert.equal(await page.locator('#remoteVideo').evaluate(video=>video.srcObject), null, 'Remote video remains inactive');
   assert.equal(await page.evaluate(() => document.querySelector('#btnWakeLock').style.color === 'var(--primary)'), false);
   assert.ok(await page.locator('#uiFeedback').isVisible(), 'touch users need visible capability feedback');
   assert.match(await page.locator('#uiFeedback').textContent(), /awake|wake|https|browser/i);
@@ -869,7 +870,7 @@ for (const [width, height] of [[360, 640], [390, 844], [844, 390], [320, 568], [
   }, true);
 }
 
-const views = ['Trackpad', 'Presenter', 'Media', 'Keyboard', 'Apps'];
+const views = ['Trackpad', 'Presenter', 'Media', 'Keyboard', 'Apps', 'Remote'];
 async function settleVisual(page) {
   await page.evaluate(async () => {
     await Promise.race([new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))),new Promise(resolve=>setTimeout(resolve,100))]);
@@ -1012,6 +1013,16 @@ test('living visual matrix covers every theme, appearance, phone size and deskto
           const overlap=await page.evaluate(()=>{const n=document.querySelector('#btnSlideNext').getBoundingClientRect(),s=document.querySelector('#presentationDisplay').getBoundingClientRect();return n.bottom>s.top;});
           if(overlap)issues.push(`${theme}/${width}: Presenter monitor overlap`);
         }
+        if(view==='Remote'){
+          for(const state of ['remote_control','remote_view','remote_connecting','remote_paused','remote_unavailable']){
+            await page.evaluate(state=>TouchHelmDemo.setState(state),state);
+            issues.push(...await inspectUsability(page,`${theme}/${appearance}/${width}x${height}/${state}`));
+            if(width===390&&height===844&&state==='remote_control')await screenshot(page,`remote-${theme}-${appearance}-control`);
+          }
+          await page.evaluate(()=>{touchhelm.remote.reset('stopped','Interface preview.');remoteCastGuide.hidden=false;});
+          issues.push(...await inspectUsability(page,`${theme}/${appearance}/${width}x${height}/casting`));
+          await page.evaluate(()=>remoteCastGuide.hidden=true);
+        }
         if(width===390&&height===844)await screenshot(page,`living-${theme}-${appearance}-${view.toLowerCase()}`);
       }
     }
@@ -1045,6 +1056,71 @@ test('living visual matrix covers every theme, appearance, phone size and deskto
   }
   await desktop.close();assert.deepEqual(issues,[],'full living theme/layout matrix');
 },true);
+
+test('Remote keeps a browser-only casting guide and refuses insecure streaming',async page=>{
+  await page.locator('#tabRemote').click();
+  await page.locator('[data-remote-mode="control"]').click();
+  assert.match(await page.locator('#remoteStatus').textContent(),/trusted HTTPS/i);
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.type==='remote_start').length),0);
+  await page.locator('#remoteCastOpen').click();
+  assert.ok(await page.locator('#remoteCastGuide').isVisible());
+  assert.match(await page.locator('#remoteCastGuide').textContent(),/Google Cast|Miracast/);
+});
+
+async function fakeRemote(page,mode='control'){
+  await page.locator('#tabRemote').click();
+  await page.evaluate(mode=>{
+    const r=touchhelm.remote;r.session='fixture';r.revision='geometry1';r.mode=mode;r.state='live';r.geometry={width:1920,height:1080};r.serverState='live';r.render();
+    Object.defineProperty(remoteVideo,'videoWidth',{get:()=>1920,configurable:true});Object.defineProperty(remoteVideo,'videoHeight',{get:()=>1080,configurable:true});
+    __packets.length=0;
+  },mode);
+}
+
+test('Remote view mode cannot send input and direct coordinates stay scoped',async page=>{
+  await fakeRemote(page,'view');
+  assert.equal(await page.evaluate(()=>touchhelm.remote.input({type:'key',key:'a'})),false);
+  assert.ok(await page.locator('#remoteLeft').isDisabled());
+  await page.evaluate(()=>{touchhelm.remote.mode='control';touchhelm.remote.render();remoteInteraction.value='direct';});
+  const box=await page.locator('#remoteStage').boundingBox();
+  await page.locator('#remoteStage').tap({position:{x:box.width/2,y:box.height/2}});
+  const commands=await page.evaluate(()=>__packets.filter(p=>p.type==='remote_input'));
+  assert.ok(commands.every(p=>p.session_id==='fixture'&&p.revision==='geometry1'));
+  assert.equal(commands.at(-1).command.type,'click');
+  assert.ok(Math.abs(commands[0].command.x-.5)<.02);
+});
+
+test('Remote text Return stays multiline and Stop releases drag and clears video',async page=>{
+  await fakeRemote(page);
+  await page.locator('#remoteTyping summary').click();
+  await page.locator('#remoteText').fill('first');await page.locator('#remoteText').press('Enter');await page.locator('#remoteText').press('b');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.command?.type==='text').length),0);
+  await page.locator('#remoteTextSend').click();
+  assert.equal(await page.evaluate(()=>__packets.find(p=>p.command?.type==='text').command.text),'first\nb');
+  await page.locator('#remoteDrag').click();await page.locator('#remoteStop').click();
+  assert.equal(await page.evaluate(()=>touchhelm.remote.session),'');
+  assert.equal(await page.evaluate(()=>remoteVideo.srcObject),null);
+  assert.equal(await page.locator('#remoteDrag').getAttribute('aria-pressed'),'false');
+});
+
+test('Leaving Remote pauses without transmitting its draft on return',async page=>{
+  await fakeRemote(page);
+  await page.locator('#remoteTyping summary').click();await page.locator('#remoteText').fill('private draft');
+  await page.locator('#tabTrackpad').click();await page.locator('#tabRemote').click();
+  assert.ok(await page.locator('#remoteResume').isVisible());
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.type==='remote_pause').length),1);
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.command?.type==='text').length),0);
+  assert.equal(await page.locator('#remoteText').inputValue(),'private draft');
+});
+
+test('Remote restores its local draft without replay and honors Shift Enter preference',async page=>{
+  await page.evaluate(()=>localStorage.setItem('touchhelm_remote_draft','saved\ndraft'));
+  await page.reload();await page.waitForFunction(()=>touchhelm?.isConnected);
+  assert.equal(await page.locator('#remoteText').inputValue(),'saved\ndraft');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.command?.type==='text'||p.type==='text').length),0);
+  await fakeRemote(page);
+  await page.evaluate(()=>{touchhelm.newlineMode='shift_enter';touchhelm.remote.input({type:'text',text:'a\nb'});});
+  assert.equal(await page.evaluate(()=>__packets.find(p=>p.command?.type==='text').command.newline_mode),'shift_enter');
+});
 
 (async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));

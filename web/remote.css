@@ -1,0 +1,48 @@
+.bottom-nav { display:grid; grid-template-columns:repeat(6,minmax(44px,1fr)); }
+.nav-tab { min-width:44px; }
+#viewRemote { overflow:auto; padding:0; }
+.remote-shell { display:flex; flex-direction:column; min-height:100%; gap:12px; padding:14px; }
+.remote-heading { display:flex; justify-content:space-between; align-items:center; gap:8px; }
+.remote-shell button { min-width:44px; min-height:44px; }
+.remote-shell button:not(.remote-mode-card) { padding:8px 12px; border:1px solid var(--border-color); border-radius:var(--th-key-radius,8px); background:var(--bg-surface); color:var(--text-main); font-weight:600; }
+.remote-shell button:not(.remote-mode-card):active { background:var(--bg-card-hover); }
+.remote-toolbar:first-child { position:sticky; top:0; z-index:4; background:var(--bg-main); padding:6px 0; }
+:root[data-theme="clay"] .remote-shell button:not(.remote-mode-card),:root[data-theme="soft"] .remote-shell button:not(.remote-mode-card) { box-shadow:var(--th-shadow); }
+:root[data-theme="clay"] .remote-shell button:not(.remote-mode-card):active,:root[data-theme="soft"] .remote-shell button:not(.remote-mode-card):active { box-shadow:inset 2px 3px 6px #00000020; }
+.remote-heading h2 { margin:0; font-size:24px; }
+.remote-heading button { min-height:44px; }
+.remote-state { color:var(--text-secondary,var(--text-muted)); font-size:13px; }
+.remote-status { margin:0; font-size:14px; line-height:1.5; overflow-wrap:anywhere; }
+.remote-modes { display:grid; gap:10px; }
+.remote-mode-card { display:grid; grid-template-columns:54px 1fr; align-items:center; gap:14px; text-align:left; border:1px solid var(--border-color); background:var(--bg-card,var(--bg-surface)); color:var(--text-main); border-radius:14px; padding:18px; min-height:100px; }
+.remote-mode-card svg { width:48px; height:48px; color:var(--primary); }
+.remote-mode-card strong { display:block; font-size:18px; margin-bottom:5px; }
+.remote-mode-card small { display:block; font-size:13px; color:var(--text-secondary,var(--text-muted)); line-height:1.5; }
+.remote-mode-card:active { background:var(--bg-surface); }
+.remote-note { margin:14px 0 0; font-size:13px; line-height:1.5; color:var(--text-secondary,var(--text-muted)); }
+.remote-viewer { display:flex; flex-direction:column; gap:10px; flex:1; }
+.remote-toolbar { display:flex; flex-wrap:wrap; align-items:end; gap:8px; }
+.remote-toolbar label { flex:1; min-width:100px; font-size:12px; display:grid; gap:4px; }
+.remote-toolbar select,.remote-toolbar button,.remote-typing button,.remote-typing input { min-height:44px; min-width:44px; padding:8px; color:var(--text-main); background:var(--bg-surface); border:1px solid var(--border-color); border-radius:8px; }
+.remote-toolbar label.remote-check { display:flex; align-items:center; gap:8px; flex:0 1 auto; min-height:44px; }
+.remote-stage { position:relative; display:flex; align-items:center; justify-content:center; background:#080d12; border-radius:14px; overflow:hidden; flex:1; min-height:240px; height:clamp(240px,42dvh,640px); touch-action:none; isolation:isolate; }
+.remote-stage:fullscreen { border-radius:0; width:100vw; height:100dvh; }
+.remote-stage video { width:100%; height:100%; object-fit:contain; pointer-events:none; transform-origin:center; }
+.remote-stage[data-state]:not([data-state=live])::after { content:"Waiting for fresh video"; position:absolute; inset:0; display:grid; place-items:center; color:#eef7fa; background:#080d12d9; pointer-events:none; }
+.remote-readouts { display:flex; flex-wrap:wrap; justify-content:space-between; gap:8px; font-size:12px; color:var(--text-secondary,var(--text-muted)); font-variant-numeric:tabular-nums; }
+.remote-clicks { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
+.remote-clicks button { min-height:44px; }
+.remote-clicks [aria-pressed=true] { background:var(--primary); color:var(--primary-contrast,#06131a); }
+.remote-typing summary,.remote-cast summary { min-height:44px; padding:12px 0; cursor:pointer; }
+.remote-typing textarea { width:100%; min-height:84px; resize:vertical; padding:12px; background:var(--bg-surface); color:var(--text-main); border:1px solid var(--border-color); border-radius:8px; font:inherit; }
+.remote-typing .button-row { display:flex; flex-wrap:wrap; gap:8px; margin:8px 0; }
+.remote-typing input { flex:1; min-width:130px; font:inherit; }
+#remoteKeys { display:grid; grid-template-columns:repeat(6,minmax(0,1fr)); gap:4px; }
+#remoteKeys .native-key { font-size:11px; min-width:0; min-height:44px; padding:3px; overflow-wrap:anywhere; }
+.remote-cast { font-size:14px; line-height:1.6; }
+.remote-cast li { margin-bottom:10px; }
+.remote-shell [hidden] { display:none!important; }
+@media(max-width:360px){.remote-shell{padding:10px}.nav-label{font-size:10px}.bottom-nav{gap:0;padding-left:6px;padding-right:6px}.remote-toolbar{gap:6px}.remote-mode-card{padding:14px;gap:10px}}
+@media(orientation:landscape) and (max-height:500px){.remote-stage{height:55dvh;min-height:160px}.remote-mode-card{min-height:84px;padding:12px}.remote-modes{grid-template-columns:repeat(3,1fr)}.remote-mode-card{grid-template-columns:1fr}.remote-mode-card svg{height:32px;width:32px}}
+
+.remote-cursor{position:absolute;width:18px;height:26px;pointer-events:none;z-index:2}

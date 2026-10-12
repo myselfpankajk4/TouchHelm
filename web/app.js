@@ -96,6 +96,7 @@ class TouchHelmClient {
     this.bindEvents();
     if (window.TouchHelmControls) this.controls = new window.TouchHelmControls(this);
     if (window.TouchHelmExperience) this.experience = new window.TouchHelmExperience(this);
+    if (window.TouchHelmRemote) this.remote = new window.TouchHelmRemote(this);
     this.connect();
     this.initPwa();
     this.fetchServerConfig();
@@ -442,6 +443,7 @@ class TouchHelmClient {
             return;
           }
           this.isConnected = true;
+          this.remote?.connected(true);
           this.closeModal(this.pinModal);
           this.setStatus("connected", "Connected");
           this.clearFeedback("connection");
@@ -456,6 +458,7 @@ class TouchHelmClient {
             this.onBrightnessSync(msg.brightness);
           }
         } else if (msg.type === "auth_required") {
+          this.remote?.connected(false);
           this.releaseDragLock();
           this.isConnected = false;
           this.stopPing();
@@ -463,6 +466,9 @@ class TouchHelmClient {
           this.showPin();
         } else if (msg.type === "config_sync") {
           if (msg.config) this.applyServerConfig(msg.config);
+          this.remote?.query();
+        } else if (msg.type.startsWith('remote_')) {
+          this.remote?.handle(msg);
         } else if (msg.type === "volume_sync") {
           this.onVolumeSync(msg.volume, msg.muted);
         } else if (msg.type === "brightness_sync") {
@@ -489,6 +495,7 @@ class TouchHelmClient {
       this.isConnected = false;
       this.stopPing();
       this.setStatus("disconnected", "Offline");
+      this.remote?.connected(false);
       if (this.pinModal?.classList.contains("open") && this.pinError) {
         this.pinError.textContent = "PC disconnected. Reconnecting…";
       }
@@ -738,6 +745,7 @@ class TouchHelmClient {
     }
     if (data.type === 'text' && this.newlineMode === 'shift_enter') data = {...data,newline_mode:'shift_enter'};
     if (data.type === 'laser' && (this.presentationDisplay||this.autoPresentationDisplay)) data = {...data,display_id:this.presentationDisplay||this.autoPresentationDisplay};
+    data = this.remote?.wrap(data) || data;
     try { this.ws.send(JSON.stringify(data)); return true; } catch (e) { return false; }
   }
 
@@ -993,6 +1001,7 @@ class TouchHelmClient {
   }
 
   switchView(viewId) {
+    this.remote?.onView(viewId);
     window.TouchHelmEffects?.reset?.();
     if(this.experience?.seeking){this.experience.seeking=false;this.experience.text('seekPreview','');this.experience.tickMedia();}
     this.releaseDragLock();

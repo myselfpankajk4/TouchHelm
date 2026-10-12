@@ -563,6 +563,12 @@ class WindowsInputController:
         self.ensure_input_desktop()
         user32.SetCursorPos(int(x), int(y))
 
+    def set_physical_cursor_pos(self, x: int, y: int):
+        """Map capture pixels without caller DPI virtualization."""
+        self.ensure_input_desktop()
+        if not user32.SetPhysicalCursorPos(int(x), int(y)):
+            raise RuntimeError('Windows could not move the pointer in the active desktop.')
+
     def move_rel(self, dx: float, dy: float, sensitivity: float = 1.0, acceleration: float = 1.0):
         """
         Relative mouse movement with sub-pixel accumulator and acceleration curve.

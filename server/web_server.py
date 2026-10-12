@@ -66,6 +66,41 @@ class TouchHelmServer:
         self._displays = {}
         self._service_tasks = {}
         self._native_action_lock = asyncio.Lock()
+        from server.remote_service import RemoteService
+        from server.remote_media import MediaWorker, capabilities
+        self.remote = RemoteService(config, self.desktop_services.displays, MediaWorker,
+            self._release_client_input, self.input_ctrl, capabilities=capabilities,
+            notify=self._remote_state_changed, before_control=self._remote_acquire_input)
+        self._remote_tasks = {}
+
+    def _remote_state_changed(self, state):
+        owner = self.remote.owner
+        async def send():
+            for client in list(self.clients.values()):
+                if client.authenticated and not client.ws.closed:
+                    if state.get('type')=='remote_cursor' and client is not owner:continue
+                    # A session token is delivered only to its owning websocket.
+                    value = state if client is owner else dict(state, session_id='', revision='')
+                    with suppress(ConnectionError, RuntimeError):
+                        await client.ws.send_json(value)
+        asyncio.create_task(send())
+
+    def _remote_acquire_input(self):
+        for client in list(self.clients.values()):self._release_client_input(client)
+        self.laser_client.hide()
+
+    async def _remote_request(self, client, data, secure):
+        result = await self.remote.request(client, data, secure)
+        if client.authenticated and not client.ws.closed:
+            with suppress(ConnectionError, RuntimeError): await client.ws.send_json(result)
+
+    async def stop_remote(self):
+        await self.remote.stop('Stopped from the desktop.')
+
+    async def remote_settings_changed(self):
+        if not self.config.get('remote_enabled') or not self.config.get('require_pin'):
+            await self.remote.stop('Remote screen access disabled on the desktop.')
+        await self.broadcast({'type':'config_sync','config':self.config.public_data()})
 
     async def _native_call(self, name, *args):
         async with self._native_action_lock:
@@ -92,6 +127,8 @@ class TouchHelmServer:
         if not client.authenticated or client.ws not in self.clients or client.ws.closed:
             return
         kind = data['type']
+        if self.remote.blocks_input(client) and kind not in ('get_desktop_state','get_apps','get_media_library','get_presentation_details','get_displays'):
+            return
         try:
             if kind == 'get_desktop_state':
                 reply = {'type': 'desktop_state', **await self.desktop_services.snapshot()}
@@ -245,6 +282,7 @@ class TouchHelmServer:
         # device must not leave the remaining clients authorized with an old PIN.
         for _, client in clients:
             client.authenticated = authorized
+        await self.remote.stop('Pairing changed. Authenticate again to start Remote.')
         for _, client in clients:
             self._cancel_desktop_requests(client)
             self._release_client_input(client)
@@ -404,7 +442,7 @@ class TouchHelmServer:
                 data = await request.json()
                 if not isinstance(data, dict):
                     raise ValueError("Settings must be an object")
-                if any(key in data for key in ('port','https_port','https_enabled','tailscale_enabled','tailscale_owned_host')):
+                if any(key in data for key in ('port','https_port','https_enabled','tailscale_enabled','tailscale_owned_host','remote_enabled')):
                     raise ValueError("Changing the port requires a server restart")
                 pin_setting_changed = any(k in data and self.config.get(k) != data[k]
                                           for k in ("require_pin", "pin_code"))
@@ -424,6 +462,7 @@ class TouchHelmServer:
 
         remote_ip = request.remote or "unknown"
         client = ConnectedClient(ws, remote_ip)
+        client.remote_secure = self.request_origin(request).startswith('https://')
         self.clients[ws] = client
         self._notify_client_change()
         self._log_event("Device connected", remote_ip)
@@ -462,6 +501,7 @@ class TouchHelmServer:
                         client.device_name = str(data.get("device_name", "TouchHelm Client"))[:40]
                         authorized = not self.config.get("require_pin", False) or self._pin_matches(data.get("pin"))
                         if not authorized:
+                            if self.remote.owner is client: await self.remote.stop('Authentication revoked.')
                             self._cancel_desktop_requests(client)
                             self._release_client_input(client)
                             self.laser_client.hide()
@@ -477,6 +517,37 @@ class TouchHelmServer:
                         continue
 
                     if not client.authenticated:
+                        continue
+
+                    if msg_type.startswith('remote_') and msg_type != 'remote_input':
+                        previous = self._remote_tasks.get(ws)
+                        if msg_type in ('remote_stop', 'remote_pause'):
+                            if previous and not previous.done(): previous.cancel()
+                            await self._remote_request(client, data, client.remote_secure)
+                        elif previous and not previous.done():
+                            await ws.send_json({'type':'remote_result','success':False,'message':'Remote request is still running.'})
+                        else:
+                            task=asyncio.create_task(self._remote_request(client,data,client.remote_secure))
+                            self._remote_tasks[ws]=task
+                        continue
+                    if msg_type == 'remote_input':
+                        if not self.remote.accept_input(client,data):
+                            await ws.send_json({'type':'remote_result','success':False,'message':'Remote input is paused, stale, or view-only.'})
+                            continue
+                        command=data.get('command')
+                        if not isinstance(command,dict) or not self._valid_packet(command): continue
+                        kind=command.get('type')
+                        if kind=='absolute':
+                            point=self.remote.point(client,dict(data,x=command.get('x'),y=command.get('y')))
+                            if point:
+                                try:self.input_ctrl.set_physical_cursor_pos(*point)
+                                except RuntimeError as error:
+                                    await ws.send_json({'type':'remote_result','success':False,'message':str(error)})
+                            continue
+                        if kind not in ('move','click','dblclick','mousedown','mouseup','scroll','key','keydown','keyup','text','hotkey','zoom'):continue
+                        data=command;msg_type=kind
+                    elif self.remote.blocks_input(client) and msg_type not in ('ping','get_desktop_state','get_apps','get_media_library','get_displays','get_volume','get_brightness','get_system_status','get_presentation_details'):
+                        await ws.send_json({'type':'command_result','success':False,'message':'Another phone currently owns Remote control.'})
                         continue
 
                     desktop_query = msg_type in ('get_desktop_state', 'get_apps', 'launch_app',
@@ -672,6 +743,9 @@ class TouchHelmServer:
                     pass
 
         finally:
+            task=self._remote_tasks.pop(ws,None)
+            if task and not task.done():task.cancel()
+            if self.remote.owner is client:await self.remote.stop('Phone disconnected.')
             self._cancel_desktop_requests(client)
             self._release_client_input(client)
             self.laser_client.hide()
@@ -895,6 +969,10 @@ class TouchHelmServer:
         print(f"TouchHelm Server listening on port {port}")
 
     async def stop(self):
+        for task in self._remote_tasks.values():task.cancel()
+        await asyncio.gather(*self._remote_tasks.values(),return_exceptions=True)
+        self._remote_tasks.clear()
+        await self.remote.stop('Host stopped.')
         await self.stop_tailscale_backend()
         await self.disable_https()
         if self.desktop_monitor_task:

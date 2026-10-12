@@ -17,6 +17,7 @@
       if(p.type==='get_apps')reply={type:'apps_sync',apps};
       if(p.type==='get_media_library')reply={type:'media_library',sessions:[{...media,id:media.session_id}],items:[],playlist_supported:false};
       if(p.type==='get_displays')reply={type:'displays',displays:[{id:'demo:display',name:'Presentation display',primary:true}]};
+      if(p.type==='remote_query')reply={type:'remote_capabilities',success:true,video:true,audio:true,enabled:true,secure:true,message:'Simulated Remote preview. No PC capture.',displays:[{id:'demo:display',name:'Sample monitor',primary:true,rect:{x:0,y:0,width:960,height:540}}]};
       if(p.type==='get_presentation_details')reply={type:'presentation_details',available:true,current:{index:3,title:'Results',artwork_id:'demo:slide'},next:{index:4,title:'Next steps',artwork_id:'demo:slide'},notes:'Illustrative speaker notes.\nThis preview does not read a real deck.',slides:Array.from({length:12},(_,i)=>({index:i+1,title:`Demo slide ${i+1}`})),capabilities:{goto:true}};
       if(p.type==='ping')reply={type:'pong',t:p.t};
       if(p.type==='media'){if(p.action==='pause')media.status='Paused';if(p.action==='play')media.status='Playing';if(p.action==='play_pause')media.status=media.status==='Playing'?'Paused':'Playing';if(p.action==='seek')media.position=p.value;reply={type:'command_result',command:'media',success:true};}
@@ -45,6 +46,17 @@
   };
   window.WebSocket=Socket;
   window.TouchHelmDemo={setState(name){
+    if(name.startsWith('remote_')&&window.touchhelm?.remote){
+      const client=window.touchhelm,r=client.remote;
+      client.switchView('viewRemote');r.reset('stopped','Simulated Remote preview.');
+      const live=['remote_control','remote_view'].includes(name);
+      r.session=live||name==='remote_connecting'?'preview-session':'';r.revision='preview-geometry';
+      r.mode=name==='remote_view'?'view':'control';r.selectedMode=r.mode;
+      r.state=live?'live':name==='remote_connecting'?'connecting':name==='remote_paused'?'paused':'unavailable';
+      r.video.poster='/icons/remote-preview.svg';r.geometry={width:960,height:540};r.render();
+      document.getElementById('remoteStats').textContent='Simulated 720p preview';document.getElementById('remoteLatency').textContent='No live connection';
+      r.status('Interface preview only. No desktop capture or PC input.');return;
+    }
     stateName=name;const client=window.touchhelm;client?.controls?.releaseKeys();
     if(name!=='typing')client?.controls?.collapseTyping();
     if(!['menu','closing'].includes(name))client?.closeModal(document.getElementById('appActionsModal'));

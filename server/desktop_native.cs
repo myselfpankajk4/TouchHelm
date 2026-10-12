@@ -8,6 +8,7 @@ using System.Text;
 
 // Private provider boundary. None of these methods accepts a phone path or HWND.
 public static class TouchHelmNative {
+    [DllImport("user32.dll")] public static extern bool SetProcessDpiAwarenessContext(IntPtr context);
     public class Window {
         public long handle; public uint pid; public string title, exe, aumid, identity;
     }

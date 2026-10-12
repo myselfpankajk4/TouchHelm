@@ -14,10 +14,12 @@ $script:slidePreviewCache = @{}
 $script:presentationTarget = $null
 $script:registrations = $null
 $script:registrationsAt = [DateTime]::MinValue
+$script:castingStatus = $null
 
 Add-Type -AssemblyName System.Drawing
 Add-Type -AssemblyName System.Windows.Forms
 Add-Type -Path (Join-Path $PSScriptRoot 'desktop_native.cs') -ReferencedAssemblies System.Drawing
+try { [void][TouchHelmNative]::SetProcessDpiAwarenessContext([IntPtr](-4)) } catch { }
 
 Add-Type -TypeDefinition @'
 using System;
@@ -379,7 +381,15 @@ function Read-Displays {
     $powerpoint = Get-PowerPoint
     try { if ($null -ne $powerpoint -and $powerpoint.SlideShowWindows.Count -gt 0) { $selected = Display-ForWindow ([long]$powerpoint.SlideShowWindows.Item(1).HWND) } } catch {}
     if ($null -eq $selected -and $null -ne $script:presentationTarget) { $selected = Display-ForWindow ([long]$script:presentationTarget.handle) }
-    return @{displays=@($displays);selected_id=$(if($null -ne $selected){$selected.id}else{$null})}
+    if ($null -eq $script:castingStatus) {
+        $script:castingStatus=@{receiver='unknown';message='Receiver and Miracast compatibility: Unknown. Check Windows Projecting to this PC.'}
+        try {
+            $receiver=@(Get-AppxPackage -Name Microsoft.WirelessDisplay -ErrorAction Stop)
+            if ($receiver.Count -eq 0) { $receiver=@(Get-AppxPackage -Name Microsoft.PPIProjection -ErrorAction Stop) }
+            if ($receiver.Count -gt 0) { $script:castingStatus=@{receiver='installed';message='Windows receiver app is registered. Phone/PC Miracast hardware compatibility is still Unknown.'} }
+        } catch { }
+    }
+    return @{displays=@($displays);casting=$script:castingStatus;selected_id=$(if($null -ne $selected){$selected.id}else{$null})}
 }
 
 function Display-ForWindow([long]$handle) {

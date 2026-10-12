@@ -26,6 +26,7 @@ DEFAULT_CONFIG = {
     "https_enabled": False,
     "https_port": 8766,
     "tailscale_enabled": False,
+    "remote_enabled": False,
     "tailscale_owned_host": ""
 }
 
@@ -53,6 +54,8 @@ class ConfigManager:
                         self.data[key] = value
                 if self.data["require_pin"] and not self._valid_pin(self.data["pin_code"]):
                     self.data["pin_code"] = DEFAULT_CONFIG["pin_code"]
+                if self.data['remote_enabled'] and not self.data['require_pin']:
+                    self.data['remote_enabled']=False
             except Exception as e:
                 print(f"Error loading config: {e}")
 
@@ -90,7 +93,7 @@ class ConfigManager:
             valid = type(value) in (int, float) and low <= value <= high and math.isfinite(value)
         elif key in ("port","https_port"):
             valid = type(value) is int and 1 <= value <= 65535
-        elif key in ("require_pin", "invert_scroll", "haptics_enabled","https_enabled","tailscale_enabled"):
+        elif key in ("require_pin", "invert_scroll", "haptics_enabled","https_enabled","tailscale_enabled","remote_enabled"):
             valid = type(value) is bool
         elif key == 'tailscale_owned_host':
             import re
@@ -117,6 +120,8 @@ class ConfigManager:
                 raise ValueError("A four-digit PIN is required")
             if updated['tailscale_enabled'] and not updated['require_pin']:
                 raise ValueError('Disable private Tailscale HTTPS before removing the host PIN.')
+            if updated['remote_enabled'] and not updated['require_pin']:
+                raise ValueError('Set a host PIN before enabling Remote screen access.')
             previous = self.data
             self.data = updated
             try:

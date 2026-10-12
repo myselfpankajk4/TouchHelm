@@ -117,6 +117,7 @@ class V2ProtocolTests(unittest.IsolatedAsyncioTestCase):
         app.router.add_get('/preview/desktop/',self.server.handle_desktop_preview)
         app.router.add_get('/preview/desktop/{path:.*}',self.server.handle_desktop_preview)
         app.router.add_get('/ws',self.server.handle_ws)
+        app.router.add_route('*','/api/config',self.server.handle_config)
         self.client=TestClient(TestServer(app));await self.client.start_server();self.addAsyncCleanup(self.client.close)
 
     async def test_desktop_preview_is_fixture_and_never_serves_private_or_native_files(self):
@@ -135,6 +136,11 @@ class V2ProtocolTests(unittest.IsolatedAsyncioTestCase):
         self.services.assets.get.return_value=None
         response=await self.client.get('/api/assets/arbitrary-path',headers={'X-TouchHelm-Pin':'5678'})
         self.assertEqual(response.status,404)
+
+    async def test_phone_cannot_enable_remote_even_with_valid_pin(self):
+        response=await self.client.post('/api/config',json={'remote_enabled':True},headers={'X-TouchHelm-Pin':'5678'})
+        self.assertEqual(response.status,400)
+        self.assertFalse(self.config.get('remote_enabled'))
 
     async def test_handoff_requires_auth_and_never_transfers_pin_or_oversize_draft(self):
         self.server.https_site=Mock()

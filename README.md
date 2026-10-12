@@ -2,7 +2,7 @@
 
 **Your PC, at your fingertips.** TouchHelm 2 adds a shared visual system, dependable composition, and controls driven by actual Windows capabilities.
 
-Turn your phone into a Windows trackpad, keyboard, presentation remote, media controller, and app launcher. TouchHelm runs on your PC and serves its controls to a phone browser over your local network. Scan the desktop QR code to connect; no phone APK is needed.
+Turn your phone into a Windows trackpad, keyboard, presentation remote, media controller, app launcher, and live desktop viewer/controller. TouchHelm runs on your PC and serves its controls to a phone browser over your local network or private Tailscale connection. Scan the desktop QR code to connect; no phone APK is needed.
 
 <p>
   <img src="docs/images/desktop.png" alt="TouchHelm desktop pairing and connected-device panel" width="620">
@@ -13,9 +13,14 @@ Turn your phone into a Windows trackpad, keyboard, presentation remote, media co
 
 ## Features
 
+**Remote (v2.2):** Control PC or View PC with live monitor video, trackpad/direct touch, pinch zoom, keyboard/numpad, quality presets and optional PC audio. Streaming starts disabled and requires a host PIN plus trusted HTTPS. The Cast phone to PC option guides compatible system casting; mobile browsers cannot capture the phone screen. [Setup, limitations and verification](docs/REMOTE.md).
+
+<img src="docs/images/remote.png" alt="Remote control tab showing a clearly labeled sample desktop" width="300">
+
 | Tab | What it does |
 | --- | --- |
 | **Trackpad** | Large movement surface, left/middle/right clicks, tap, hold-to-drag, two-finger scrolling, edge scrolling, and optional air mouse. |
+| **Remote** | Live PC viewing/control, monitor selection, zoom, native keys, optional system audio, and a Miracast setup guide. |
 | **Typing dock** | Buffered by default. Return inserts a newline; Send or Ctrl+Enter sends. Optional live sync, PC Enter, and Enter/Shift+Enter line breaks. Touching the pad dismisses typing and preserves the draft without PC input. |
 | **Presenter** | Previous/next above a large laser surface, monitor selection, independent countdown, and an optional PowerPoint slide/preview/notes drawer. |
 | **Media** | Now Playing with artwork, metadata, stateful Play/Pause, timeline, seeking and supported repeat/shuffle/speed controls. A queue appears only when a provider supplies one. |

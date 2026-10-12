@@ -1,0 +1,5 @@
+# Optional Remote tab providers. Keep base controls usable without them.
+aiortc==1.15.0
+dxcam==0.3.0
+PyAudioWPatch==0.2.12.9
+opencv-python-headless==5.0.0.93

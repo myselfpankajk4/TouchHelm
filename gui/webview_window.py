@@ -134,7 +134,7 @@ class DesktopAPI:
     def save_settings(self, token, settings):
         self._authorize(token)
         allowed = {'mouse_sensitivity', 'mouse_acceleration', 'scroll_speed', 'invert_scroll',
-                   'require_pin', 'pin_code', 'laser_color', 'haptics_enabled', 'server_name'}
+                   'require_pin', 'pin_code', 'laser_color', 'haptics_enabled', 'server_name', 'remote_enabled'}
         if not isinstance(settings, dict) or not settings or not set(settings) <= allowed:
             return {'success': False, 'error': 'Choose valid desktop settings. Port changes require a restart.'}
         app = self._app
@@ -150,7 +150,7 @@ class DesktopAPI:
                     if changed_pin:
                         app._submit(app.server.invalidate_auth_sessions())
                     else:
-                        app._submit(app.server.broadcast({'type': 'config_sync', 'config': app.config.public_data()}))
+                        app._submit(app.server.remote_settings_changed())
                 return {'success': True, 'config': app.config.public_data()}
             except Exception as error:
                 return {'success': True, 'config': app.config.public_data(),
@@ -233,6 +233,20 @@ class DesktopAPI:
     def minimize(self, token):
         self._authorize(token)
         self._app.minimize()
+
+    def stop_remote(self, token):
+        self._authorize(token)
+        try:
+            self._app._submit(self._app.server.stop_remote())
+            return {'success': True}
+        except Exception as error:
+            return {'success': False, 'error': str(error)}
+
+    def open_casting_settings(self, token):
+        self._authorize(token)
+        import os
+        os.startfile('ms-settings:project')
+        return {'success':True}
 
     def close(self, token):
         self._authorize(token)
@@ -328,6 +342,7 @@ class WebViewDesktopApp:
         return {'config': self.config.public_data(), 'pin_code': self.config.get('pin_code', '')
                     if self.config.get('require_pin', False) else '',
                 'devices': devices, 'activity': activity, 'pairing': self._pairing(),
+                'remote': self.server.remote.snapshot(),
                 'preferences': self._preferences(),
                 'diagnostics': {'engine': 'EdgeChromium / WebView2', 'python': platform.python_version(),
                     'build': self.build_id, 'source': str(ROOT), 'host': self.primary_ip,
@@ -366,6 +381,8 @@ class WebViewDesktopApp:
         try:
             icon = pystray.Icon('TouchHelm', Image.open(ROOT / 'assets' / 'touchhelm.png').copy(),
                 'TouchHelm', menu=pystray.Menu(pystray.MenuItem('Open TouchHelm', self.restore_from_tray, default=True),
+                                            pystray.MenuItem('Stop remote session', lambda *args: self._submit(self.server.stop_remote())),
+                                            pystray.MenuItem(lambda item:'Remote: '+self.server.remote.state, None, enabled=False),
                                             pystray.MenuItem('Exit', lambda *args: self.request_close())))
             self.tray_icon = icon
             def worker():
