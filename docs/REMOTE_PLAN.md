@@ -48,9 +48,14 @@ No recording, file transfer, public relay or Android companion.
 - 1,120 theme/appearance/viewport/state combinations passed the batched layout
   checks. The visual correction replaced browser-default gray buttons with themed
   controls and made the monitor/mode/Stop row sticky. Confirmation passed.
+- Actual Windows provider returned the primary monitor at 2560×1440; receiver
+  compatibility remained Unknown, as reported in the UI. No casting was started.
+- Dependency check passed. The actual Latest desktop shortcut launched the current
+  source from `D:\Mouse` with WebView2. A read-only capability query confirmed
+  video/audio providers available and remote access still disabled by default.
 
 ## Progress
 - Stage 1: software complete; physical LAN/Tailscale acceptance outstanding.
 - Stage 2: complete.
-- Stage 3: software verification and documentation complete; private integration
-  and source-launcher confirmation follow. Device acceptance stays outstanding.
+- Stage 3: software verification, documentation, private main integration and
+  latest-source launcher confirmation complete. Device acceptance stays outstanding.
