@@ -308,7 +308,7 @@ class TouchHelmServer:
         if matches:
             return True
         # Missing credentials are discovery, not a submitted PIN guess.
-        if pin is not None:
+        if pin not in (None, ''):
             self._pin_failures.append(now)
             if len(self._pin_failures) >= 8:
                 self._pin_blocked_until = now+60

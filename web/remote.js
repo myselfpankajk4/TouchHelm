@@ -18,6 +18,8 @@
       this.client=client;this.session='';this.revision='';this.state='stopped';this.mode='control';this.scale=1;this.panX=this.panY=0;
       this.points=new Map();this.video=$('remoteVideo');this.stage=$('remoteStage');this.selectedMode='control';this.previousFrames=0;
       try{$('remoteText').value=(localStorage.getItem('touchhelm_remote_draft')||'').slice(0,10000);}catch{}
+      try{const saved=localStorage.getItem('touchhelm_remote_quality');$('remoteQuality').value=['saver','balanced','clear','detail'].includes(saved)?saved:'clear';}catch{}
+      $('remoteQuality').addEventListener('change',()=>{try{localStorage.setItem('touchhelm_remote_quality',$('remoteQuality').value);}catch{}});
       $('remoteText').addEventListener('input',()=>{try{localStorage.setItem('touchhelm_remote_draft',$('remoteText').value);}catch{}});
       for(const button of document.querySelectorAll('[data-remote-mode]'))button.addEventListener('click',()=>this.start(button.dataset.remoteMode));
       $('remoteStop').addEventListener('click',()=>this.stop());
@@ -60,7 +62,12 @@
     }
     status(text){$('remoteStatus').textContent=text;}
     query(){this.client.send({type:'remote_query'});}
-    onView(view){if(view==='viewRemote')this.query();else if(this.session)this.pause('Paused after leaving Remote.');}
+    onView(view){
+      this.cancelGesture();this.client.controls?.releaseKeys();
+      if(view==='viewRemote')this.query();
+      // Navigation keeps media alive; phone backgrounding still pauses it.
+      window.TouchHelmEffects?.suspend(view==='viewRemote'&&!!this.session);
+    }
     connected(value){if(value)this.query();else this.reset('disconnected','PC disconnected. Reconnect, then tap Resume.');}
     wrap(data){return this.session&&document.querySelector('#viewRemote.active')&&inputs.has(data.type)?{type:'remote_input',session_id:this.session,revision:this.revision,command:data}:data;}
     input(command){if(this.mode!=='control'||this.state!=='live')return false;if(command.type==='text'&&this.client.newlineMode==='shift_enter')command={...command,newline_mode:'shift_enter'};return this.client.send({type:'remote_input',session_id:this.session,revision:this.revision,command});}
@@ -202,8 +209,8 @@
             const count=stat.framesDecoded||0,frames=count-this.previousFrames;this.previousFrames=count;
             if(frames>0){this.lastFrame=performance.now();if(this.serverState==='live'&&this.state!=='live'){this.state='live';this.status('Desktop stream connected.');this.render();}}
             $('remoteStats').textContent=`${Math.max(0,frames)} fps · ${stat.frameWidth||this.video.videoWidth} × ${stat.frameHeight||this.video.videoHeight}`;
-            this.badSamples=frames>0&&frames<8?(this.badSamples||0)+1:0;
-            if(this.badSamples>=5&&$('remoteQuality').value!=='saver'){this.badSamples=0;$('remoteQuality').value=validateQuality($('remoteQuality').value);this.configure();}
+            // Low capture FPS is not evidence of network congestion. Keep the
+            // selected resolution; WebRTC adjusts bitrate using receiver feedback.
           }
           if(stat.type==='candidate-pair'&&stat.state==='succeeded'&&Number.isFinite(stat.currentRoundTripTime))$('remoteLatency').textContent=`${Math.round(stat.currentRoundTripTime*1000)} ms network RTT`;
         }

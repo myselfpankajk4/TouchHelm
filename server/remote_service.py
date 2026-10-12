@@ -7,7 +7,7 @@ import time
 import ipaddress
 import re
 
-QUALITIES = {'saver': (540, 15), 'balanced': (720, 30), 'clear': (1080, 30)}
+QUALITIES = {'saver': (540, 15), 'balanced': (720, 30), 'clear': (1080, 30), 'detail': (1440, 24)}
 
 
 def private_sdp(sdp):

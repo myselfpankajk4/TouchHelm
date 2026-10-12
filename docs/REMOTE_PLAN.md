@@ -59,3 +59,33 @@ No recording, file transfer, public relay or Android companion.
 - Stage 2: complete.
 - Stage 3: software verification, documentation, private main integration and
   latest-source launcher confirmation complete. Device acceptance stays outstanding.
+
+## Follow-up reliability and setup repairs — 13 October 2026
+
+- Reproduced the main WebSocket dropping with code 1006 after Remote Stop/tab
+  exit. Native DXcam 0.3.0 teardown double-released comtypes-owned COM pointers.
+  The version-scoped adapter corrects release ownership without editing dependencies.
+- Switching tabs now preserves the stream while releasing gestures/held keys.
+  Phone backgrounding still pauses capture; Stop does not end phone authentication.
+- New video default: Clear 1080p/30, plus Detail 1440p/24, remembered per device.
+  Increased desktop encoding budgets retain WebRTC congestion feedback. Removed
+  the low-FPS resolution downgrade that mistook capture load for network congestion.
+- Empty startup credentials no longer count as wrong guesses. Pairing survives
+  reloads in tab-scoped session storage. Real wrong passwords retain global backoff.
+- New host configurations get unique 12-character passwords, persisted on creation.
+  Desktop Remote enablement enables password protection automatically. Existing
+  configured PINs remain compatible; desktop Generate password rotates credentials.
+- Added a desktop-owned Windows Wireless Display optional-feature installer with
+  UAC handling, actual DISM progress, indeterminate download/check states, installed
+  readback, restart/error reporting, and no phone-accessible privileged endpoint.
+
+Verification: 224 Python tests; 83 JavaScript tests passed (one optional test
+skipped); 53 browser interactions; full seven-theme light/dark layout matrix passed.
+PowerShell installation helper parsed successfully. Installer/native authorization
+effects are mocked in automated tests; no Windows feature installation was performed.
+The real local Chrome probe received 1920×1080 video (13 decoded fps sample),
+2560×1440 Detail video (12 fps sample), 1ms network RTT and 270 audio packets.
+It passed tab switching, Stop/restart, and 12 consecutive paired page refreshes.
+These are short local samples, not guaranteed frame rates or Android performance.
+Trusted Android/Tailscale endurance and actual Miracast/Windows installation remain
+unverified on physical devices.

@@ -46,7 +46,12 @@ async def main():
             if request.headers.get('X-Probe-Token')!=token:return web.Response(status=403)
             done.set();return web.json_response({'success':True})
         app=web.Application(middlewares=[server._private_transport])
-        app.router.add_get('/ws',server.handle_ws)
+        async def diagnostic_ws(request):
+            try:return await server.handle_ws(request)
+            except BaseException:
+                import traceback
+                traceback.print_exc();raise
+        app.router.add_get('/ws',diagnostic_ws)
         app.router.add_get('/api/info',server.handle_info)
         app.router.add_get('/api/version',server.handle_version)
         app.router.add_get('/shutdown',shutdown)

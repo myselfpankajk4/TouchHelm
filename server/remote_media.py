@@ -11,6 +11,39 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .remote_service import QUALITIES, private_sdp
 
+def configure_video_encoding(quality):
+    """aiortc 1.15's stock camera budgets blur desktop text. Retain REMB."""
+    from aiortc.codecs import h264, vpx
+    budget={'saver':1200000,'balanced':3000000,'clear':6000000,'detail':10000000}[quality]
+    for codec in (h264,vpx):
+        codec.DEFAULT_BITRATE=budget
+        codec.MAX_BITRATE=12000000
+    return budget
+
+def release_dxgi_duplicator(self):
+    """comtypes pointers release themselves; an explicit Release double-frees."""
+    if self.duplicator is not None:
+        self.release_frame()
+        self.texture = None
+        self.duplicator = None
+
+
+def release_stage_surface(self):
+    self.width = self.height = 0
+    self.interface = None
+    self.texture = None
+
+
+def fix_dxcam_030_release():
+    # Narrow compatibility repair for pinned DXcam 0.3.0 (upstream issue #144).
+    # Do not change site-packages or replace cleanup in future library versions.
+    from importlib.metadata import version
+    if version('dxcam') == '0.3.0':
+        from dxcam.core.dxgi_duplicator import DXGIDuplicator
+        from dxcam.core.stagesurf import StageSurface
+        DXGIDuplicator.release = release_dxgi_duplicator
+        StageSurface.release = release_stage_surface
+
 
 def capabilities():
     video=all(importlib.util.find_spec(name) is not None for name in ('aiortc','av','dxcam','cv2'))
@@ -64,10 +97,11 @@ class MediaWorker:
 
     async def _start(self, display, quality, audio):
         from aiortc import RTCPeerConnection, RTCConfiguration
+        configure_video_encoding(quality)
         self.pc=RTCPeerConnection(RTCConfiguration(iceServers=[]))
         self.video=DesktopTrack(display,quality,self.on_state,self.capture_pool)
         await self.loop.run_in_executor(self.capture_pool,self.video.capture.open)
-        self.pc.addTrack(self.video.track)
+        self.video_sender=self.pc.addTrack(self.video.track)
         # Always negotiate an audio transceiver; capture is opt-in, silence otherwise.
         if capabilities()['audio']:
             self.audio=AudioSource(self.on_state)
@@ -103,6 +137,11 @@ class MediaWorker:
 
     async def _configure(self,display,quality,audio):
         await self.loop.run_in_executor(self.capture_pool,self.video.capture.configure,display,quality)
+        budget=configure_video_encoding(quality)
+        # Pinned aiortc exposes no public encoder policy. Keep this compatibility
+        # seam guarded, and let subsequent REMB feedback lower the bitrate.
+        encoder=getattr(self.video_sender,'_RTCRtpSender__encoder',None)
+        if encoder is not None and hasattr(encoder,'target_bitrate'):encoder.target_bitrate=budget
         message=None
         if self.audio:
             try:await asyncio.to_thread(self.audio.enable,audio)
@@ -147,6 +186,7 @@ class DesktopCapture:
 
     def open(self):
         import dxcam
+        if hasattr(dxcam,'__version__') or getattr(dxcam,'__file__',None):fix_dxcam_030_release()
         # Bind registered GDI monitor identity to a DXGI output, never guess by title/order.
         factory=dxcam.__dict__.get('__factory')
         outputs=getattr(factory,'outputs',None)

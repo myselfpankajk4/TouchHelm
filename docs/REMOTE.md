@@ -11,7 +11,10 @@ Keyboard and Apps remain available. No TouchHelm Android app is required.
    .\.venv\Scripts\python.exe -m pip install -r requirements-remote.txt
    ```
 
-2. In desktop Settings, set a four-digit host PIN and enable **Remote screen access**.
+2. In desktop Settings, enable **Remote screen access**. TouchHelm enables password
+   protection automatically and has a random 12-character password ready for new
+   setups. Existing four-digit PINs remain compatible. Use **Generate password**
+   to rotate the password when needed.
    It is disabled by default. The desktop bridge is the only interface that can
    enable it; the phone settings API cannot.
 3. Connect using trusted local HTTPS or private Tailscale HTTPS from desktop Pairing.
@@ -37,11 +40,14 @@ the supported alternative without installing TouchHelm's CA.
 - Open **Typing, keys & combinations** for multiline buffered text, PC Enter,
   held/sticky native keys, numpad and combinations such as Ctrl+Shift+A. Return in
   the text field creates a newline; sending remains explicit.
-- Balanced is 720p/30fps; Saver is 540p/15fps; Clear is 1080p/30fps. These are caps,
-  not guaranteed frame rates. Sustained very low received FPS reduces the preset.
+- Clear, the new default, is 1080p/30fps; Detail is 1440p/24fps; Balanced is
+  720p/30fps; Saver is 540p/15fps. These are caps, not guaranteed frame rates.
+  The selected preset is remembered per browser. Low capture FPS no longer silently
+  reduces resolution; WebRTC still uses receiver feedback to adjust encoding bitrate.
   The readouts show decoded frames and network RTT, not claimed end-to-end latency.
-- Desktop/tray Stop ends the stream and releases app-owned input. Backgrounding
-  the phone or leaving Remote pauses it. Resume is explicit; drafts are retained.
+- Desktop/tray Stop ends the stream and releases app-owned input while other tabs
+  stay connected. Tab switching keeps streaming; backgrounding the phone pauses it.
+  Resume after backgrounding is explicit; drafts are retained.
 
 Only one stream may exist. Control mode reserves app input for its owning phone
 and releases input held by other phones before granting that lease. Disconnect,
@@ -77,8 +83,12 @@ Android Chrome and iPhone Safari currently cannot capture a phone screen through
 the browser screen-sharing API. The Remote tab provides an honest **system casting
 guide**, not a reverse WebRTC capture feature. Installing a PWA does not change this.
 
-Desktop **Wireless Display setup** opens Windows Projecting to this PC. Install
-the Windows optional Wireless Display feature and open the receiver application.
+Desktop Settings includes **Install Wireless Display**, with first-time setup
+guidance, live Windows installation progress, cancellation/error feedback, and
+restart requirements. Accept Windows' administrator prompt and keep the PC online
+while Windows Update supplies the feature. TouchHelm checks the actual optional
+feature before installation and verifies it afterward. **Open casting settings**
+opens Windows Projecting to this PC, where you enable/open the receiver application.
 On a compatible Android phone, use Cast, Wireless Display, Screen sharing or Smart
 View and select the PC. Names vary by manufacturer.
 
@@ -109,3 +119,18 @@ Sources: [Windows capture](https://learn.microsoft.com/en-us/windows/win32/direc
 [Windows loopback](https://learn.microsoft.com/en-us/windows/win32/coreaudio/loopback-recording),
 [browser screen-capture support](https://github.com/mdn/browser-compat-data/blob/main/api/MediaDevices.json),
 [Windows casting setup](https://support.microsoft.com/en-us/windows/hardware/display-graphics/screen-mirroring-and-projecting-to-your-pc-or-wireless-display).
+
+## Remote reliability repairs (October 2026)
+
+Stop ends Remote only, keeping the authenticated WebSocket and other tabs usable.
+Switching tabs keeps the stream and releases held Remote inputs; backgrounding the
+phone still pauses capture for privacy and requires Resume. Passwords survive page
+refreshes in tab-scoped session storage, but are cleared after a rejected password
+or host change. Missing/empty startup credentials do not count against the global
+wrong-password attempt limit. Actual submitted wrong passwords retain rate limiting.
+
+The pinned DXcam 0.3.0 cleanup adapter avoids explicitly releasing comtypes-owned
+pointers twice. This addresses the native capture cleanup failure also tracked in
+[DXcam issue 144](https://github.com/ra1nty/DXcam/issues/144). No installed library
+files are modified. Desktop encoding budgets are increased, with congestion feedback
+retained; the locally verified results are not Android/network performance claims.

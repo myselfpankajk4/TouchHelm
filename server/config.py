@@ -8,6 +8,11 @@ import socket
 import math
 import threading
 import tempfile
+import secrets
+import string
+
+def random_password():
+    return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
 
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
 
@@ -19,7 +24,7 @@ DEFAULT_CONFIG = {
     "scroll_speed": 1.0,
     "invert_scroll": False,
     "require_pin": False,
-    "pin_code": "1234",
+    "pin_code": "",
     "laser_color": "red",
     "theme": "cyber",
     "haptics_enabled": True,
@@ -36,7 +41,9 @@ class ConfigManager:
         self.file_path = file_path
         self._lock = threading.RLock()
         self.data = DEFAULT_CONFIG.copy()
+        self.data['pin_code'] = random_password()
         self.load()
+        if not os.path.exists(self.file_path):self.save()
 
     def load(self):
         if os.path.exists(self.file_path):
@@ -53,7 +60,7 @@ class ConfigManager:
                             continue
                         self.data[key] = value
                 if self.data["require_pin"] and not self._valid_pin(self.data["pin_code"]):
-                    self.data["pin_code"] = DEFAULT_CONFIG["pin_code"]
+                    self.data["pin_code"] = random_password()
                 if self.data['remote_enabled'] and not self.data['require_pin']:
                     self.data['remote_enabled']=False
             except Exception as e:
@@ -80,7 +87,8 @@ class ConfigManager:
 
     @staticmethod
     def _valid_pin(value):
-        return isinstance(value, str) and len(value) == 4 and value.isascii() and value.isdigit()
+        return isinstance(value, str) and value.isascii() and (
+            len(value) == 4 and value.isdigit() or 8 <= len(value) <= 64 and value.isalnum())
 
     @classmethod
     def _validate(cls, key, value):
@@ -117,7 +125,7 @@ class ConfigManager:
                 self._validate(key, value)
             updated = dict(self.data, **settings)
             if updated["require_pin"] and not self._valid_pin(updated["pin_code"]):
-                raise ValueError("A four-digit PIN is required")
+                raise ValueError("Use a legacy four-digit PIN or an 8–64 character password containing letters and numbers")
             if updated['tailscale_enabled'] and not updated['require_pin']:
                 raise ValueError('Disable private Tailscale HTTPS before removing the host PIN.')
             if updated['remote_enabled'] and not updated['require_pin']:

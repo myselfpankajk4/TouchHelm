@@ -140,6 +140,13 @@ class DesktopAPI:
         app = self._app
         with app._settings_lock:
             try:
+                if settings.get('remote_enabled'):
+                    # Enabling Remote should not require manually making a PIN first.
+                    settings=dict(settings,require_pin=True)
+                    candidate=settings.get('pin_code',app.config.get('pin_code'))
+                    if not candidate or candidate=='1234' and not app.config.get('require_pin'):
+                        from server.config import random_password
+                        settings['pin_code']=random_password()
                 changed_pin = any(key in settings and settings[key] != app.config.get(key)
                                   for key in ('require_pin', 'pin_code'))
                 app.config.update(settings)
@@ -151,7 +158,7 @@ class DesktopAPI:
                         app._submit(app.server.invalidate_auth_sessions())
                     else:
                         app._submit(app.server.remote_settings_changed())
-                return {'success': True, 'config': app.config.public_data()}
+                return {'success': True, 'config': app.config.public_data(), 'pin_code':app.config.get('pin_code')}
             except Exception as error:
                 return {'success': True, 'config': app.config.public_data(),
                         'warning': f'Settings saved, but connected phones could not be updated: {error}. Restart the host before continuing.'}
@@ -217,7 +224,8 @@ class DesktopAPI:
         with app._settings_lock:
             try:
                 if enabled and not app.config.get('require_pin'):
-                    app.config.update({'require_pin':True,'pin_code':f'{secrets.randbelow(10000):04d}'})
+                    from server.config import random_password
+                    app.config.update({'require_pin':True,'pin_code':app.config.get('pin_code') or random_password()})
                     app._submit(app.server.invalidate_auth_sessions())
                 app._submit(app.server.enable_tailscale() if enabled else app.server.disable_tailscale())
                 pairing=app._pairing()
@@ -248,6 +256,19 @@ class DesktopAPI:
         os.startfile('ms-settings:project')
         return {'success':True}
 
+    def install_wireless_display(self, token):
+        self._authorize(token)
+        self._app.wireless_display.install()
+        return {'success':True,'setup':self._app.wireless_display.snapshot()}
+
+    def generate_password(self, token):
+        self._authorize(token)
+        from server.config import random_password
+        password=random_password()
+        result=self.save_settings(token,{'require_pin':True,'pin_code':password})
+        if result.get('success'):result['password']=password
+        return result
+
     def close(self, token):
         self._authorize(token)
         self._app.request_close()
@@ -267,6 +288,8 @@ class WebViewDesktopApp:
         self._activity, self._devices = deque(maxlen=1000), []
         self._qr_cache = {}
         self.preference_path = Path(preference_path) if preference_path is not None else private_storage_root() / 'desktop-preferences.json'
+        from server.wireless_display import WirelessDisplaySetup
+        self.wireless_display=WirelessDisplaySetup(private_storage_root()/'wireless-display')
 
     def _submit(self, coroutine):
         if self.server_loop is None or self.server_loop.is_closed() or not self.server_loop.is_running():
@@ -342,7 +365,7 @@ class WebViewDesktopApp:
         return {'config': self.config.public_data(), 'pin_code': self.config.get('pin_code', '')
                     if self.config.get('require_pin', False) else '',
                 'devices': devices, 'activity': activity, 'pairing': self._pairing(),
-                'remote': self.server.remote.snapshot(),
+                'remote': self.server.remote.snapshot(), 'wireless_display':self.wireless_display.snapshot(),
                 'preferences': self._preferences(),
                 'diagnostics': {'engine': 'EdgeChromium / WebView2', 'python': platform.python_version(),
                     'build': self.build_id, 'source': str(ROOT), 'host': self.primary_ip,
@@ -397,6 +420,8 @@ class WebViewDesktopApp:
 
     def run(self):
         if self._closing: return
+        self.config.save()  # Keep the generated password stable across source restarts.
+        self.wireless_display.check()
         import webview
         webview.settings['ALLOW_FILE_URLS'] = False
         webview.settings['ALLOW_DOWNLOADS'] = False

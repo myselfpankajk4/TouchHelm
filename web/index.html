@@ -104,7 +104,7 @@
           <div id="remoteStage" class="remote-stage" aria-label="Remote PC screen. Use trackpad gestures or Direct touch." tabindex="0" data-state="stopped"><video id="remoteVideo" autoplay playsinline muted aria-label="Selected PC monitor"></video><svg id="remoteCursor" class="remote-cursor" viewBox="0 0 18 26" aria-hidden="true" hidden><path d="M1 1v21l5-6 6 9 4-3-6-8 7-2Z" fill="white" stroke="#101820" stroke-width="1.5"/></svg></div>
           <div class="remote-readouts" aria-live="off"><span id="remoteStats">Waiting for video</span><span id="remoteLatency">Network RTT unavailable</span></div>
           <div class="remote-toolbar"><label>Touch mode<select id="remoteInteraction"><option value="trackpad">Trackpad</option><option value="direct">Direct touch</option><option value="pan">Pan view</option></select></label><button id="remoteFit">Fit</button><button id="remoteActual">Actual size</button><button id="remoteFullscreen" aria-label="Fullscreen remote video"><svg class="ui-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path d="M8 3H3v5m13-5h5v5M3 16v5h5m8 0h5v-5"/></svg></button></div>
-          <div class="remote-toolbar"><label>Quality<select id="remoteQuality"><option value="saver">Saver · 540p / 15</option><option value="balanced" selected>Balanced · 720p / 30</option><option value="clear">Clear · 1080p / 30</option></select></label><label class="remote-check"><input id="remoteAudio" type="checkbox">PC audio</label><button id="remoteUnmute" hidden>Unmute</button></div>
+          <div class="remote-toolbar"><label>Quality<select id="remoteQuality"><option value="saver">Saver · 540p / 15</option><option value="balanced">Balanced · 720p / 30</option><option value="clear" selected>Clear · 1080p / 30</option><option value="detail">Detail · 1440p / 24</option></select></label><label class="remote-check"><input id="remoteAudio" type="checkbox">PC audio</label><button id="remoteUnmute" hidden>Unmute</button></div>
           <div class="remote-clicks"><button id="remoteLeft">Left click</button><button id="remoteDrag" aria-pressed="false">Drag lock</button><button id="remoteRight">Right click</button></div>
           <details id="remoteTyping" class="remote-typing"><summary>Typing, keys &amp; combinations</summary><label for="remoteText">Text for the active PC app</label><textarea id="remoteText" maxlength="10000" enterkeyhint="enter" placeholder="Type here. Return creates a new line."></textarea><div class="button-row"><button id="remoteTextSend">Send text</button><button id="remoteEnter">PC Enter</button><button id="remoteRelease">Release keys</button></div><label for="remoteChord">Key combination</label><div class="button-row"><input id="remoteChord" value="Ctrl+Shift+A" autocomplete="off" spellcheck="false"><button id="remoteChordSend">Send chord</button></div><div id="remoteKeys" aria-label="Native keys and numpad"></div></details>
           <p class="remote-note">Pinch to zoom. Pan view moves only the viewer. Two-finger scrolling in Control PC scrolls the PC.</p>
@@ -281,9 +281,9 @@
       <div class="modal-card">
         <div class="modal-header"><h2 class="modal-title" id="pinTitle">Connect to PC</h2></div>
         <form id="pinForm" class="modal-body">
-          <label class="setting-label" for="pinInput">Enter the 4-digit PIN shown on your PC</label>
+          <label class="setting-label" for="pinInput">Enter the pairing password or PIN shown on your PC</label>
           <div class="input-row">
-            <input id="pinInput" class="text-field" type="password" inputmode="numeric" pattern="[0-9]{4}" maxlength="4" autocomplete="off" required>
+            <input id="pinInput" class="text-field" type="password" pattern="([0-9]{4}|[A-Za-z0-9]{8,64})" maxlength="64" autocomplete="current-password" autocapitalize="none" spellcheck="false" required>
             <button class="send-btn" type="submit">Connect</button>
           </div>
           <p id="pinError" role="alert"></p>

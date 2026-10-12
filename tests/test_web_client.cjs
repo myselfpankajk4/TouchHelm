@@ -1102,12 +1102,12 @@ test('Remote text Return stays multiline and Stop releases drag and clears video
   assert.equal(await page.locator('#remoteDrag').getAttribute('aria-pressed'),'false');
 });
 
-test('Leaving Remote pauses without transmitting its draft on return',async page=>{
+test('Leaving Remote keeps the stream without transmitting its draft on return',async page=>{
   await fakeRemote(page);
   await page.locator('#remoteTyping summary').click();await page.locator('#remoteText').fill('private draft');
   await page.locator('#tabTrackpad').click();await page.locator('#tabRemote').click();
-  assert.ok(await page.locator('#remoteResume').isVisible());
-  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.type==='remote_pause').length),1);
+    assert.equal(await page.evaluate(()=>touchhelm.remote.session),'fixture');
+    assert.equal(await page.evaluate(()=>__packets.filter(p=>p.type==='remote_pause').length),0);
   assert.equal(await page.evaluate(()=>__packets.filter(p=>p.command?.type==='text').length),0);
   assert.equal(await page.locator('#remoteText').inputValue(),'private draft');
 });
@@ -1120,6 +1120,23 @@ test('Remote restores its local draft without replay and honors Shift Enter pref
   await fakeRemote(page);
   await page.evaluate(()=>{touchhelm.newlineMode='shift_enter';touchhelm.remote.input({type:'text',text:'a\nb'});});
   assert.equal(await page.evaluate(()=>__packets.find(p=>p.command?.type==='text').command.newline_mode),'shift_enter');
+});
+
+test('Wireless Display setup shows real progress, approval and completion states',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmDesktopPreview);
+  await desktop.setViewportSize({width:820,height:820});
+  await desktop.locator('[data-panel="settings"]').click();
+  for(const [state,progress,message]of [['permission',null,'Approve the Windows administrator prompt.'],['installing',null,'Downloading optional feature…'],['installing',52,'Installing Wireless Display…'],['installed',100,'Wireless Display is installed.'],['permission_required',null,'Installation approval was cancelled.']]){
+    await desktop.evaluate(({state,progress,message})=>TouchHelmDesktopPreview.setWirelessDisplayState({state,progress,message}),{state,progress,message});
+    assert.equal(await desktop.locator('#wirelessDisplayStatus').textContent(),message);
+    const active=['permission','installing'].includes(state);
+    assert.equal(await desktop.locator('#wirelessDisplayProgress').isVisible(),active);
+    if(active&&progress===null)assert.equal(await desktop.locator('#wirelessDisplayProgress').getAttribute('value'),null);
+    if(active&&progress===52){await desktop.locator('#wirelessDisplayStatus').scrollIntoViewIfNeeded();await screenshot(desktop,'wireless-display-installing');}
+    assert.equal(await desktop.locator('#installWirelessDisplay').isDisabled(),active||state==='installed');
+  }
+  await desktop.close();
 });
 
 (async () => {

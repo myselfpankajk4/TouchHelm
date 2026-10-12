@@ -40,8 +40,10 @@ class TouchHelmClient {
 
     // Status
     this.isConnected = false;
+    this.authPending = false;
     this.reconnectTimer = null;
     this.authPin = "";
+    try { this.authPin=sessionStorage.getItem(`touchhelm_pairing_${this.host}`)||''; } catch {}
     this.liveTextValue = "";
     this.isComposing = false;
     this.pingInterval = null;
@@ -436,13 +438,17 @@ class TouchHelmClient {
           const rtt = Math.max(1, Math.round(Date.now() - msg.t));
           if (this.elStatusPing) this.elStatusPing.textContent = `${rtt}ms`;
         } else if (msg.type === "auth_res") {
+          this.authPending=false;
           if (!msg.success) {
+            this.authPin='';
+            try {sessionStorage.removeItem(`touchhelm_pairing_${this.host}`);}catch{}
             this.isConnected = false;
             this.stopPing();
             this.showPin(msg.message || "Invalid PIN");
             return;
           }
           this.isConnected = true;
+          try { if(this.authPin)sessionStorage.setItem(`touchhelm_pairing_${this.host}`,this.authPin); } catch {}
           this.remote?.connected(true);
           this.closeModal(this.pinModal);
           this.setStatus("connected", "Connected");
@@ -462,8 +468,7 @@ class TouchHelmClient {
           this.releaseDragLock();
           this.isConnected = false;
           this.stopPing();
-          this.authPin = "";
-          this.showPin();
+          if(this.authPin){if(!this.authPending)this.authenticate();}else this.showPin();
         } else if (msg.type === "config_sync") {
           if (msg.config) this.applyServerConfig(msg.config);
           this.remote?.query();
@@ -523,6 +528,7 @@ class TouchHelmClient {
 
   authenticate() {
     if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.authPending=true;
       this.ws.send(JSON.stringify({ type: "auth", pin: this.authPin,
         device_name: `${navigator.platform || "Mobile"} TouchHelm` }));
     }

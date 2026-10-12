@@ -40,7 +40,7 @@
             <p id="pairingMode" class="muted">Local connection</p>
           </div>
           <div class="pairing-information">
-            <div class="surface"><h2>Connection security</h2><p id="pinStatus"></p><p id="pinCode" class="pin-code" hidden></p><p class="muted">A PIN limits who can control your PC. Change it in Settings.</p></div>
+            <div class="surface"><h2>Connection security</h2><p id="pinStatus"></p><p id="pinCode" class="pin-code" hidden></p><p class="muted">Enter this pairing password on your phone once. Refreshes keep pairing in the same browser tab. Generate a new password in Settings when needed.</p></div>
             <div class="surface secure-pairing" id="localCASetup" hidden><h2>Local certificate HTTPS</h2><p>HTTPS gives Android Chrome a secure connection for supported phone capabilities.</p>
               <p id="secureStatus" class="muted">Optional. Certificate trust is never installed automatically.</p>
               <div class="button-row"><button id="enableHTTPS" class="secondary-button">Enable HTTPS</button><button id="useHTTP" class="quiet-button" hidden>Use HTTP instead</button></div>
@@ -69,13 +69,13 @@
           </fieldset>
           <fieldset class="control-group"><legend>Security & presentation</legend>
             <label class="check-label"><input id="remoteEnabled" type="checkbox" name="remote_enabled">Enable Remote screen access</label><p class="muted">Requires a host PIN and trusted HTTPS. Your authenticated phone can start viewing or control while you are away. One remote stream at a time.</p>
-            <label class="check-label"><input id="requirePIN" type="checkbox" name="require_pin">Require a four-digit PIN</label>
-            <label for="pinInput">Connection PIN</label><input id="pinInput" name="pin_code" type="text" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" aria-describedby="pinHelp"><p id="pinHelp" class="muted">A change asks connected phones to authenticate again.</p>
+            <label class="check-label"><input id="requirePIN" type="checkbox" name="require_pin">Require a pairing password</label>
+            <label for="pinInput">Pairing password</label><input id="pinInput" name="pin_code" type="text" pattern="([0-9]{4}|[A-Za-z0-9]{8,64})" minlength="4" maxlength="64" autocomplete="off" aria-describedby="pinHelp"><div class="button-row"><button id="generatePassword" type="button" class="secondary-button">Generate password</button></div><p id="pinHelp" class="muted">A random password is ready for new setups. Existing PINs still work. Changing it asks phones to pair again; refreshes keep pairing in the same browser tab.</p>
             <label for="laserColor">Laser color</label><select id="laserColor" name="laser_color"><option value="red">Red</option><option value="green">Green</option><option value="blue">Blue</option><option value="amber">Amber</option></select>
           </fieldset>
           <p id="saveError" class="save-error" role="alert" hidden></p><div class="button-row"><button class="primary-button" id="saveSettings" type="submit">Save settings</button><span id="saveStatus" class="muted" role="status"></span></div>
         </form>
-        <section class="surface" aria-labelledby="desktopRemoteTitle"><h2 id="desktopRemoteTitle">Remote screen &amp; casting</h2><p id="desktopRemoteStatus" role="status">No remote session.</p><div class="button-row"><button id="desktopStopRemote" type="button">Stop remote session</button><button id="desktopCastingSettings" type="button">Wireless Display setup</button></div><p class="muted">Windows Wireless Display receives compatible Miracast phones. Install its optional feature in Windows Settings; Google Cast and AirPlay are different protocols.</p></section>
+        <section class="surface" aria-labelledby="desktopRemoteTitle"><h2 id="desktopRemoteTitle">Remote screen &amp; casting</h2><p id="desktopRemoteStatus" role="status">No remote session.</p><div class="button-row"><button id="desktopStopRemote" class="secondary-button" type="button">Stop remote session</button><button id="desktopCastingSettings" class="secondary-button" type="button">Open casting settings</button></div><h3>Wireless Display receiver</h3><p id="wirelessDisplayStatus" role="status">First-time setup may take a few minutes.</p><progress id="wirelessDisplayProgress" max="100" aria-label="Wireless Display installation progress" hidden></progress><div class="button-row"><button id="installWirelessDisplay" class="primary-button" type="button">Install Wireless Display</button></div><p class="muted">TouchHelm installs the Windows optional feature with administrator approval. Keep the PC online during setup. Casting still requires Miracast-compatible phone and Wi-Fi hardware; Google Cast and AirPlay use different protocols.</p></section>
         <div id="themePicker" class="surface theme-picker" aria-label="Desktop appearance"></div>
       </section>
       <section class="desktop-panel" data-page="diagnostics" hidden>

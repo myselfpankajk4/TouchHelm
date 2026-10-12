@@ -12,6 +12,13 @@ from server.config import ConfigManager
 from server.web_server import TouchHelmServer, ConnectedClient
 
 class V2ProtocolTests(unittest.IsolatedAsyncioTestCase):
+    def test_empty_discovery_credentials_do_not_lock_out_refreshes(self):
+        for _ in range(30):
+            self.assertFalse(self.server._pin_matches(''))
+            self.assertFalse(self.server._pin_matches(None))
+        self.assertEqual(self.server._pin_failures, [])
+        self.assertTrue(self.server._pin_matches('5678'))
+
     def test_pin_failures_have_global_backoff_even_through_shared_loopback(self):
         with patch('server.web_server.time.monotonic', return_value=1000):
             for _ in range(8):self.assertFalse(self.server._pin_matches('0000'))

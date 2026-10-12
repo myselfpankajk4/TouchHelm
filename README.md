@@ -15,6 +15,12 @@ Turn your phone into a Windows trackpad, keyboard, presentation remote, media co
 
 **Remote (v2.2):** Control PC or View PC with live monitor video, trackpad/direct touch, pinch zoom, keyboard/numpad, quality presets and optional PC audio. Streaming starts disabled and requires a host PIN plus trusted HTTPS. The Cast phone to PC option guides compatible system casting; mobile browsers cannot capture the phone screen. [Setup, limitations and verification](docs/REMOTE.md).
 
+Remote now defaults to Clear 1080p, with a 1440p Detail option. Tab switches keep
+the stream; Stop leaves the rest of TouchHelm connected. Pairing survives refreshes
+in the same browser tab. New setups receive a generated password, and desktop
+Settings provides a Windows Wireless Display installer with installation progress
+and Windows administrator approval.
+
 <img src="docs/images/remote.png" alt="Remote control tab showing a clearly labeled sample desktop" width="300">
 
 | Tab | What it does |

@@ -6,6 +6,27 @@ from server.remote_media import DesktopCapture
 
 
 class CaptureTests(unittest.TestCase):
+    def test_encoding_budget_improves_detail_and_keeps_congestion_feedback(self):
+        from server.remote_media import configure_video_encoding
+        from aiortc.codecs import h264, vpx
+        for quality, expected in [('clear',6000000),('detail',10000000),('saver',1200000)]:
+            configure_video_encoding(quality)
+            encoder=h264.H264Encoder()
+            self.assertEqual(encoder.target_bitrate,expected)
+            encoder.target_bitrate=250000
+            self.assertLessEqual(encoder.target_bitrate,500000)
+        self.assertGreaterEqual(vpx.MAX_BITRATE,10000000)
+    def test_dxcam_030_managed_com_objects_are_released_once(self):
+        from server.remote_media import release_dxgi_duplicator, release_stage_surface
+        class Pointer:
+            def Release(self):raise AssertionError('comtypes already owns Release on destruction')
+        duplicator=SimpleNamespace(duplicator=Pointer(),texture=Pointer(),release_frame=Mock())
+        stage=SimpleNamespace(texture=Pointer(),interface=Pointer(),width=10,height=10)
+        release_dxgi_duplicator(duplicator);release_stage_surface(stage)
+        duplicator.release_frame.assert_called_once()
+        self.assertIsNone(duplicator.duplicator);self.assertIsNone(duplicator.texture)
+        self.assertIsNone(stage.texture);self.assertIsNone(stage.interface)
+
     def test_audio_output_format_stays_constant_across_device_changes(self):
         from server.remote_media import AudioNormalizer
         normalizer=AudioNormalizer()
