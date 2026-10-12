@@ -175,6 +175,19 @@ class DesktopServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertFalse((await self.service.snapshot())['media']['available'])
         self.assertEqual(self.bridge.calls, [])
 
+    async def test_native_startup_has_its_own_budget_before_command_deadline(self):
+        bridge=PersistentPowerShellBridge(timeout=.04)
+        process=Mock();process.poll.return_value=None
+        responses=queue.Queue()
+        def start():
+            time.sleep(.08);bridge._proc=process;bridge._responses=responses
+        def write(line):responses.put({'id':json.loads(line)['id'],'result':{'displays':[{'id':'monitor'}]}})
+        process.stdin.write.side_effect=write
+        with patch.object(bridge,'_start',side_effect=start):
+            result=await asyncio.to_thread(bridge.request,'displays')
+        self.assertEqual(len(result['displays']),1)
+        await asyncio.to_thread(bridge.close)
+
     async def test_cancelled_queued_launch_never_writes_to_the_native_bridge(self):
         bridge = PersistentPowerShellBridge(timeout=1)
         process = Mock()

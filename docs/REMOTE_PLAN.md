@@ -125,3 +125,10 @@ Physical Android orientation, destination-app double-Return behavior, listening,
 theme performance, Tailscale sign-in/endurance and real installer acceptance remain
 unperformed. Browser-only private-LAN trust requires domain/certificate provisioning
 infrastructure; reserved IP/internal-name certificates cannot be publicly trusted.
+
+Final live-host verification found a cold native-provider bootstrap taking seven
+seconds while the normal command timeout was four seconds. The helper now warms
+its read-only display/receiver context and emits readiness under a separate bounded
+20-second startup budget. Commands retain their short deadline, queued cancellations
+are checked before dispatch, and provider work stays outside the input event loop.
+A mocked regression reproduces the original timeout and verifies the separation.

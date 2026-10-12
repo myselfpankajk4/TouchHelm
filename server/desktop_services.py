@@ -28,6 +28,7 @@ class PersistentPowerShellBridge:
     """One hidden, lazy JSON-lines helper. Timeouts discard the affected process."""
     def __init__(self, timeout=4.0):
         self.timeout = timeout
+        self.startup_timeout = 20.0
         self._lock = threading.Lock()
         self._proc = None
         self._responses = None
@@ -41,7 +42,7 @@ class PersistentPowerShellBridge:
             raise RuntimeError('Windows desktop providers are unavailable on this platform')
         self._proc = subprocess.Popen(
             ['powershell.exe', '-NoLogo', '-NoProfile', '-NonInteractive',
-             '-ExecutionPolicy', 'Bypass', '-File', str(Path(__file__).with_name('desktop_bridge.ps1'))],
+             '-ExecutionPolicy', 'Bypass', '-File', str(Path(__file__).with_name('desktop_bridge.ps1')), '-BridgeHost'],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, encoding='utf-8', bufsize=1,
             creationflags=subprocess.CREATE_NO_WINDOW, cwd=str(ROOT))
@@ -59,6 +60,10 @@ class PersistentPowerShellBridge:
                 responses.put(None)
 
         threading.Thread(target=read_lines, name='TouchHelm desktop bridge', daemon=True).start()
+        try:ready=responses.get(timeout=self.startup_timeout)
+        except queue.Empty as error:raise TimeoutError('Windows provider initialization timed out') from error
+        if not isinstance(ready,dict) or ready.get('ready') is not True:
+            raise RuntimeError('Windows provider failed to initialize')
 
     def _terminate(self):
         process, self._proc = self._proc, None
@@ -79,8 +84,7 @@ class PersistentPowerShellBridge:
                     pass
 
     def request(self, command, payload=None, *, cancelled=None):
-        started = time.monotonic()
-        if not self._lock.acquire(timeout=self.timeout):
+        if not self._lock.acquire(timeout=self.timeout+self.startup_timeout):
             raise TimeoutError('Windows provider is busy; try again')
         try:
             if cancelled is not None and cancelled.is_set():
@@ -94,6 +98,7 @@ class PersistentPowerShellBridge:
             request_id = self._sequence
             if cancelled is not None and cancelled.is_set():
                 raise ProviderRequestCancelled('Desktop command was cancelled')
+            started=time.monotonic()
             self._proc.stdin.write(json.dumps({'id': request_id, 'command': command,
                                                'payload': payload or {}}, ensure_ascii=True) + '\n')
             self._proc.stdin.flush()
@@ -168,7 +173,7 @@ class DesktopServices:
         cancelled = threading.Event()
         try:
             result = await asyncio.wait_for(asyncio.to_thread(self._bridge.request, command, payload,
-                                                             cancelled=cancelled), self.timeout + .1)
+                                                             cancelled=cancelled), self.timeout + getattr(self._bridge,'startup_timeout',0) + .1)
         except asyncio.CancelledError:
             cancelled.set()
             raise

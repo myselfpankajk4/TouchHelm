@@ -1,4 +1,5 @@
 # TouchHelm's private Windows bridge. Requests arrive as data, never PowerShell code.
+param([switch]$BridgeHost)
 $ErrorActionPreference = 'Stop'
 [Console]::InputEncoding = [System.Text.UTF8Encoding]::new($false)
 [Console]::OutputEncoding = [System.Text.UTF8Encoding]::new($false)
@@ -615,6 +616,12 @@ function Dispatch-Request($request) {
     }
 }
 
+if ($BridgeHost) {
+    # Loading native types and the optional-feature registry can exceed a normal
+    # command deadline on a cold PC. Finish it before accepting queued commands.
+    try { Read-Displays | Out-Null } catch { }
+    [Console]::WriteLine('{"ready":true}')
+}
 while ($null -ne ($line = [Console]::ReadLine())) {
     if (-not $line) { continue }
     $identifier = $null
