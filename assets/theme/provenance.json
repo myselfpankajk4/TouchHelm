@@ -1,0 +1,16 @@
+[
+  {
+    "asset": "web/themes/assets/bloom-forest.webp",
+    "origin": "Built-in imagegen, generated 2026-10-12",
+    "source_filename": "exec-0743a633-c6bb-4b53-88f4-b329007e7f95.png",
+    "prompt": "Use case: illustration-story. Asset type: a premium small local theme illustration for a phone trackpad, transparent PNG. Draw an exquisitely detailed woodland flowering garden vignette: airy pale cream wildflowers, tiny coral-pink blossoms, delicate ferns and warm green moss, deep jade foliage, slender forest tree trunks and a few luminous fireflies. Botanical editorial illustration, softly painted gouache with precise richly rendered leaves and petals, absolutely not sketch line art or emoji. Composition: two lovely curved woodland edges growing from the bottom left and bottom right, leave the upper two thirds and center genuinely transparent so UI text remains fully legible. Restrained jewel-green / soft ivory / pale coral palette, natural depth, soft spring forest light. No text, no logos, no frame, no UI, no checkerboard rendered into pixels. This is real polished illustration, not flat vector or abstract blobs. Actual transparent background and subtle natural irregular silhouettes.",
+    "export": "Resized and encoded as WebP; original alpha retained; embedded XMP includes exact prompt."
+  },
+  {
+    "asset": "web/themes/assets/companion-face.webp",
+    "origin": "Built-in imagegen, generated 2026-10-12",
+    "source_filename": "exec-dfb9ead7-c1b6-4650-8f7b-abb3aceb37b9.png",
+    "prompt": "Use case: stylized-concept. Asset type: a beautiful friendly robot companion face for a phone remote theme, transparent PNG. One carefully designed small rounded robot head in three-quarter frontal view, low angle neutral. Warm pearl-white enamel shell with soft violet side panels, charcoal wide face visor with two bright warm aqua eyes and a subtle small friendly smile, lovely precise machined seams, miniature antenna with lavender cap, soft polished clay-like 3D surface and tasteful tactile depth. Friendly and quietly helpful, never childish toy or cartoon emoji. Subtle rim light, soft realistic studio shadows on the subject, no ground/background. Face fills the square with generous transparent margin, no body, no hands, no text, no logo, no UI, no added circles or badges. Physically plausible premium industrial design, high-quality stylized 3D render. Actual transparent background, clean refined cutout edges.",
+    "export": "Resized and encoded as WebP; original alpha retained; embedded XMP includes exact prompt."
+  }
+]

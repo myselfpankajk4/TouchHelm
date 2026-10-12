@@ -1,5 +1,23 @@
 # TouchHelm bug fixes
 
+## Current v2 — 12 October 2026
+
+The approved v2 plan is implemented across the phone browser and WebView2 desktop. [Implementation and device acceptance](docs/TOUCHHELM_V2.md) · [Desktop/HTTPS setup](docs/desktop-v2.md).
+
+- First pad contact dismisses the expanded typing dock without PC input or draft loss. Return adds a newline; Send is explicit. Buffered typing is the default, with optional live sync and Enter/Shift+Enter line-break choice.
+- Presenter prioritizes Previous/Next and the large laser surface; the timer is independent. PowerPoint details, notes and bounded, on-demand cached thumbnails live in a drawer. Generic fallback checks the intended window.
+- Media follows actual state and capabilities: artwork, seek, ±10 seconds and supported transport/options. Unsupported queues and local folder scanning are removed. Disappeared selected players stay unavailable; missing hardware readback never invents a percentage.
+- Apps show extracted Windows icons and verified windows, with pinning, hold/overflow actions and focus selection. Hold, scroll and cancellation cannot also launch. Keyboard includes saved chords and controlled repeat with interruption cleanup.
+- Seven theme families cover phone and desktop with illustrations, materials, light/dark variants, motion and contrast controls. The interactive preview board covers all tabs/panels and important states using simulated transport.
+- Optional local-CA HTTPS uses restricted private storage and manual Android trust. Authenticated certificate download and single-use draft/preference transfer use headers. The owned desktop bridge is unavailable to phone HTTP clients.
+- The source launcher restores matching hosts and gracefully replaces changed builds. Runtime native helpers and artwork participate in build identity.
+
+Final safe verification: **163 Python, 65 JavaScript and 50 browser checks passed**. Browser checks include all fourteen light/dark theme variants and the required viewport matrix. A theme confirmation batch produced 73 fixture captures with no page errors, document overflow or undersized visible buttons. An actual WebView2 smoke loaded branding, QR, bridge/theme and four panels, then closed normally. Actual same-build restoration and changed-source restart passed with normal process exits. Temporary local TLS passed CA/hostname verification and authenticated single-use handoff; no trust store was changed.
+
+Physical Android keyboard/IME, vibration, trusted Android HTTPS and theme performance remain unverified. Live player and PowerPoint behavior also need supported applications open. Native effects are mocked in automated suites; API acceptance is not reported as physical success. The fresh final review subagent could not start because its configured model was unavailable; earlier domain reviews and a manual integration review were completed.
+
+## Historical v1 record — 11 October 2026
+
 The desktop app, server, and phone page were audited together. The approved 11 October 2026 control console has five tabs: Trackpad, Presenter, Media, Keyboard, and Apps. Numpad is inside Keyboard; the five appearance themes and existing pairing/input safeguards remain.
 
 ## Requested changes

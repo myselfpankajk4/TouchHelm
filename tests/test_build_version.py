@@ -30,6 +30,14 @@ class BuildVersionTests(unittest.TestCase):
                 (Path(folder) / 'app.js').write_text('same source')
             self.assertEqual(version.get_build_id(Path(first)), version.get_build_id(Path(second)))
 
+    def test_theme_artwork_change_alone_updates_browser_build(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder);art=root/'themes'/'assets';art.mkdir(parents=True)
+            image=art/'forest.webp';image.write_bytes(b'first picture')
+            before=self.module().get_build_id(root)
+            image.write_bytes(b'changed picture')
+            self.assertNotEqual(self.module().get_build_id(root),before)
+
     def test_rendered_page_has_versioned_assets_and_matching_meta(self):
         version = self.module()
         html = '<meta name="touchhelm-build" content="__TOUCHHELM_BUILD__"><script src="app.js?v=__TOUCHHELM_BUILD__"></script>'

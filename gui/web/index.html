@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en" data-theme="glass" data-appearance="dark">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+  <meta name="desktop-token" content="__DESKTOP_TOKEN__"><meta name="theme-color" content="#111722">
+  <title>TouchHelm · Windows host</title>
+  <link rel="icon" href="__DESKTOP_ASSET_BASE__icons/icon.svg">
+  <link id="th-themes-base" rel="stylesheet" href="__DESKTOP_ASSET_BASE__themes.css">
+  <link rel="stylesheet" href="__DESKTOP_ASSET_BASE__desktop.css">
+  <script defer src="__DESKTOP_ASSET_BASE__themes.js"></script>
+  <script defer src="__DESKTOP_ASSET_BASE__desktop.js"></script>
+</head>
+<body data-surface="desktop">
+<div class="desktop-shell">
+  <header class="desktop-header">
+    <div class="desktop-brand"><img src="__DESKTOP_ASSET_BASE__icons/icon.svg" alt="" width="48" height="48"><div><strong>TouchHelm</strong><span>Windows host</span></div></div>
+    <div class="host-status"><span class="status-dot" aria-hidden="true"></span><span id="hostStatus">Starting host…</span></div>
+    <button id="minimize" class="quiet-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg><span>Minimize to tray</span></button>
+  </header>
+  <p id="previewBanner" class="preview-banner" hidden>Interface preview · sample data. Native actions are disabled.</p>
+  <div class="desktop-body">
+    <nav class="desktop-nav" aria-label="Desktop pages">
+      <button type="button" data-panel="pairing" aria-current="page"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="3" y="3" width="6" height="6"/><rect x="15" y="3" width="6" height="6"/><rect x="3" y="15" width="6" height="6"/><path d="M15 15h3v3h3m-6 3v-3m6-3v-3"/></svg>Pair your phone</button>
+      <button type="button" data-panel="devices"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M10 18h4"/></svg>Devices & activity</button>
+      <button type="button" data-panel="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="8" cy="7" r="3"/><circle cx="16" cy="17" r="3"/></svg>Settings</button>
+      <button type="button" data-panel="diagnostics"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Diagnostics</button>
+      <p class="nav-note">Your phone controls this PC over your local network.</p>
+    </nav>
+    <main class="desktop-content">
+      <p id="feedback" role="status" class="desktop-feedback" hidden></p>
+      <section class="desktop-panel" data-page="pairing">
+        <h1>Connect your phone</h1><p class="lead">Use the same Wi-Fi as this PC, then scan the code with your phone camera.</p>
+        <div class="desktop-pairing">
+          <div class="surface pairing-panel"><div class="qr-wrap"><img id="pairingQR" alt="QR code containing this PC’s connection address" width="224" height="224"></div>
+            <label for="phoneURL">Phone address</label><input id="phoneURL" readonly spellcheck="false">
+            <div class="button-row"><button id="copyURL" class="primary-button">Copy address</button><button id="openURL" class="secondary-button">Open in browser</button></div>
+            <p id="pairingMode" class="muted">Local connection</p>
+          </div>
+          <div class="pairing-information">
+            <div class="surface"><h2>Connection security</h2><p id="pinStatus"></p><p id="pinCode" class="pin-code" hidden></p><p class="muted">A PIN limits who can control your PC. Change it in Settings.</p></div>
+            <div class="surface secure-pairing"><h2>Secure pairing</h2><p>HTTPS gives Android Chrome a secure connection for supported phone capabilities.</p>
+              <p id="secureStatus" class="muted">Optional. Certificate trust is never installed automatically.</p>
+              <div class="button-row"><button id="enableHTTPS" class="secondary-button">Enable HTTPS</button><button id="useHTTP" class="quiet-button" hidden>Use HTTP instead</button></div>
+              <details id="trustSetup"><summary>Android certificate setup</summary>
+                <ol id="trustGuide"></ol><p class="muted">SHA-256 fingerprint</p><code id="certificateFingerprint">Enable HTTPS to create this PC’s certificate.</code>
+                <p id="setupAddress" class="muted"></p>
+              </details>
+            </div>
+          </div>
+        </div>
+      </section>
+      <section class="desktop-panel" data-page="devices" hidden>
+        <div class="section-heading"><h1>Devices & activity</h1><span id="deviceCount" class="muted">0 devices</span></div>
+        <div class="surface"><div class="table-wrap"><table class="device-table"><thead><tr><th>Device</th><th>Address</th><th>Status</th><th>Link</th></tr></thead><tbody id="devicesBody"></tbody></table></div><p id="noDevices" class="muted">No phone connected. Scan the QR code to get started.</p></div>
+        <div class="section-heading"><h2>Recent activity</h2><span class="muted">Latest 1,000 entries</span></div><pre id="activityLog" class="surface activity-log" aria-label="Recent host activity">No activity yet.</pre>
+      </section>
+      <section class="desktop-panel" data-page="settings" hidden>
+        <h1>Settings</h1><p class="lead">Pointer and security settings apply to this PC. Appearance is saved for this desktop.</p>
+        <form id="settingsForm" class="surface">
+          <fieldset class="control-group"><legend>Pointer & scrolling</legend>
+            <label class="range-label" for="sensitivity">Pointer speed <output id="sensitivityValue"></output></label><input id="sensitivity" type="range" min="0.4" max="3.5" step="0.1" name="mouse_sensitivity">
+            <label class="range-label" for="acceleration">Acceleration <output id="accelerationValue"></output></label><input id="acceleration" type="range" min="1" max="2.5" step="0.05" name="mouse_acceleration">
+            <label class="range-label" for="scrollSpeed">Scroll speed <output id="scrollSpeedValue"></output></label><input id="scrollSpeed" type="range" min="0.3" max="2.5" step="0.1" name="scroll_speed">
+            <label class="check-label"><input id="invertScroll" type="checkbox" name="invert_scroll">Natural scrolling</label>
+          </fieldset>
+          <fieldset class="control-group"><legend>Security & presentation</legend>
+            <label class="check-label"><input id="requirePIN" type="checkbox" name="require_pin">Require a four-digit PIN</label>
+            <label for="pinInput">Connection PIN</label><input id="pinInput" name="pin_code" type="text" inputmode="numeric" pattern="[0-9]{4}" minlength="4" maxlength="4" autocomplete="off" aria-describedby="pinHelp"><p id="pinHelp" class="muted">A change asks connected phones to authenticate again.</p>
+            <label for="laserColor">Laser color</label><select id="laserColor" name="laser_color"><option value="red">Red</option><option value="green">Green</option><option value="blue">Blue</option><option value="amber">Amber</option></select>
+          </fieldset>
+          <p id="saveError" class="save-error" role="alert" hidden></p><div class="button-row"><button class="primary-button" id="saveSettings" type="submit">Save settings</button><span id="saveStatus" class="muted" role="status"></span></div>
+        </form>
+        <div id="themePicker" class="surface theme-picker" aria-label="Desktop appearance"></div>
+      </section>
+      <section class="desktop-panel" data-page="diagnostics" hidden>
+        <h1>Diagnostics</h1><p class="lead">Connection details and the source build currently running on this PC.</p>
+        <dl id="diagnostics" class="surface diagnostic-list"></dl>
+        <div class="surface"><h2>Available capabilities</h2><p>Windows handles native mouse and keyboard input. Player metadata, presentation details and display brightness depend on the active application and hardware.</p><p class="muted">HTTPS trust must be installed manually on each phone. This desktop never changes Windows or Android certificate trust automatically.</p><p class="muted">If WebView2 is unavailable, launch <code>run.bat --classic-ui</code>. For terminal-only mode, use <code>run.bat --headless</code>.</p></div>
+      </section>
+    </main>
+  </div>
+</div>
+</body></html>

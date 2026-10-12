@@ -114,6 +114,21 @@ class LaserOverlayApp:
         else:
             self.canvas.delete("laser")
 
+    def set_display(self,rect):
+        """Move the owned click-through window to a validated monitor rectangle."""
+        if not isinstance(rect,dict):return
+        values=[rect.get(key) for key in ('x','y','width','height')]
+        if any(type(value) is not int for value in values):return
+        x,y,width,height=values
+        if width<=0 or height<=0 or width>40000 or height>40000:return
+        if getattr(self,'display_rect',None)==tuple(values):return
+        self.display_rect=tuple(values);self.sw=width;self.sh=height
+        self.root.geometry(f'{width}x{height}')
+        self.canvas.configure(width=width,height=height)
+        self.root.update_idletasks()
+        hwnd=user32.GetParent(self.root.winfo_id()) or self.root.winfo_id()
+        user32.SetWindowPos(hwnd,0,x,y,width,height,0x0010|0x0004)
+
     def hide(self):
         self.is_active = False
         self.canvas.delete("laser")
@@ -136,6 +151,7 @@ def run_overlay_process():
             app.close()
             sys.exit(0)
         elif cmd == "update":
+            if data.get('display_rect'):app.set_display(data['display_rect'])
             x = data.get("x", 0.5)
             y = data.get("y", 0.5)
             active = data.get("active", True)
@@ -188,14 +204,16 @@ class LaserOverlayClient:
         except Exception as e:
             print(f"Failed to start laser overlay process: {e}")
 
-    def update(self, x: float, y: float, active: bool = True):
+    def update(self, x: float, y: float, active: bool = True, display_rect=None):
         if not self.proc or self.proc.poll() is not None:
             if active:
                 self.start()
             else:
                 return
         try:
-            msg = json.dumps({"cmd": "update", "x": x, "y": y, "active": active}) + "\n"
+            payload={"cmd":"update","x":x,"y":y,"active":active}
+            if display_rect is not None:payload['display_rect']=display_rect
+            msg = json.dumps(payload) + "\n"
             self.proc.stdin.write(msg)
             self.proc.stdin.flush()
         except Exception:

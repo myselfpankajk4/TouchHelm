@@ -13,3 +13,5 @@ qrcode==8.2
 six==1.17.0
 websockets==17.2
 yarl==1.25.1
+pywebview==6.2.1
+cryptography==50.0.2

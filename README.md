@@ -1,6 +1,6 @@
 # TouchHelm
 
-**Your PC, at your fingertips.**
+**Your PC, at your fingertips.** TouchHelm 2 adds a shared visual system, dependable composition, and controls driven by actual Windows capabilities.
 
 Turn your phone into a Windows trackpad, keyboard, presentation remote, media controller, and app launcher. TouchHelm runs on your PC and serves its controls to a phone browser over your local network. Scan the desktop QR code to connect; no phone APK is needed.
 
@@ -16,19 +16,23 @@ Turn your phone into a Windows trackpad, keyboard, presentation remote, media co
 | Tab | What it does |
 | --- | --- |
 | **Trackpad** | Large movement surface, left/middle/right clicks, tap, hold-to-drag, two-finger scrolling, edge scrolling, and optional air mouse. |
-| **Typing dock** | Expands for typing, paste, Send/Enter, Clear, and live sync. Done collapses it while keeping your draft. |
-| **Presenter** | Previous/next, start/from-current/end, black/white screen, current presentation context, independent countdown timer, and desktop laser. |
-| **Media** | Current player/track details, player selection, playback controls, volume, brightness, exposed queues, and local files. |
+| **Typing dock** | Buffered by default. Return inserts a newline; Send or Ctrl+Enter sends. Optional live sync, PC Enter, and Enter/Shift+Enter line breaks. Touching the pad dismisses typing and preserves the draft without PC input. |
+| **Presenter** | Previous/next above a large laser surface, monitor selection, independent countdown, and an optional PowerPoint slide/preview/notes drawer. |
+| **Media** | Now Playing with artwork, metadata, stateful Play/Pause, timeline, seeking and supported repeat/shuffle/speed controls. A queue appears only when a provider supplies one. |
 | **Keyboard** | Native press/release, F1–F24, letters, symbols, navigation, left/right modifiers, editing shortcuts, and integrated Numpad. Hold or latch modifiers for chords such as **Ctrl+Shift+A**. |
-| **Apps** | Search registered Windows apps and launch them, with running apps and successful TouchHelm launch frequency first. |
+| **Apps** | Real Windows icons and verified windows. Pinned apps first, then running/frequently opened apps. Hold or choose Actions for Open, Focus, Pin and Details. |
 
-Five themes, optional PIN pairing, shared pointer settings, desktop device status, and system-tray support are included. Versioned QR links and assets help the browser load current UI updates while preserving drafts.
+Seven complete themes—**Forest & Bloom, Resonance, Companion, Clay, Glass, Soft UI and Ink**—cover phone and desktop. Each supports light/dark appearance, reduced motion and increased contrast. Preferences belong to each device. Optional PIN pairing and trusted HTTPS, desktop device status, and system-tray support are included.
+
+<img src="docs/images/themes.png" alt="Seven TouchHelm phone and desktop theme previews" width="1100">
+
+Open **`/preview.html`** on the running host for an interactive preview board with all tabs, desktop panels, themes and simulated states. Preview transport cannot send PC input. [Implementation and acceptance record](docs/TOUCHHELM_V2.md) · [Desktop and HTTPS guide](docs/desktop-v2.md).
 
 ## Requirements
 
-- **Host:** Windows 10/11, Python with Tkinter, and Windows PowerShell. Verified with **Python 3.13**.
+- **Host:** Windows 10/11, Python, Windows PowerShell, WebView2 Runtime and .NET Framework 4.6.2 or later. Python 3.13 is used in this workspace. Tkinter remains available for the classic rollback UI.
 - **Phone:** a modern browser on the same reachable local network as the PC. The UI supports phone, landscape, and desktop browser sizes.
-- **Network:** default HTTP/WebSocket port **8765**. Allow the host through Windows Firewall on your private network if prompted. The experimental Android wrapper uses UDP **53317** for discovery.
+- **Network:** HTTP/WebSocket **8765**, optional HTTPS/WSS **8766**, discovery UDP **53317**. Allow the host through Windows Firewall on your private network if prompted.
 
 Node.js is needed only for development tests, not normal app use.
 
@@ -59,20 +63,21 @@ python -m venv .venv
 .\.venv\Scripts\python.exe main.py
 ```
 
-Enable PIN pairing or run without the desktop window:
+Enable PIN pairing, run without the desktop window, or choose the classic desktop:
 
 ```powershell
 .\.venv\Scripts\python.exe main.py --pin 1234
 .\.venv\Scripts\python.exe main.py --headless
+.\.venv\Scripts\python.exe main.py --classic-ui
 ```
 
 Use your own four-digit PIN; `1234` is an example. Changing/enabling a PIN revokes phone authorization and releases held inputs.
 
 ### Updates
 
-Pull changes, quit the existing host completely, then launch `run.bat` again. Minimizing to the tray keeps the old Python process running. The QR carries the current web build; the phone checks the server version on open/focus and can refresh a confirmed changed build while keeping a draft.
+Pull changes, then launch `run.bat` again. The single-instance launcher restores the current window when source and startup settings match. Changed source requests graceful shutdown and starts the new build after ownership is released. It reports failure if that handoff cannot finish safely. The QR carries the current browser build; the phone checks on open/focus and refreshes a confirmed changed build while keeping its draft.
 
-Browser preferences and saved update drafts migrate from the former app name. This workspace's desktop shortcut is **TouchHelm (Latest)** and points to the source launcher, opens in a normal window, and uses the TouchHelm icon. Close the running host before relaunching to load Python changes.
+Browser preferences and saved update drafts migrate from the former app name. This workspace's **TouchHelm (Latest)** shortcut points to the source launcher and uses the TouchHelm icon. For a host started before v2, quit that older host once before using the new single-instance lifecycle.
 
 ## App compatibility
 
@@ -80,14 +85,13 @@ Details depend on what each desktop application exposes:
 
 | Integration | Available behavior |
 | --- | --- |
-| **PowerPoint** | Deck title, slide number/count/title, slideshow state, and direct COM commands. |
-| **Other recognized presenter/browser/PDF windows** | Window/app context and keyboard fallback. Generic shortcuts depend on the focused application; unavailable slide counts remain unknown. |
-| **Windows media sessions** | Player selection, metadata, state/timeline where exposed, and supported playback commands. |
+| **PowerPoint** | Deck title, slide count/title, slideshow state, direct COM commands, on-demand current/next previews, notes and slide selection. |
+| **Other recognized presenter/browser/PDF windows** | Verified presentation-window context and guarded keyboard fallback. Generic browser windows are rejected; unavailable slide counts/previews remain unavailable. |
+| **Windows media sessions** | Player selection, artwork, metadata, state/timeline, seek bounds, and supported playback/seek/shuffle/repeat/rate commands. |
 | **Windows Media Player** | Selectable queue when a running instance exposes it through COM. |
-| **Local media** | Music/Videos files combined with session/queue items into a list bounded to 200 entries. |
-| **Volume/brightness** | Native volume keys request the Windows flyout. Absolute volume and brightness show a transient TouchHelm indicator; brightness depends on monitor/driver support. |
+| **Volume/brightness** | Native volume keys request the Windows flyout. TouchHelm overlays use measured readback. Missing readback stays unavailable; brightness depends on monitor/driver support. |
 
-Unsupported queues or slide details show explicit unavailable states. Running-app flags use process/window matching and can misidentify generic names. Launch counts record successful requests, not proof that an app finished opening.
+Windows media sessions provide no universal playlist API. TouchHelm does not scan Music/Videos folders in this flow. App windows use registered or executable identity; uncertain matches are not labeled Running. Windows may refuse foreground activation. Launch counts record successful requests, not proof that an app finished opening. Elevated applications can reject ordinary native input; hardware Fn functions are not promised.
 
 ## Settings and privacy
 
@@ -102,9 +106,12 @@ Local settings are saved automatically in `config.json`, which is excluded from 
 | Natural scrolling | Off | On/off |
 | PIN required | Off | Four ASCII digits when enabled |
 | Laser color | Red | Red, green, blue, amber |
-| Theme | Cyber | Cyber, OLED, Matrix, Nordic, Light |
+| Theme | Glass | Bloom, Resonance, Companion, Clay, Glass, Soft UI, Ink; device-local |
+| HTTPS | Off, port `8766` | Enable on desktop; manually trust this PC’s public CA on Android |
 
-The default transport is HTTP/WebSocket for a trusted local network. Keep the host on that network rather than exposing it to the public Internet. An enabled PIN gates input, context/catalog queries, and settings; public responses omit the PIN. App/media commands use registered catalog IDs, not phone-supplied shell commands or arbitrary paths.
+The default transport is HTTP/WebSocket for a trusted local network. Optional HTTPS uses a local CA and address-specific server certificate; private keys remain in a restricted user folder outside served assets. Trust installation is manual. An authenticated, short-lived, single-use handoff transfers drafts/preferences between HTTP and HTTPS; authentication is rechecked. See the [Android setup instructions](docs/desktop-v2.md#optional-android-https-setup).
+
+An enabled PIN gates input, context/catalog queries, settings and private artwork/icons. Asset URLs contain opaque IDs; authentication uses headers. App/media commands use registered catalog IDs. The privileged desktop bridge belongs only to the owned local desktop window and has no phone HTTP command route.
 
 ## Development and verification
 
@@ -115,7 +122,7 @@ The host uses Python/aiohttp/Tkinter and Win32 input. The phone uses plain HTML/
 After installing `requirements.txt`, run on Windows:
 
 ```powershell
-.\.venv\Scripts\python.exe -m unittest tests.test_build_version tests.test_desktop_regressions tests.test_native_controls tests.test_desktop_services tests.test_server_regressions -v
+.\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
 ```
 
 ### Browser checks
@@ -140,13 +147,18 @@ Physical phone gestures, live PowerPoint/player integration, and native feedback
 ```text
 main.py                    Desktop/headless entry point
 run.bat                    Source launcher and first-run setup
-gui/app_window.py          Pairing, devices, settings, tray
+gui/webview_window.py      Owned WebView2 bridge, pairing, devices, tray
+gui/web/                   Shared themed desktop interface
+gui/app_window.py          Classic Tk rollback interface
 server/web_server.py       HTTP/WebSocket and authentication
 server/windows_input.py    Native input, volume and brightness
 server/desktop_services.py Async catalog/context interface
 server/desktop_bridge.ps1  COM/WinRT providers
 server/osd_overlay.py      Desktop feedback
 server/build_version.py    Content-derived browser versions
+server/instance_control.py Latest-source restore/restart lifecycle
+server/secure_pairing.py   Local CA, LAN certificates and user ACLs
+server/asset_store.py      Bounded opaque artwork/icon cache
 web/                       Phone controls, themes, PWA assets
 android/                   Experimental Android WebView wrapper
 tests/                     Safe regressions and previews
@@ -158,8 +170,9 @@ The browser is the supported phone entry point. The Android scaffold has been re
 ## Troubleshooting
 
 - **Cannot connect:** check the displayed address, reachable network, running host, and private-network firewall permission. Guest Wi-Fi/client isolation may block access.
-- **Old UI:** quit/restart the host and scan its new QR. Python changes require a process restart.
+- **Old UI:** launch TouchHelm (Latest) and scan the current QR. Changed source uses the graceful single-instance restart. Quit a pre-v2 host once if it is still running.
 - **No media/presentation details:** open the application on the PC; unavailable fields depend on provider support.
-- **Air mouse, keep-awake, or installation unavailable:** permissions and secure-context/device rules vary. Other remote controls remain usable.
+- **Vibration missing:** use Settings → Test vibration. An accepted API request is not proof of a physical pulse; browser support, user activation and phone settings matter.
+- **Air mouse or keep-awake unavailable:** complete trusted HTTPS pairing and grant browser permission. Other remote controls remain usable; keep-awake can still be released by the OS.
 
 This is a private development repository. No public release or open-source license is currently declared.

@@ -1,0 +1,32 @@
+/* Resonance: an analog instrument. Vinyl grooves rotate only on confirmed playback. */
+:root[data-theme="resonance"][data-appearance="dark"] {
+  --th-bg:#211921; --th-panel:#2e252e; --th-surface:#403441; --th-hover:#504252;
+  --th-text:#fff3df; --th-muted:#d5baa9; --th-accent:#efb767; --th-on-accent:#342111;
+  --th-border:#8c7168; --th-danger:#ff9b9d; --th-success:#d5d19a;
+}
+:root[data-theme="resonance"][data-appearance="light"] {
+  --th-bg:#f7efe1; --th-panel:#efe0cb; --th-surface:#e4ceb3; --th-hover:#dbc1a3;
+  --th-text:#392a26; --th-muted:#6d4a3e; --th-accent:#8b471f; --th-on-accent:#fff5e5;
+  --th-border:#9b7860; --th-danger:#a62431; --th-success:#4c6239;
+}
+:root[data-theme="resonance"] { --th-radius:8px; --th-key-radius:6px; --th-pad-radius:12px; --th-shadow:0 4px 12px #10071333; }
+:root[data-theme="resonance"] :is(.top-bar,.bottom-nav) { background:var(--th-panel); }
+:root[data-theme="resonance"] .touch-surface { background:var(--th-surface); border:2px solid var(--th-border); }
+:root[data-theme="resonance"] .touch-surface::before { content:""; position:absolute; width:210px; height:210px; right:-64px; bottom:-50px; border-radius:50%; border:17px solid color-mix(in srgb,var(--th-accent) 14%,transparent); box-shadow:inset 0 0 0 2px var(--th-border),inset 0 0 0 12px var(--th-surface),inset 0 0 0 13px var(--th-border),inset 0 0 0 28px var(--th-surface),inset 0 0 0 29px var(--th-border); opacity:.55; }
+:root[data-theme="resonance"] .media-context::before { content:""; position:absolute; right:10px; bottom:12px; width:92px; height:92px; border-radius:50%; background:radial-gradient(circle,var(--th-bg) 0 5%,var(--th-accent) 6% 17%,#161116 18% 33%,#332833 34% 35%,#161116 36% 48%,#332833 49% 50%,#161116 51% 64%,#332833 65% 66%,#161116 67%); opacity:.35; pointer-events:none; animation:th-vinyl-turn 16s linear infinite; animation-play-state:paused; }
+:root[data-theme="resonance"][data-playing="true"] .media-context::before { animation-play-state:running; }
+:root[data-theme="resonance"] :is(.trackpad-btn,.tool-btn,.native-key,.macro-btn,.shortcut-btn,.media-btn) { border:1px solid var(--th-border); background:linear-gradient(180deg,var(--th-hover),var(--th-panel)); box-shadow:0 3px 8px #08030a26; }
+:root[data-theme="resonance"] :is(.trackpad-btn,.tool-btn,.native-key,.macro-btn,.shortcut-btn,.media-btn):active { background:var(--th-surface); box-shadow:inset 0 2px 5px #0003; }
+:root[data-theme="resonance"] :is(.send-btn,.btn-next,.play-btn,.native-key.held) { background:var(--th-accent); color:var(--th-on-accent); }
+:root[data-theme="resonance"] .play-btn { border-radius:50%; }
+:root[data-theme="resonance"] .nav-tab { border-radius:5px; }
+:root[data-theme="resonance"] .nav-tab.active { background:var(--th-surface); box-shadow:inset 0 -3px var(--th-accent); }
+:root[data-theme="resonance"] :is(.ui-icon,.nav-tab>svg) { stroke-width:1.6; }
+:root[data-theme="resonance"] .icon-heading>.ui-icon { padding:3px; width:26px; height:26px; border:1px solid var(--th-border); border-radius:50%; }
+:root[data-theme="resonance"] .desktop-context { border-block:1px solid var(--th-border); padding-top:14px; }
+:root[data-theme="resonance"] :is(.catalog-text strong,.desktop-context h1,.media-context h1) { font-weight:650; }
+:root[data-theme="resonance"] :is(.typing-dock,.segmented-control) { background:var(--th-panel); border:1px solid var(--th-border); }
+:root[data-theme="resonance"] .laser-surface { border:2px solid var(--th-border); background:var(--th-surface); }
+:root[data-theme="resonance"] .app-monogram { border:1px solid var(--th-border); border-radius:6px; }
+:root[data-theme="resonance"] .desktop-panel { box-shadow:var(--th-shadow); }
+@keyframes th-vinyl-turn { to{transform:rotate(360deg)} }

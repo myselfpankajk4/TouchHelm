@@ -193,8 +193,8 @@ class WindowsAudioController:
     """
 
     def __init__(self):
-        self._cached_vol = 50
-        self._cached_mute = False
+        self._cached_vol = None
+        self._cached_mute = None
         try:
             v, m = self.get_volume_info()
             self._cached_vol = v
@@ -243,156 +243,98 @@ class WindowsAudioController:
         ReleaseVol = ctypes.WINFUNCTYPE(wintypes.ULONG, ctypes.c_void_p)(vol_vtable[2])
         return pVolume, vol_vtable, ReleaseVol
 
+    def _unknown(self):
+        self._cached_vol = self._cached_mute = None
+        return None, None
+
+    def _read_endpoint(self, endpoint, vtable):
+        get_level = ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p,
+                                      ctypes.POINTER(ctypes.c_float))(vtable[9])
+        get_mute = ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p,
+                                     ctypes.POINTER(wintypes.BOOL))(vtable[15])
+        level, muted = ctypes.c_float(), wintypes.BOOL()
+        level_ok = get_level(endpoint, ctypes.byref(level)) == 0
+        mute_ok = get_mute(endpoint, ctypes.byref(muted)) == 0
+        self._cached_vol = (max(0, min(100, round(level.value * 100)))
+                            if level_ok and math.isfinite(level.value) else None)
+        self._cached_mute = bool(muted.value) if mute_ok else None
+        return self._cached_vol, self._cached_mute
+
     def get_volume_info(self) -> tuple:
-        """Returns (master_volume_percent, is_muted)."""
+        """Observed (percent, mute); a missing/failed field is None."""
         hr_init = ole32.CoInitialize(None)
-        need_uninit = (hr_init in (0, 1))
         try:
-            pVol, vtable, release = self._get_endpoint_volume()
-            if not pVol:
-                return self._cached_vol, self._cached_mute
+            endpoint, vtable, release = self._get_endpoint_volume()
+            if not endpoint:
+                return self._unknown()
             try:
-                GetMasterVolumeLevelScalar = ctypes.WINFUNCTYPE(
-                    ctypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(ctypes.c_float)
-                )(vtable[9])
-                GetMute = ctypes.WINFUNCTYPE(
-                    ctypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(wintypes.BOOL)
-                )(vtable[15])
-                level = ctypes.c_float()
-                muted = wintypes.BOOL()
-                GetMasterVolumeLevelScalar(pVol, ctypes.byref(level))
-                GetMute(pVol, ctypes.byref(muted))
-                self._cached_vol = max(0, min(100, round(level.value * 100)))
-                self._cached_mute = bool(muted.value)
-                return self._cached_vol, self._cached_mute
+                return self._read_endpoint(endpoint, vtable)
             finally:
-                release(pVol)
+                release(endpoint)
         except Exception:
-            return self._cached_vol, self._cached_mute
+            return self._unknown()
         finally:
-            if need_uninit:
+            if hr_init in (0, 1):
                 ole32.CoUninitialize()
 
     def set_volume(self, percent: int) -> tuple:
-        """Sets Windows master volume to exact percentage (0-100)."""
+        """Request an absolute level and return measured readback only."""
         percent = max(0, min(100, int(percent)))
-        scalar = float(percent) / 100.0
         hr_init = ole32.CoInitialize(None)
-        need_uninit = (hr_init in (0, 1))
         try:
-            pVol, vtable, release = self._get_endpoint_volume()
-            if not pVol:
-                self._cached_vol = percent
-                return self._cached_vol, self._cached_mute
+            endpoint, vtable, release = self._get_endpoint_volume()
+            if not endpoint:
+                return self._unknown()
             try:
-                SetMasterVolumeLevelScalar = ctypes.WINFUNCTYPE(
-                    ctypes.HRESULT, ctypes.c_void_p, ctypes.c_float, ctypes.c_void_p
-                )(vtable[7])
-                SetMute = ctypes.WINFUNCTYPE(
-                    ctypes.HRESULT, ctypes.c_void_p, wintypes.BOOL, ctypes.c_void_p
-                )(vtable[14])
-                GetMasterVolumeLevelScalar = ctypes.WINFUNCTYPE(
-                    ctypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(ctypes.c_float)
-                )(vtable[9])
-                GetMute = ctypes.WINFUNCTYPE(
-                    ctypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(wintypes.BOOL)
-                )(vtable[15])
-
-                SetMasterVolumeLevelScalar(pVol, scalar, None)
-
-                # If volume is set > 0 while muted, automatically unmute (standard Windows audio behavior)
-                if percent > 0 and self._cached_mute:
-                    SetMute(pVol, wintypes.BOOL(False), None)
-
-                actual_level = ctypes.c_float()
-                muted = wintypes.BOOL()
-                GetMasterVolumeLevelScalar(pVol, ctypes.byref(actual_level))
-                GetMute(pVol, ctypes.byref(muted))
-                self._cached_vol = max(0, min(100, round(actual_level.value * 100)))
-                self._cached_mute = bool(muted.value)
-                return self._cached_vol, self._cached_mute
+                setter = ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p,
+                    ctypes.c_float, ctypes.c_void_p)(vtable[7])
+                if setter(endpoint, percent / 100.0, None) != 0:
+                    return self._unknown()
+                if percent > 0:
+                    # Setting a positive level explicitly unmutes without
+                    # relying on a stale cached mute observation.
+                    unmute = ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p,
+                        wintypes.BOOL, ctypes.c_void_p)(vtable[14])
+                    unmute(endpoint, wintypes.BOOL(False), None)
+                return self._read_endpoint(endpoint, vtable)
             finally:
-                release(pVol)
+                release(endpoint)
         except Exception:
-            self._cached_vol = percent
-            return self._cached_vol, self._cached_mute
+            return self._unknown()
         finally:
-            if need_uninit:
+            if hr_init in (0, 1):
                 ole32.CoUninitialize()
 
     def toggle_mute(self) -> tuple:
-        """Toggles Windows master mute state."""
-        hr_init = ole32.CoInitialize(None)
-        need_uninit = (hr_init in (0, 1))
-        try:
-            pVol, vtable, release = self._get_endpoint_volume()
-            if not pVol:
-                self._cached_mute = not self._cached_mute
-                return self._cached_vol, self._cached_mute
-            try:
-                GetMasterVolumeLevelScalar = ctypes.WINFUNCTYPE(
-                    ctypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(ctypes.c_float)
-                )(vtable[9])
-                GetMute = ctypes.WINFUNCTYPE(
-                    ctypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(wintypes.BOOL)
-                )(vtable[15])
-                SetMute = ctypes.WINFUNCTYPE(
-                    ctypes.HRESULT, ctypes.c_void_p, wintypes.BOOL, ctypes.c_void_p
-                )(vtable[14])
-
-                muted = wintypes.BOOL()
-                GetMute(pVol, ctypes.byref(muted))
-                new_mute = not bool(muted.value)
-                SetMute(pVol, wintypes.BOOL(new_mute), None)
-
-                level = ctypes.c_float()
-                GetMasterVolumeLevelScalar(pVol, ctypes.byref(level))
-                self._cached_vol = max(0, min(100, round(level.value * 100)))
-                self._cached_mute = new_mute
-                return self._cached_vol, self._cached_mute
-            finally:
-                release(pVol)
-        except Exception:
-            self._cached_mute = not self._cached_mute
-            return self._cached_vol, self._cached_mute
-        finally:
-            if need_uninit:
-                ole32.CoUninitialize()
+        _, muted = self.get_volume_info()
+        if muted is None:
+            return self._unknown()
+        return self.set_mute(not muted)
 
     def set_mute(self, is_muted: bool) -> tuple:
-        """Sets Windows master mute state."""
         hr_init = ole32.CoInitialize(None)
-        need_uninit = (hr_init in (0, 1))
         try:
-            pVol, vtable, release = self._get_endpoint_volume()
-            if not pVol:
-                self._cached_mute = bool(is_muted)
-                return self._cached_vol, self._cached_mute
+            endpoint, vtable, release = self._get_endpoint_volume()
+            if not endpoint:
+                return self._unknown()
             try:
-                GetMasterVolumeLevelScalar = ctypes.WINFUNCTYPE(
-                    ctypes.HRESULT, ctypes.c_void_p, ctypes.POINTER(ctypes.c_float)
-                )(vtable[9])
-                SetMute = ctypes.WINFUNCTYPE(
-                    ctypes.HRESULT, ctypes.c_void_p, wintypes.BOOL, ctypes.c_void_p
-                )(vtable[14])
-                SetMute(pVol, wintypes.BOOL(bool(is_muted)), None)
-                level = ctypes.c_float()
-                GetMasterVolumeLevelScalar(pVol, ctypes.byref(level))
-                self._cached_vol = max(0, min(100, round(level.value * 100)))
-                self._cached_mute = bool(is_muted)
-                return self._cached_vol, self._cached_mute
+                setter = ctypes.WINFUNCTYPE(ctypes.HRESULT, ctypes.c_void_p,
+                    wintypes.BOOL, ctypes.c_void_p)(vtable[14])
+                if setter(endpoint, wintypes.BOOL(bool(is_muted)), None) != 0:
+                    return self._unknown()
+                return self._read_endpoint(endpoint, vtable)
             finally:
-                release(pVol)
+                release(endpoint)
         except Exception:
-            self._cached_mute = bool(is_muted)
-            return self._cached_vol, self._cached_mute
+            return self._unknown()
         finally:
-            if need_uninit:
+            if hr_init in (0, 1):
                 ole32.CoUninitialize()
-
     def change_volume(self, delta: int) -> tuple:
         """Adjusts volume by delta percent."""
         cur_vol, cur_mute = self.get_volume_info()
+        if cur_vol is None:
+            return None, cur_mute
         new_vol = max(0, min(100, cur_vol + delta))
         if delta > 0 and cur_mute:
             self.set_mute(False)
@@ -408,8 +350,11 @@ class WindowsBrightnessController:
     """
 
     def __init__(self):
-        self._current_level = 80
+        self._current_level = None
         self._target_level = None
+        self._available = False
+        self._generation = 0
+        self.on_readback = None
         self._lock = threading.Lock()
         self._has_work = threading.Event()
         self._stopping = threading.Event()
@@ -418,6 +363,16 @@ class WindowsBrightnessController:
         self._query_initial_brightness()
 
     def _query_initial_brightness(self):
+        self.refresh_brightness()
+
+    @property
+    def available(self):
+        with self._lock:
+            return self._available
+
+    def refresh_brightness(self, expected_generation=None):
+        """Bounded actual readback; never return an intended target as observed."""
+        observed = None
         # 1. Query WMI via powershell with CREATE_NO_WINDOW
         try:
             res = subprocess.run(
@@ -427,18 +382,21 @@ class WindowsBrightnessController:
                 creationflags=0x08000000  # CREATE_NO_WINDOW
             )
             val = res.stdout.strip()
-            if val.isdigit():
-                with self._lock:
-                    self._current_level = max(0, min(100, int(val)))
-                return
+            if res.returncode == 0 and val.isdigit() and 0 <= int(val) <= 100:
+                observed = int(val)
         except Exception:
             pass
 
         # 2. Fallback to Dxva2 for external desktop monitors
-        val = self._query_dxva2_brightness()
-        if val is not None:
-            with self._lock:
-                self._current_level = val
+        if observed is None:
+            observed = self._query_dxva2_brightness()
+        with self._lock:
+            if expected_generation is not None and expected_generation != self._generation:
+                return None
+            self._current_level = observed
+            if observed is not None:
+                self._available = True
+        return observed
 
     def _query_dxva2_brightness(self):
         try:
@@ -493,6 +451,7 @@ class WindowsBrightnessController:
             with self._lock:
                 target = self._target_level
                 self._target_level = None
+                generation = self._generation
             if target is None:
                 continue
 
@@ -513,30 +472,40 @@ class WindowsBrightnessController:
                 self._apply_dxva2_brightness(target)
             except Exception:
                 pass
+            observed = self.refresh_brightness(expected_generation=generation)
+            if self._stopping.is_set():
+                break
+            if observed is not None and callable(self.on_readback):
+                try:
+                    self.on_readback(observed)
+                except Exception:
+                    pass
 
-    def get_brightness(self) -> int:
+    def get_brightness(self):
         with self._lock:
             return self._current_level
 
-    def set_brightness(self, level: int) -> int:
+    def set_brightness(self, level: int):
         level = max(0, min(100, int(level)))
         with self._lock:
             if self._stopping.is_set():
                 return self._current_level
-            self._current_level = level
+            self._generation += 1
+            self._current_level = None
             self._target_level = level
             self._has_work.set()
-        return level
+        return None
 
-    def change_brightness(self, delta: int) -> int:
+    def change_brightness(self, delta: int):
         with self._lock:
-            if self._stopping.is_set():
+            if self._stopping.is_set() or self._current_level is None:
                 return self._current_level
             new_level = max(0, min(100, self._current_level + delta))
-            self._current_level = new_level
+            self._generation += 1
+            self._current_level = None
             self._target_level = new_level
             self._has_work.set()
-            return new_level
+            return None
 
     def close(self):
         """Cancel queued brightness changes and let an in-flight bounded query finish."""
@@ -767,16 +736,27 @@ class WindowsInputController:
         arr = (INPUT * 2)(inp_down, inp_up)
         user32.SendInput(2, ctypes.byref(arr), ctypes.sizeof(INPUT))
 
-    def type_text(self, text: str):
+    def type_text(self, text: str, newline_mode='enter'):
         """Types string with full unicode support."""
         for ch in text:
             if ch == "\n":
-                self.key_tap("enter")
+                if newline_mode == 'shift_enter':
+                    self.hotkey('shift','enter')
+                else:
+                    self.key_tap("enter")
             elif ch == "\t":
                 self.key_tap("tab")
             else:
                 self.type_unicode_char(ch)
-                time.sleep(0.005)
+
+    def zoom(self,delta):
+        """Ctrl-wheel while preserving an already-held physical Control key."""
+        self.ensure_input_desktop()
+        held=bool(user32.GetAsyncKeyState(0x11)&0x8000)
+        if not held:self.key_down('ctrl')
+        try:user32.mouse_event(MOUSEEVENTF_WHEEL,0,0,int(max(-10,min(10,delta))*120),0)
+        finally:
+            if not held:self.key_up('ctrl')
 
     def presentation_action(self, action: str):
         """
@@ -816,7 +796,8 @@ class WindowsInputController:
     def set_volume(self, percent: int) -> tuple:
         """Sets Windows master volume (0-100) and returns (new_volume, is_muted)."""
         state = self.audio_ctrl.set_volume(percent)
-        self.osd.show("volume", state[0], muted=state[1])
+        if state[0] is not None and state[1] is not None:
+            self.osd.show("volume", state[0], muted=state[1])
         return state
 
     def toggle_mute(self) -> tuple:
@@ -826,7 +807,8 @@ class WindowsInputController:
     def set_mute(self, is_muted: bool) -> tuple:
         """Sets Windows master mute and returns (volume, is_muted)."""
         state = self.audio_ctrl.set_mute(is_muted)
-        self.osd.show("volume", state[0], muted=state[1])
+        if state[0] is not None and state[1] is not None:
+            self.osd.show("volume", state[0], muted=state[1])
         return state
 
     def change_volume(self, delta: int) -> tuple:
@@ -834,7 +816,8 @@ class WindowsInputController:
         if delta in (-2, 2):
             return self._native_volume_key("volume_up" if delta > 0 else "volume_down")
         state = self.audio_ctrl.change_volume(delta)
-        self.osd.show("volume", state[0], muted=state[1])
+        if state[0] is not None and state[1] is not None:
+            self.osd.show("volume", state[0], muted=state[1])
         return state
 
     def _native_volume_key(self, key: str) -> tuple:
@@ -856,16 +839,24 @@ class WindowsInputController:
         return self.brightness_ctrl.get_brightness()
 
     def set_brightness(self, level: int) -> int:
-        """Sets display brightness percentage (0-100) and returns new level."""
+        """Queue a target; display feedback only after actual worker readback."""
+        self.brightness_ctrl.on_readback = self._brightness_observed
         actual = self.brightness_ctrl.set_brightness(level)
-        self.osd.show("brightness", actual)
+        if actual is not None:
+            self.osd.show("brightness", actual)
         return actual
 
     def change_brightness(self, delta: int) -> int:
-        """Changes display brightness by delta percent and returns new level."""
+        """Change from a known measured level; unknown readback stays unknown."""
+        self.brightness_ctrl.on_readback = self._brightness_observed
         actual = self.brightness_ctrl.change_brightness(delta)
-        self.osd.show("brightness", actual)
+        if actual is not None:
+            self.osd.show("brightness", actual)
         return actual
+
+    def _brightness_observed(self, actual):
+        if actual is not None and not self._closed:
+            self.osd.show("brightness", actual)
 
     def close(self):
         """Close only feedback/brightness resources owned by this controller."""

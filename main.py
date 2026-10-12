@@ -8,11 +8,15 @@ import time
 import argparse
 import asyncio
 import threading
+import hashlib
+import json
+from pathlib import Path
 from concurrent.futures import Future
 
 from server.config import ConfigManager
 from server.discovery import DiscoveryBeaconService, get_local_ip_addresses
 from server.web_server import TouchHelmServer
+from server.instance_control import InstanceController, source_build_id
 
 
 def run_async_server(server_instance, loop, startup=None):
@@ -72,6 +76,7 @@ def main():
     parser.add_argument("--port", type=int, default=None, help="Server port (default: 8765)")
     parser.add_argument("--no-gui", "--headless", action="store_true", help="Run without Desktop GUI in terminal mode")
     parser.add_argument("--pin", type=str, default=None, help="Require 4-digit security PIN")
+    parser.add_argument("--classic-ui", action="store_true", help="Use the classic Tk desktop instead of EdgeChromium")
     args = parser.parse_args()
 
     if args.port is not None and not 1 <= args.port <= 65535:
@@ -89,15 +94,48 @@ def main():
     ips = get_local_ip_addresses()
     primary_ip = ips[0] if ips else "127.0.0.1"
 
-    # Start UDP Discovery Beacon
-    beacon = DiscoveryBeaconService(
-        port=port,
-        has_pin=lambda: config.get("require_pin", False),
-        server_name=config.get("server_name")
-    )
+    source_root = Path(__file__).resolve().parent
+    build = source_build_id(source_root)
+    mode = 'headless' if args.no_gui else 'classic' if args.classic_ui else 'webview'
+    # A saved CLI override must not merely restore a host using its old binding
+    # or access policy. Only an opaque identity travels through protected IPC.
+    startup_policy = {'port': port, 'require_pin': config.get('require_pin', False),
+                      'pin_code': config.get('pin_code', '') if config.get('require_pin', False) else ''}
+    policy_id = hashlib.sha256(json.dumps(startup_policy, sort_keys=True).encode()).hexdigest()[:12]
+    instance = InstanceController(f'{build}-{mode}-{policy_id}', source_root=source_root)
+    try:
+        if not instance.acquire():
+            handoff = instance.handoff(timeout=20)
+            if handoff == 'restored':
+                print('Restored the running TouchHelm host.')
+                return 0
+            if handoff != 'acquired':
+                print('The running TouchHelm host could not be restored or stopped safely. Close it and try again.', file=sys.stderr)
+                return 1
+    except Exception as error:
+        instance.close()
+        print(f'Unable to initialize TouchHelm instance control: {error}', file=sys.stderr)
+        return 1
 
     # Shared UI log handlers
     gui_app = None
+    root = None
+    server_loop = None
+    server_thread = None
+    beacon = None
+    stopped = threading.Event()
+
+    def restore_host():
+        if gui_app:
+            gui_app.restore_from_tray()
+
+    def stop_host():
+        stopped.set()
+        if gui_app:
+            if hasattr(gui_app, 'request_close'):
+                gui_app.request_close()
+            else:
+                gui_app.ui_queue.put(gui_app._exit_app)
 
     def on_event_callback(msg):
         if gui_app:
@@ -109,25 +147,18 @@ def main():
         if gui_app:
             gui_app.update_clients(clients)
 
-    # Initialize Web & WebSocket Server
-    server = TouchHelmServer(
-        config=config,
-        on_event=on_event_callback,
-        on_client_change=on_clients_callback
-    )
-
-    # Start Async Server loop in background thread
-    server_loop = asyncio.new_event_loop()
-    startup = Future()
-    server_thread = threading.Thread(
-        target=run_async_server,
-        args=(server, server_loop, startup),
-        daemon=True
-    )
-    server_thread.start()
-
-    root = None
     try:
+        instance.start(restore_host, stop_host)
+        if stopped.is_set(): return 0
+        beacon = DiscoveryBeaconService(port=port,
+            has_pin=lambda: config.get("require_pin", False), server_name=config.get("server_name"))
+        server = TouchHelmServer(config=config, on_event=on_event_callback,
+                                on_client_change=on_clients_callback)
+        server_loop = asyncio.new_event_loop()
+        startup = Future()
+        server_thread = threading.Thread(target=run_async_server,
+            args=(server, server_loop, startup), daemon=True, name='TouchHelm host')
+        server_thread.start()
         try:
             startup.result(timeout=10.0)
         except Exception as error:
@@ -141,10 +172,11 @@ def main():
             config.get("require_pin", False),
             config.get("pin_code", "1234")
         )
+        if stopped.is_set(): return 0
         if args.no_gui:
-            while server_thread.is_alive():
-                time.sleep(0.5)
-        else:
+            while server_thread.is_alive() and not stopped.wait(.5):
+                pass
+        elif args.classic_ui:
             # Keep GUI dependencies optional for headless mode.
             import tkinter as tk
             from gui.app_window import TouchHelmDesktopApp
@@ -157,24 +189,44 @@ def main():
                 server_loop=server_loop,
                 on_exit=root.destroy
             )
-            root.mainloop()
+            if stopped.is_set():
+                root.destroy()
+            else:
+                root.mainloop()
+        else:
+            from gui.webview_window import WebViewDesktopApp
+            gui_app = WebViewDesktopApp(config, server, server_loop,
+                primary_ip=primary_ip, build_id=build, on_exit=stopped.set)
+            if stopped.is_set(): gui_app.request_close()
+            gui_app.run()
     except KeyboardInterrupt:
         print("\nShutting down TouchHelm server...")
+    except Exception as error:
+        print(f'Unable to open TouchHelm: {error}. Use run.bat --classic-ui for the classic desktop, or --headless for terminal mode.', file=sys.stderr)
+        return 1
     finally:
-        if gui_app and gui_app.tray_icon:
-            gui_app.tray_icon.stop()
+        stopped.set()
+        if gui_app:
+            if hasattr(gui_app, 'close'):
+                gui_app.close()
+            elif gui_app.tray_icon:
+                gui_app.tray_icon.stop()
         if root is not None:
             try:
                 root.destroy()
             except Exception:
                 pass
-        beacon.stop()
-        if not server_loop.is_closed():
+        if beacon: beacon.stop()
+        if server_loop is not None and not server_loop.is_closed():
             try:
                 server_loop.call_soon_threadsafe(server_loop.stop)
             except RuntimeError:
                 pass
-        server_thread.join(timeout=5.0)
+        if server_thread is not None:
+            server_thread.join(timeout=15.0)
+            if server_thread.is_alive():
+                print('TouchHelm shutdown did not complete within 15 seconds.', file=sys.stderr)
+        instance.close()
     return 0
 
 

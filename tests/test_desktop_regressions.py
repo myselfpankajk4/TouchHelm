@@ -89,6 +89,51 @@ class DesktopLifecycleTests(unittest.TestCase):
             "server.web_server": types.SimpleNamespace(TouchHelmServer=object),
             "gui.app_window": types.SimpleNamespace(TouchHelmDesktopApp=object),
         })
+        self.instance_patch = patch.object(self.main, 'InstanceController')
+        self.instance = self.instance_patch.start().return_value
+        self.instance.acquire.return_value = True
+        self.addCleanup(self.instance_patch.stop)
+
+    def test_matching_instance_restores_before_any_native_host_construction(self):
+        self.instance.acquire.return_value = False
+        self.instance.handoff.return_value = 'restored'
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: {'port': 8765, 'require_pin': False}.get(key, default)
+        with patch.object(sys, 'argv', ['main.py']), patch.object(self.main, 'ConfigManager', return_value=config), patch.object(
+            self.main, 'get_local_ip_addresses', return_value=['127.0.0.1']
+        ), patch.object(self.main, 'TouchHelmServer') as server, patch('sys.stdout', io.StringIO()):
+            self.assertEqual(self.main.main(), 0)
+        server.assert_not_called()
+        self.instance.start.assert_not_called()
+
+    def test_restart_during_ipc_setup_prevents_native_host_startup(self):
+        self.instance.start.side_effect = lambda restore, stop: stop()
+        config = Mock()
+        config.get.side_effect = lambda key, default=None: {'port': 8765, 'require_pin': False}.get(key, default)
+        with patch.object(sys, 'argv', ['main.py']), patch.object(self.main, 'ConfigManager', return_value=config), patch.object(
+            self.main, 'get_local_ip_addresses', return_value=['127.0.0.1']
+        ), patch.object(self.main, 'TouchHelmServer') as server:
+            self.assertEqual(self.main.main(), 0)
+        server.assert_not_called()
+        self.instance.close.assert_called_once_with()
+
+    def test_explicit_cli_port_and_pin_policy_change_instance_identity(self):
+        identities = []
+        with tempfile.TemporaryDirectory(dir=ROOT / 'tests') as directory:
+            config = ConfigManager(str(pathlib.Path(directory) / 'config.json'))
+            self.instance.acquire.return_value = False
+            self.instance.handoff.return_value = 'restored'
+            for arguments in ([], ['--port', '8767'], ['--pin', '5678']):
+                config.update({'port': 8765, 'require_pin': False, 'pin_code': '1234'})
+                with patch.object(sys, 'argv', ['main.py', *arguments]), patch.object(
+                    self.main, 'ConfigManager', return_value=config
+                ), patch.object(self.main, 'get_local_ip_addresses', return_value=['127.0.0.1']), patch.object(
+                    self.main, 'source_build_id', return_value='a' * 32
+                ), patch('sys.stdout', io.StringIO()):
+                    self.assertEqual(self.main.main(), 0)
+                identities.append(self.main.InstanceController.call_args.args[0])
+        self.assertEqual(len(set(identities)), 3)
+        self.assertNotIn('5678', identities[-1])
 
     def test_start_failure_cleans_up_partial_server_and_closes_loop(self):
         class Server:

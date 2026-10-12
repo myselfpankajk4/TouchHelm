@@ -26,7 +26,7 @@ test('installation caches the versioned assets used by the phone page for offlin
   assert.ok(saved.includes('/'));
   const html = fs.readFileSync(path.join(__dirname, '../web/index.html'), 'utf8');
   const assets = [...html.matchAll(/(?:href|src)="(\/[^" ]+\?v=__TOUCHHELM_BUILD__)"/g)].map(match => match[1]);
-  assert.equal(assets.length, 4);
+  assert.ok(assets.length >= 9);
   for (const asset of assets) assert.ok(saved.includes(asset), `missing offline asset ${asset}`);
 });
 

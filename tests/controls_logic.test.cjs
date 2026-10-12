@@ -119,9 +119,9 @@ test('apps use safe text, real running/frequency order, and catalog IDs for laun
 test('media playback sends item/session IDs and accurately states unavailable queues', () => {
   const {controls, elements, messages, client} = setup();
   controls.renderMediaLibrary({sessions: [{id: 'player-1', app: 'Music'}],
-    items: [{id: 'media:1', title: '<script>bad()</script>', subtitle: 'Local file', kind: 'local'}],
-    playlist_supported: false, playlist_message: 'This player does not expose its queue.'});
-  assert.equal(elements.get('mediaLibraryMessage').textContent, 'This player does not expose its queue.');
+    items: [{id: 'media:1', title: '<script>bad()</script>', subtitle: 'Player queue', kind: 'queue'}],
+    playlist_supported: true, playlist_message: 'Player queue'});
+  assert.equal(elements.get('mediaLibraryMessage').textContent, 'Player queue');
   elements.get('mediaSessionSelect').value = 'player-1'; elements.get('mediaSessionSelect').emit('change');
   assert.equal(client.selectedMediaSession, 'player-1');
   elements.get('mediaLibrary').children[0].emit('click');

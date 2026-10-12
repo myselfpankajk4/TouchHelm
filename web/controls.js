@@ -30,7 +30,7 @@
         'nativeKeyboard','nativeNumpad','keyboardModeKeys','keyboardModeNumpad','viewNumpad','keyboardKeys',
         'heldKeys','btnReleaseKeys','presentationApp','presentationTitle','presentationStatus','presentationSlide','presentationSlideTitle',
         'mediaSessionSelect','mediaTitle','mediaArtist','mediaStatus','mediaPosition','mediaDuration','mediaProgress',
-        'mediaLibraryMessage','mediaLibrary','btnRefreshMedia','appSearch','appsStatus','appsList','btnRefreshApps']) {
+        'mediaLibraryMessage','mediaLibrary','mediaQueueSection','btnRefreshMedia','appSearch','appsStatus','appsList','btnRefreshApps']) {
         this.ids[id] = document.getElementById(id);
       }
       this.buildKeyboard(); this.bindTyping(); this.bindCatalogs();
@@ -115,11 +115,17 @@
       else if (!this.down(key)) return;
       if (!modifiers.has(key)) for (const pointer of this.pointers.values()) if (modifiers.has(pointer.key)) pointer.used = true;
       this.pointers.set(event.pointerId,{key,button,started:Date.now(),used:false,toggledOff});
+      if(['backspace','delete','left','right','up','down','pageup','pagedown','home','end'].includes(key)) {
+        const pointer=this.pointers.get(event.pointerId);
+        const repeat=()=>{if(this.pointers.get(event.pointerId)!==pointer||!this.connected)return;this.send({type:'keydown',key,repeat:true});pointer.repeatTimer=setTimeout(repeat,65);};
+        pointer.repeatTimer=setTimeout(repeat,450);
+      }
       try { button.setPointerCapture(event.pointerId); } catch (_) {}
       this.updateHeld();
     }
     endPointer(event) {
       const pointer = this.pointers.get(event.pointerId); if (!pointer) return;
+      clearTimeout(pointer.repeatTimer);
       event.preventDefault(); this.pointers.delete(event.pointerId);
       if (!pointer.toggledOff) {
         if (modifiers.has(pointer.key) && !pointer.used && Date.now()-pointer.started < 400) this.latched.add(pointer.key);
@@ -131,6 +137,7 @@
     }
     releaseLatched() { for (const key of [...this.latched]) this.up(key); }
     releaseKeys() {
+      for(const pointer of this.pointers.values())clearTimeout(pointer.repeatTimer);
       this.pointers.clear();
       for (const key of [...this.held]) this.up(key);
       this.latched.clear(); this.updateHeld();
@@ -199,6 +206,7 @@
       this.text('mediaLibraryMessage','Loading media…'); this.send({type:'get_media_library'});
     }
     onViewChange(viewId) {
+      this.client.experience?.cancelAppHolds();
       this.releaseKeys();
       if (viewId !== 'viewTrackpad') this.collapseTyping();
       if (!this.connected) return;
@@ -212,7 +220,10 @@
       this.connected = !!connected; this.updateConnection();
       if (this.connected && !wasConnected) {
         this.send({type:'get_desktop_state'}); this.requestApps(); this.requestMedia();
+        this.send({type:'get_displays'});
+        this.client.experience?.consumeHandoff();
       }
+      if(!this.connected){this.client.experience?.clearAssets();this.client.experience?.clearPending();}
     }
     updateConnection() {
       for (const button of this.keyButtons) button.disabled = !this.connected;
@@ -227,12 +238,13 @@
 
     renderApps(apps) {
       this.apps = (Array.isArray(apps) ? apps : []).filter(app => app && typeof app.id === 'string' && typeof app.name === 'string');
-      this.apps.sort((a,b) => Number(!!b.running)-Number(!!a.running) || (number(b.launches)||0)-(number(a.launches)||0) || a.name.localeCompare(b.name));
+      this.apps.sort((a,b) => Number(!!b.pinned)-Number(!!a.pinned) || Number(!!b.running)-Number(!!a.running) || (number(b.launches)||0)-(number(a.launches)||0) || a.name.localeCompare(b.name));
       this.pendingApps.clear(); this.drawApps();
     }
     drawApps() {
       const list = this.ids.appsList; if (!list) return;
       const query = (this.ids.appSearch?.value || '').trim().toLocaleLowerCase();
+      if (this.client.experience) return this.client.experience.drawApps(this.apps,query);
       const apps = this.apps.filter(app => app.name.toLocaleLowerCase().includes(query));
       list.replaceChildren();
       for (const app of apps) {
@@ -262,13 +274,15 @@
           const id=session.id || session.session_id; if (typeof id !== 'string') continue;
           const option=this.node('option',session.app || session.title || id); option.value=id; selector.appendChild(option);
         }
-        selector.value=sessions.some(session => (session.id||session.session_id)===selected)?selected:'';
+        if(selected&&!sessions.some(session => (session.id||session.session_id)===selected)){const missing=this.node('option','Selected player unavailable');missing.value=selected;selector.appendChild(missing);}
+        selector.value=selected;
         this.client.selectedMediaSession=selector.value;
       }
-      this.mediaItems=(Array.isArray(catalog.items)?catalog.items:[]).filter(item => item && typeof item.id==='string');
-      this.text('mediaLibraryMessage',catalog.playlist_message || (catalog.playlist_supported ? 'Player queue' : 'No player queue is available. Local media appears here when available.'));
+      this.mediaItems=(Array.isArray(catalog.items)?catalog.items:[]).filter(item => catalog.playlist_supported && item?.kind==='queue' && typeof item.id==='string');
+      if (this.ids.mediaQueueSection) this.ids.mediaQueueSection.hidden=!catalog.playlist_supported;
+      this.text('mediaLibraryMessage',catalog.playlist_message || (catalog.playlist_supported ? 'Player queue' : 'No player queue is available.'));
       this.drawMediaItems();
-      if (this.lastDesktopState) this.renderDesktopState(this.lastDesktopState);
+      if (this.lastDesktopState) this.renderDesktopState({...this.lastDesktopState,media:{...this.lastDesktopState.media,sessions}});
     }
     drawMediaItems() {
       const list=this.ids.mediaLibrary; if (!list) return; list.replaceChildren();
@@ -302,10 +316,16 @@
       const slide=number(presentation.slide), total=number(presentation.total);
       this.text('presentationSlide',slide!==null && slide>0 ? `Slide ${slide}${total!==null && total>0?` of ${total}`:''}` : 'Slide details unavailable');
       this.text('presentationSlideTitle',presentation.slide_title || '');
+      this.client.experience?.renderPresentation(presentation);
       if (this.ids.presentationSlideTitle) this.ids.presentationSlideTitle.hidden=!presentation.slide_title;
       this.text('mediaTitle',media.title || 'Nothing playing');
       this.text('mediaArtist',[media.artist,media.album].filter(Boolean).join(' · ') || media.app || 'Choose a player or open media on your PC.');
       this.text('mediaStatus',media.message || (media.available ? media.status || 'Playback status unavailable':'No media session available'));
+      const playbackState=(media.status || '').toLowerCase();
+      const action=playbackState==='playing'?'Pause':['paused','stopped'].includes(playbackState)?'Play':'Play / pause';
+      this.client.setButtonLabel?.(document.getElementById('btnMediaPlay'),action,playbackState==='playing'?'pause':'play');
+      this.client.experience?.renderMedia(media);
+      window.TouchHelmThemes?.updateContext({playing:playbackState==='playing',connected:this.connected});
       this.text('mediaPosition',clock(media.position)); this.text('mediaDuration',clock(media.duration));
       const position=number(media.position), duration=number(media.duration), progress=this.ids.mediaProgress;
       if (progress) {
@@ -317,6 +337,7 @@
       }
     }
     commandResult(result = {}) {
+      this.client.experience?.commandResult(result);
       const quietSuccess = ['presentation','media','play_media','get_desktop_state','get_apps','get_media_library'].includes(result.command);
       if (!result.success || !quietSuccess) {
         this.client.showFeedback?.(result.message || (result.success?'Command completed.':'The PC could not complete this command.'),result.success?'success':'error','command');

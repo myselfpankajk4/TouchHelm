@@ -11,7 +11,7 @@ _cache = {}
 def get_build_id(web_dir=WEB_DIR):
     root = Path(web_dir)
     files = sorted(path for path in root.rglob('*') if path.is_file()
-                   and path.suffix.lower() in {'.html', '.css', '.js', '.json', '.svg'})
+                   and path.suffix.lower() in {'.html', '.css', '.js', '.json', '.svg', '.png', '.webp', '.woff2', '.ico'})
     signature = tuple((str(path.relative_to(root)), path.stat().st_mtime_ns,
                        path.stat().st_size) for path in files)
     with _lock:

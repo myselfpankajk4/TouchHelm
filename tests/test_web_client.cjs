@@ -23,10 +23,10 @@ const desktopState = {presentation: {available:true,active:true,app:'PowerPoint'
   media:{available:true,app:'Music',title:'Morning light',artist:'Test artist',status:'Playing',position:65,duration:240,
     sessions:[{id:'player-one',available:true,app:'Music',title:'Morning light',artist:'Test artist',status:'Playing',position:65,duration:240},
       {id:'player-two',available:true,app:'Video',title:'Design talk',status:'Paused',position:12,duration:600}]}};
-const catalog = {sessions:desktopState.media.sessions,items:[{id:'track-one',title:'Morning light',kind:'queue'},{id:'file-one',title:'Demo video',kind:'local'}],playlist_supported:true,playlist_message:'Player queue and local files'};
+const catalog = {sessions:desktopState.media.sessions,items:[{id:'track-one',title:'Morning light',kind:'queue'}],playlist_supported:true,playlist_message:'Selectable player queue'};
 const apps = [{id:'app-editor',name:'Code Editor',running:true,launches:8},{id:'app-music',name:'Music',running:false,launches:3},{id:'app-notes',name:'Notes',running:false,launches:0}];
 const types = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css',
-  '.json': 'application/json', '.svg': 'image/svg+xml' };
+  '.json': 'application/json', '.svg': 'image/svg+xml', '.webp':'image/webp', '.png':'image/png' };
 const server = http.createServer((req, res) => {
   const name = new URL(req.url, 'http://127.0.0.1').pathname;
   if (name === '/api/info') {
@@ -44,13 +44,18 @@ const server = http.createServer((req, res) => {
     });
     return;
   }
-  const relative = `web${name === '/' ? '/index.html' : name}`;
+  let relative = `web${name === '/' ? '/index.html' : name}`;
+  if(name.startsWith('/preview/desktop/')){
+    const file=name.slice('/preview/desktop/'.length)||'index.html';
+    relative=['index.html','desktop.js','desktop.css'].includes(file)?`gui/web/${file}`:`web/${file}`;
+  }
   const filename = path.resolve(root, relative);
-  if (!filename.startsWith(path.join(root, 'web') + path.sep)) {
+  if (![path.join(root,'web'),path.join(root,'gui','web')].some(folder=>filename.startsWith(folder+path.sep))) {
     res.writeHead(403); return res.end();
   }
   try {
-    const body = fs.readFileSync(filename, 'utf8').replaceAll('__TOUCHHELM_BUILD__', 'test-build');
+    const raw = fs.readFileSync(filename);
+    const body = ['.html','.js','.css','.json','.svg'].includes(path.extname(filename)) ? raw.toString('utf8').replaceAll('__TOUCHHELM_BUILD__', 'test-build').replaceAll('__DESKTOP_TOKEN__','preview-disabled').replaceAll('__DESKTOP_ASSET_BASE__','/preview/desktop/') : raw;
     res.writeHead(200, {'Content-Type': types[path.extname(filename)] || 'application/octet-stream'});
     res.end(body);
   } catch { res.writeHead(404); res.end(); }
@@ -108,8 +113,124 @@ async function typingView(page) {
   const view = await page.locator('#typeInput').evaluate(el => el.closest('.view').id);
   await page.locator(`.nav-tab[data-view="${view}"]`).click();
   await page.locator('#typeInput').focus();
+  await page.locator('#chkRealtimeTyping').check();
   await page.evaluate(() => window.__packets.length = 0);
 }
+
+const tests = [];
+test('v2 Return writes a local newline and Ctrl Enter explicitly sends a buffered draft', async page => {
+  await typingView(page);
+  await page.locator('#chkRealtimeTyping').uncheck();
+  await page.locator('#typeInput').fill('first');
+  await page.locator('#typeInput').press('Enter');
+  await page.locator('#typeInput').press('a');
+  assert.equal(await page.locator('#typeInput').inputValue(), 'first\na');
+  assert.deepEqual(await packets(page), []);
+  await page.locator('#typeInput').press('Control+Enter');
+  assert.deepEqual(await packets(page), [{type:'text',text:'first\na'}]);
+});
+
+test('v2 first pad contact dismisses the composer and preserves its draft without PC input', async page => {
+  await typingView(page);
+  await page.locator('#chkRealtimeTyping').uncheck();
+  await page.locator('#typeInput').fill('unsent\nsecond line');
+  await page.evaluate(() => window.__packets.length=0);
+  const box=await page.locator('#touchSurface').boundingBox();
+  await page.touchscreen.tap(box.x+30,box.y+30);
+  assert.equal(await page.locator('#typingDock').evaluate(el=>el.classList.contains('expanded')),false);
+  assert.equal(await page.locator('#typeInput').inputValue(),'unsent\nsecond line');
+  assert.deepEqual(await page.evaluate(()=>window.__packets.filter(p=>['move','click','double_click','mousedown','scroll'].includes(p.type))),[]);
+});
+
+test('v2 Presenter prioritizes the laser above secondary controls and timer', async page => {
+  await page.locator('#tabPresenter').click();
+  const laser=await page.locator('#laserSurface').boundingBox();
+  const tools=await page.locator('.slide-tools-row').boundingBox();
+  const timer=await page.locator('.timer-details').boundingBox();
+  assert.ok(laser.y<tools.y && laser.y<timer.y);
+  assert.ok(laser.height>=280);
+});
+
+test('v2 media action follows real state and hides unsupported queues', async page => {
+  await page.locator('#tabMedia').click();
+  await page.evaluate(()=>window.touchhelm.controls.renderDesktopState({media:{available:true,status:'Playing',title:'Track',capabilities:{pause:true,play:true}}}));
+  assert.match(await page.locator('#btnMediaPlay').innerText(),/Pause/);
+  await page.evaluate(()=>window.touchhelm.controls.renderDesktopState({media:{available:true,status:'Paused',title:'Track',capabilities:{pause:true,play:true}}}));
+  assert.match(await page.locator('#btnMediaPlay').innerText(),/^Play$/);
+  await page.evaluate(()=>window.touchhelm.controls.renderMediaLibrary({playlist_supported:false,items:[{id:'local:x',title:'Not a queue',kind:'local'}],sessions:[]}));
+  assert.equal(await page.locator('#mediaQueueSection').isVisible(),false);
+});
+test('v2 media seek clamps to provider bounds and renders supplied supplementary metadata', async page => {
+  await page.locator('#tabMedia').click();
+  await page.evaluate(()=>{window.touchhelm.controls.renderDesktopState({media:{available:true,session_id:'player-one',status:'Paused',title:'Track',position:14,duration:180,min_seek:10,max_seek:150,playback_rate:1,genre:['Jazz'],track:2,album_tracks:9,capabilities:{seek:true,play:true}}});window.__packets.length=0;});
+  assert.match(await page.locator('#mediaDetails').textContent(),/Jazz.*Track 2 of 9/);
+  await page.locator('#btnSeekBack').click();
+  assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='media'&&p.action==='seek'&&p.value===10)));
+  await page.waitForFunction(()=>!window.touchhelm.experience.pending);
+  await page.evaluate(()=>{window.touchhelm.experience.renderMedia({available:true,status:'Paused',position:14,min_seek:10,max_seek:150,capabilities:{seek:true}});window.touchhelm.experience.mediaAction('seek',999);});
+  assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='media'&&p.action==='seek'&&p.value===150)));
+});
+test('v2 app hold and cancelled scrolling never also launch, and overflow remains keyboard accessible', async page => {
+  await page.locator('#tabApps').click();const app=page.locator('[data-app-id="app-editor"]');
+  await app.dispatchEvent('pointerdown',{pointerId:6,button:0,clientX:40,clientY:140});await page.waitForTimeout(550);
+  assert.equal(await page.locator('#appActionsModal').isVisible(),true);
+  await app.dispatchEvent('pointerup',{pointerId:6});await app.dispatchEvent('click',{detail:1});
+  assert.equal(await page.evaluate(()=>window.__packets.filter(p=>p.type==='launch_app').length),0);
+  await page.keyboard.press('Escape');
+  await app.dispatchEvent('pointerdown',{pointerId:7,button:0,clientX:40,clientY:140});
+  await app.dispatchEvent('pointermove',{pointerId:7,clientX:40,clientY:170});await app.dispatchEvent('pointerup',{pointerId:7});await app.dispatchEvent('click',{detail:1});
+  assert.equal(await page.evaluate(()=>window.__packets.filter(p=>p.type==='launch_app').length),0);
+  const more=page.locator('.app-more').first();await more.focus();await page.keyboard.press('Enter');
+  assert.equal(await page.locator('#appActionsModal').isVisible(),true);
+});
+test('v2 optional pinch is locked to zoom and never scrolls or clicks',async page=>{
+  await page.evaluate(()=>{window.touchhelm.pinchZoom=true;window.__packets.length=0;});
+  await touch(page,'touchstart',[{x:100,y:200},{x:200,y:200}]);
+  await touch(page,'touchmove',[{x:75,y:200},{x:225,y:200}]);
+  await touch(page,'touchmove',[{x:75,y:240},{x:225,y:240}]);await touch(page,'touchend',[]);
+  assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='zoom')));
+  assert.deepEqual(await page.evaluate(()=>window.__packets.filter(p=>['scroll','click','move'].includes(p.type))),[]);
+});
+test('v2 disappeared selected player stays unavailable instead of targeting another session',async page=>{
+  await page.locator('#tabMedia').click();await page.locator('#mediaSessionSelect').selectOption('player-two');
+  await page.evaluate(()=>window.touchhelm.controls.renderMediaLibrary({sessions:[],items:[],playlist_supported:false}));
+  assert.equal(await page.locator('#mediaSessionSelect').inputValue(),'player-two');
+  assert.match(await page.locator('#mediaTitle').textContent(),/unavailable/i);assert.equal(await page.locator('#btnMediaPlay').isDisabled(),true);
+});
+test('v2 unknown hardware readback never displays an invented percentage',async page=>{
+  await page.locator('#tabMedia').click();
+  await page.evaluate(()=>{window.touchhelm.onVolumeSync(null,null);window.touchhelm.onBrightnessSync(null);});
+  assert.match(await page.locator('#lblVolLevel').textContent(),/unknown|unavailable/i);
+  assert.match(await page.locator('#lblBrightLevel').textContent(),/unknown|unavailable/i);
+  assert.equal(await page.locator('#sliderVol').isDisabled(),true);assert.equal(await page.locator('#sliderBright').isDisabled(),true);
+});
+test('v2 certificate download uses authenticated headers and handoff preserves theme preferences',async page=>{
+  await page.route('**/api/pairing',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({enabled:true,fingerprint_sha256:'fixture fingerprint',https_port:8766})}));
+  await page.route('**/api/pairing/certificate',route=>route.fulfill({contentType:'application/pkix-cert',body:'Public fixture certificate'}));
+  await page.route('**/api/pairing/handoff',route=>route.fulfill({status:503,contentType:'application/json',body:'{}'}));
+  await page.evaluate(()=>{window.touchhelm.authPin='5678';window.touchhelm.typeInput.value='keep\nthis';});
+  await page.locator('#btnSettings').click();await page.locator('#btnSecurePairing').click();
+  const request=page.waitForRequest('**/api/pairing/certificate');await page.getByRole('button',{name:'Download public certificate',exact:true}).click();
+  assert.equal((await request).headers()['x-touchhelm-pin'],'5678');
+  const handoff=page.waitForRequest('**/api/pairing/handoff');await page.getByRole('button',{name:'Continue over HTTPS',exact:true}).click();const data=(await handoff).postDataJSON();
+  assert.equal(data.draft,'keep\nthis');assert.equal(data.preferences.theme,'glass');assert.ok(data.preferences.appearance&&data.preferences.motion&&data.preferences.contrast);assert.equal(data.preferences.pin_code,undefined);
+  assert.equal(await page.locator('#typeInput').inputValue(),'keep\nthis');
+});
+test('v2 preview board presents typing, held keys, missing artwork and action sheets without native transport',async page=>{
+  const sockets=[];page.on('websocket',socket=>sockets.push(socket.url()));
+  await page.goto(origin+'/preview.html',{waitUntil:'networkidle'});
+  await page.waitForFunction(()=>document.getElementById('previewPhone').contentWindow.touchhelm?.isConnected&&document.getElementById('previewDesktop').contentWindow.TouchHelmDesktopPreview);
+  const phone=page.frameLocator('#previewPhone');
+  await page.locator('#previewState').selectOption('held');
+  assert.match(await phone.locator('#heldKeys').textContent(),/Ctrl.*Shift/);
+  await page.locator('#previewState').selectOption('typing');
+  assert.equal(await phone.locator('#typingDock').evaluate(el=>el.classList.contains('expanded')),true);
+  assert.match(await phone.locator('#typeInput').inputValue(),/\n/);
+  await page.locator('#previewState').selectOption('missing-artwork');assert.equal(await phone.locator('#mediaArtwork').isVisible(),false);
+  await page.locator('#previewState').selectOption('menu');assert.equal(await phone.locator('#appActionsModal').isVisible(),true);
+  await page.locator('#previewState').selectOption('ready');assert.equal(await phone.locator('#appActionsModal').isVisible(),false);
+  assert.deepEqual(sockets,[],'preview transport never opens a real WebSocket');
+});
 async function openTheme(page) {
   if (!await page.locator('#settingsModal').isVisible()) await page.locator('#btnSettings').click();
   await page.locator('#btnTheme').click();
@@ -141,7 +262,6 @@ async function touch(page, type, points = [{x: 110, y: 190}]) {
   }, {type, points});
 }
 async function tap(page) { await touch(page, 'touchstart'); await touch(page, 'touchend', []); }
-const tests = [];
 function test(name, run, visual = false) { tests.push({name, run, visual}); }
 
 async function disconnect(page) {
@@ -176,11 +296,12 @@ test('navigation exposes selected tabs and keyboard theme choices are native con
     assert.ok(await page.locator(`#${view}`).isVisible());
   }
   await openTheme(page);
-  const choice = page.locator('.theme-option[data-theme-id="light"]');
+  const choice = page.locator('.th-theme-choice[data-theme-id="clay"]');
   assert.equal(await choice.evaluate(el => el.tagName), 'BUTTON');
   await choice.focus(); await page.keyboard.press('Space');
-  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'light');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'clay');
   assert.equal(await choice.getAttribute('aria-pressed'), 'true');
+  await page.keyboard.press('Escape');
   assert.equal(await page.locator('#themeModal').isVisible(), false);
   assert.equal(await page.locator('#btnTheme').evaluate(el => el === document.activeElement), true);
 });
@@ -245,7 +366,7 @@ test('disconnected remote controls are disabled while drafts, local timer and na
   assert.match(await page.locator('#uiFeedback').textContent(), /connect|offline/i);
   await screenshot(page, 'offline-trackpad');
   await page.locator('#typeInput').press('Enter');
-  assert.equal(await page.locator('#typeInput').inputValue(), 'local draft');
+  assert.equal(await page.locator('#typeInput').inputValue(), 'local draft\n');
   await page.locator('.nav-tab[data-view="viewPresenter"]').click();
   await page.locator('.timer-details summary').click();
   assert.equal(await page.locator('#btnTimerStart').isDisabled(), false);
@@ -368,7 +489,7 @@ test('live Send emits Enter once and resets draft; buffered Send emits text once
   assert.deepEqual(await packets(page), [{type: 'text', text: 'live'}, {type: 'key', key: 'enter'}]);
   await page.locator('#chkRealtimeTyping').uncheck();
   await input(page, 'buffer', 'insertFromPaste');
-  await page.locator('#typeInput').press('Enter');
+  await page.locator('#typeInput').press('Control+Enter');
   assert.deepEqual((await packets(page)).slice(2), [{type: 'text', text: 'buffer'}]);
   assert.equal(await page.locator('#typeInput').inputValue(), '');
 });
@@ -388,24 +509,24 @@ test('live off and on preserves the sent baseline; buffered edits update that dr
   assert.equal(await page.locator('#typeInput').inputValue(), '');
 });
 
-test('offline Send and Enter preserve buffered and live drafts', async page => {
+test('offline Send preserves drafts and Return still creates a local newline', async page => {
   await typingView(page);
   await disconnect(page);
   await input(page, 'keep me', 'insertText', 'keep me');
   await page.locator('#btnSendText').dispatchEvent('click');
   assert.equal(await page.locator('#typeInput').inputValue(), 'keep me');
   await page.locator('#typeInput').press('Enter');
-  assert.equal(await page.locator('#typeInput').inputValue(), 'keep me');
+  assert.equal(await page.locator('#typeInput').inputValue(), 'keep me\n');
   await page.locator('#chkRealtimeTyping').uncheck();
   await page.locator('#btnSendText').dispatchEvent('click');
-  assert.equal(await page.locator('#typeInput').inputValue(), 'keep me');
+  assert.equal(await page.locator('#typeInput').inputValue(), 'keep me\n');
   assert.deepEqual(await packets(page), []);
 });
 
 test('startup reads server settings without posting phone defaults', async page => {
   assert.deepEqual(posts, [], 'startup must not write /api/config');
   assert.equal(await page.evaluate(() => window.touchhelm.sensitivity), serverConfig.mouse_sensitivity);
-  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), serverConfig.theme);
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'glass', 'host settings do not replace the device theme');
 });
 
 test('stale socket callbacks cannot mark a newer socket offline or reconnect it', async page => {
@@ -463,7 +584,7 @@ test('server config broadcasts update UI without writing settings back', async p
   })}));
   assert.equal(await page.evaluate(() => window.touchhelm.sensitivity), 1.7);
   assert.equal(await page.locator('#sliderSensitivity').inputValue(), '1.7');
-  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'matrix');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'glass', 'another device cannot restyle this phone');
   assert.deepEqual(posts, []);
 });
 
@@ -545,12 +666,13 @@ test('native chords, nested numpad, timer reset, current context and catalogs wo
   assert.equal(await page.locator('#mediaTitle').textContent(),'Design talk');
   await page.locator('#btnMediaPlay').click();
   assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='media' && p.session_id==='player-two')));
-  await page.locator('[data-item-id="file-one"]').click();
-  assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='play_media' && p.item_id==='file-one')));
+  await page.locator('[data-item-id="track-one"]').click();
+  assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='play_media' && p.item_id==='track-one')));
   await page.locator('.nav-tab[data-view="viewApps"]').click();
   await page.locator('#appSearch').fill('notes');
-  assert.equal(await page.locator('#appsList button').count(),1);
-  await page.locator('#appsList button').click();
+  assert.equal(await page.locator('#appsList .app-item').count(),1);
+  assert.equal(await page.locator('#appsList .app-more').count(),1);
+  await page.locator('#appsList .app-item').click();
   assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='launch_app' && p.app_id==='app-notes')));
 });
 
@@ -662,6 +784,9 @@ async function inspectUsability(page, label) {
   return page.evaluate(label => {
     const issues = [];
     const rgba = value => {
+      if(value.startsWith('color(')||value.startsWith('oklab(')||value.startsWith('oklch(')){
+        const canvas=document.createElement('canvas');canvas.width=canvas.height=1;const ctx=canvas.getContext('2d',{willReadFrequently:true});ctx.fillStyle=value;ctx.fillRect(0,0,1,1);const pixel=ctx.getImageData(0,0,1,1).data;return [pixel[0],pixel[1],pixel[2],pixel[3]/255];
+      }
       const parts = (value.match(/[\d.]+/g) || []).map(Number);
       return [parts[0] || 0, parts[1] || 0, parts[2] || 0, parts.length > 3 ? parts[3] : 1];
     };
@@ -747,23 +872,28 @@ for (const [width, height] of [[360, 640], [390, 844], [844, 390], [320, 568], [
   }, true);
 }
 
-test('all five themes keep control text readable on every remote view and settings dialog', async page => {
+test('all seven themes keep control text readable on every remote view and settings dialog', async page => {
   const issues = [];
-  for (const theme of ['cyber', 'oled', 'matrix', 'nordic', 'light']) {
+  for (const theme of ['bloom', 'resonance', 'companion', 'clay', 'glass', 'soft', 'ink']) {
+    for(const appearance of ['light','dark']) {
     await openTheme(page);
-    await page.locator(`.theme-option[data-theme-id="${theme}"]`).click();
+    await page.locator(`.th-theme-choice[data-theme-id="${theme}"]`).click();
+    await page.locator('#th-picker-appearance').selectOption(appearance);
+    await page.evaluate(()=>window.TouchHelmThemes.ready);
+    await page.keyboard.press('Escape');
     await page.keyboard.press('Escape');
     for (const view of views) {
       await page.locator(`.nav-tab[data-view="view${view}"]`).click();
       if (view === 'Trackpad') await screenshot(page, `theme-${theme}-trackpad`);
-      issues.push(...await inspectUsability(page, `${theme}/${view}`));
+      issues.push(...await inspectUsability(page, `${theme}/${appearance}/${view}`));
     }
     await page.locator('#btnSettings').click();
     await screenshot(page, `theme-${theme}-settings`);
-    issues.push(...await inspectUsability(page, `${theme}/settings`));
+    issues.push(...await inspectUsability(page, `${theme}/${appearance}/settings`));
     await page.keyboard.press('Escape');
+    }
   }
-  assert.deepEqual(issues, [], 'five-theme accessibility audit');
+  assert.deepEqual(issues, [], 'seven-theme accessibility audit');
 }, true);
 
 (async () => {

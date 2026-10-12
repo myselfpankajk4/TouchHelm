@@ -61,6 +61,14 @@ function fixture(overrides = {}) {
   return { client, messages, element, document, listeners, context };
 }
 
+test('secure browser context is required before motion or wake-lock activation',async()=>{
+  const {client,context,element}=fixture();context.window.isSecureContext=false;context.window.DeviceOrientationEvent={};
+  let gyro=0,wake=0;client.enableGyro=()=>gyro++;client.btnGyro=element();client.btnWakeLock=element();client.wakeLockRequested=true;
+  context.navigator.wakeLock={request:async()=>{wake++;return {release:async()=>{},addEventListener(){}};}};
+  await client.toggleGyro();await client.requestWakeLock();
+  assert.equal(gyro,0);assert.equal(wake,0);assert.equal(client.btnWakeLock.attrs['aria-pressed'],'false');assert.match(client.uiFeedback.textContent,/https|secure/i);
+});
+
 test('successful Send and Clear return focus to the text field without changing live packets', () => {
   const { client, messages, document } = fixture();
   client.bindKeyboardControls();
@@ -89,7 +97,7 @@ test('offline Send preserves the draft and explains recovery visibly', () => {
 test('typing mode names the existing Send/Enter action', () => {
   const { client } = fixture();
   client.bindKeyboardControls();
-  assert.equal(client.btnSendText.textContent, 'Enter');
+  assert.equal(client.btnSendText.textContent, 'PC Enter');
   client.chkRealtimeTyping.checked = false;
   client.chkRealtimeTyping.emit('change');
   assert.equal(client.btnSendText.textContent, 'Send');

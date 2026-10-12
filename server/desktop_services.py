@@ -2,9 +2,10 @@
 from __future__ import annotations
 
 import asyncio
-import hashlib
+import base64
 import json
 import os
+import math
 from pathlib import Path
 import queue
 import subprocess
@@ -12,11 +13,11 @@ import tempfile
 import threading
 import time
 
+from .asset_store import AssetStore
+
 
 ROOT = Path(__file__).resolve().parents[1]
 MAX_MEDIA_ITEMS = 200
-MEDIA_EXTENSIONS = {'.mp3', '.wav', '.flac', '.wma', '.aac', '.m4a', '.ogg',
-                    '.mp4', '.mkv', '.avi', '.mov', '.wmv', '.m4v', '.webm'}
 
 
 class ProviderRequestCancelled(RuntimeError):
@@ -129,44 +130,34 @@ class PersistentPowerShellBridge:
 
 def _presentation(message='No supported presentation context is available.'):
     return dict(available=False, app='', title='', active=False, slide=None,
-                total=None, slide_title='', message=message)
+                total=None, slide_title='', message=message, capabilities={}, display=None)
 
 
 def _media(message='No active Windows media session is available.'):
     return dict(available=False, session_id='', app='', title='', artist='', album='',
-                status='unavailable', position=None, duration=None, message=message, sessions=[])
-
-
-def _default_media_dirs():
-    directories = [Path.home() / 'Music', Path.home() / 'Videos']
-    if os.name == 'nt':
-        try:
-            import winreg
-            with winreg.OpenKey(winreg.HKEY_CURRENT_USER,
-                                r'Software\Microsoft\Windows\CurrentVersion\Explorer\User Shell Folders') as key:
-                for name in ('My Music', 'My Video'):
-                    try:
-                        value = os.path.expandvars(winreg.QueryValueEx(key, name)[0])
-                        directories.append(Path(value))
-                    except OSError:
-                        pass
-        except OSError:
-            pass
-    return list(dict.fromkeys(directories))
+                genre=[], track=None, album_tracks=None, artwork_id=None,
+                status='unavailable', position=None, duration=None, min_seek=None, max_seek=None,
+                playback_rate=None, shuffle=None, repeat=None, updated_at=time.time(),
+                capabilities={key: False for key in
+                              ('play', 'pause', 'play_pause', 'next', 'prev', 'stop', 'seek', 'shuffle', 'repeat', 'rate')},
+                message=message, sessions=[])
 
 
 class DesktopServices:
-    def __init__(self, *, bridge=None, usage_file=None, media_dirs=None, timeout=4.0):
+    def __init__(self, *, bridge=None, usage_file=None, media_dirs=None, timeout=4.0, assets=None):
         self.timeout = timeout
         self._bridge = bridge if bridge is not None else PersistentPowerShellBridge(timeout)
         self._usage_file = Path(usage_file) if usage_file is not None else ROOT / '.touchhelm_usage.json'
-        self._media_dirs = media_dirs
+        self.assets = assets if assets is not None else AssetStore()
+        self._legacy_usage = ROOT / '.phonepad_usage.json' if usage_file is None else None
         self._usage = None
+        self._pinned = set()
         self._usage_lock = threading.Lock()
         self._apps = {}
         self._apps_at = 0.
         self._media_catalog = {}
         self._sessions = {}
+        self._current_session = ''
         self._closed = False
 
     async def _call(self, command, payload=None):
@@ -184,6 +175,27 @@ class DesktopServices:
             raise TimeoutError('Windows provider timed out') from error
         if not isinstance(result, dict):
             raise RuntimeError('Windows provider returned an invalid response')
+        return await asyncio.to_thread(self._normalize_assets, result)
+
+    def _normalize_assets(self, value):
+        if isinstance(value, list):
+            return [self._normalize_assets(item) for item in value]
+        if not isinstance(value, dict):
+            return value
+        result = {}
+        for key, item in value.items():
+            if key in ('artwork_data', 'icon_data', 'preview_data'):
+                target = 'icon_id' if key == 'icon_data' else 'artwork_id'
+                result[target] = None
+                if isinstance(item, str) and len(item) <= 6 * 1024 * 1024:
+                    try:
+                        result[target] = self.assets.put(base64.b64decode(item, validate=True))
+                    except ValueError:
+                        pass
+            else:
+                if key in ('artwork_id', 'icon_id') and key in result:
+                    continue
+                result[key] = self._normalize_assets(item)
         return result
 
     async def snapshot(self):
@@ -204,11 +216,21 @@ class DesktopServices:
             if self._usage is not None:
                 return
             try:
-                if self._usage_file.stat().st_size > 128 * 1024:
+                source = self._usage_file
+                if not source.exists() and self._legacy_usage and self._legacy_usage.exists():
+                    source = self._legacy_usage
+                if source.stat().st_size > 128 * 1024:
                     raise ValueError('Usage history exceeds its size limit')
-                saved = json.loads(self._usage_file.read_text(encoding='utf-8'))
-                self._usage = {key: value for key, value in saved.items()
+                saved = json.loads(source.read_text(encoding='utf-8'))
+                if not isinstance(saved, dict):
+                    raise ValueError('Usage history must be an object')
+                counts = saved.get('launches', saved)
+                if not isinstance(counts, dict):
+                    counts = {}
+                self._usage = {key: value for key, value in counts.items()
                                if isinstance(key, str) and type(value) is int and value >= 0}
+                pins = saved.get('pinned', [])
+                self._pinned = {key for key in pins if isinstance(key, str)} if isinstance(pins, list) else set()
             except (OSError, ValueError, AttributeError):
                 self._usage = {}
 
@@ -217,7 +239,16 @@ class DesktopServices:
             return []
         try:
             result = await self._call('apps')
-            self._apps = {app['id']: {'id': app['id'], 'name': app['name'], 'running': bool(app.get('running', False))}
+            if result.get('icons_pending'):
+                try:
+                    result = await self._call('apps')
+                except Exception:
+                    pass  # Keep the valid first-pass catalog if icons time out.
+            self._apps = {app['id']: {'id': app['id'], 'name': app['name'],
+                                     'running': bool(app.get('windows')), 'icon_id': app.get('icon_id'),
+                                     'windows': [{'id': window['id'], 'title': str(window.get('title', ''))}
+                                                 for window in app.get('windows', []) if isinstance(window, dict)
+                                                 and isinstance(window.get('id'), str)]}
                           for app in result.get('apps', [])
                           if isinstance(app, dict) and isinstance(app.get('id'), str)
                           and isinstance(app.get('name'), str) and app['id'] and app['name']}
@@ -227,22 +258,26 @@ class DesktopServices:
             # Existing catalog entries remain valid if Windows temporarily fails.
             if not self._apps:
                 return []
-        apps = [dict(app, launches=(self._usage or {}).get(app['id'], 0)) for app in self._apps.values()]
-        return sorted(apps, key=lambda app: (not app['running'], -app['launches'], app['name'].casefold(), app['id']))
+        apps = [dict(app, launches=(self._usage or {}).get(app['id'], 0), pinned=app['id'] in self._pinned)
+                for app in self._apps.values()]
+        return sorted(apps, key=lambda app: (not app['pinned'], not app['running'], -app['launches'], app['name'].casefold(), app['id']))
+
+    def _save_usage(self):
+        self._usage_file.parent.mkdir(parents=True, exist_ok=True)
+        descriptor, temporary = tempfile.mkstemp(dir=self._usage_file.parent, suffix='.tmp')
+        try:
+            with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
+                json.dump({'version': 2, 'launches': self._usage, 'pinned': sorted(self._pinned)}, stream, indent=2)
+            os.replace(temporary, self._usage_file)
+        finally:
+            if os.path.exists(temporary):
+                os.unlink(temporary)
 
     def _record_launch(self, app_id):
         self._load_usage()
         with self._usage_lock:
             self._usage[app_id] = self._usage.get(app_id, 0) + 1
-            self._usage_file.parent.mkdir(parents=True, exist_ok=True)
-            descriptor, temporary = tempfile.mkstemp(dir=self._usage_file.parent, suffix='.tmp')
-            try:
-                with os.fdopen(descriptor, 'w', encoding='utf-8') as stream:
-                    json.dump(self._usage, stream, indent=2)
-                os.replace(temporary, self._usage_file)
-            finally:
-                if os.path.exists(temporary):
-                    os.unlink(temporary)
+            self._save_usage()
 
     async def launch_app(self, app_id):
         if not isinstance(app_id, str) or not app_id or len(app_id) > 512 or self._closed:
@@ -262,33 +297,6 @@ class DesktopServices:
         except Exception as error:
             return {'success': False, 'message': str(error)}
 
-    def _scan_media(self):
-        result = {}
-        deadline = time.monotonic() + min(self.timeout, 2.)
-        folders = self._media_dirs if self._media_dirs is not None else _default_media_dirs()
-        visited = 0
-        for directory in folders:
-            directory = Path(directory).absolute()
-            if str(directory).startswith('\\\\'):
-                continue
-            for folder, subdirs, files in os.walk(directory, followlinks=False):
-                visited += 1
-                subdirs[:] = sorted(name for name in subdirs
-                                    if not os.path.islink(os.path.join(folder, name))
-                                    and not getattr(os.path, 'isjunction', lambda _: False)(os.path.join(folder, name)))
-                if len(Path(folder).relative_to(directory).parts) >= 5:
-                    subdirs.clear()
-                for name in sorted(files, key=str.casefold):
-                    if time.monotonic() > deadline or len(result) >= MAX_MEDIA_ITEMS or visited > 500:
-                        return result
-                    path = Path(folder) / name
-                    if path.suffix.lower() not in MEDIA_EXTENSIONS or path.is_symlink():
-                        continue
-                    identifier = 'local:' + hashlib.sha256(str(path).encode('utf-8')).hexdigest()[:24]
-                    result[identifier] = {'id': identifier, 'title': path.stem,
-                                          'subtitle': str(path.parent.name), 'kind': 'local', 'path': str(path)}
-        return result
-
     async def list_media(self):
         native = {'sessions': [], 'items': [], 'playlist_supported': False,
                   'playlist_message': 'Windows media sessions do not expose a player queue.'}
@@ -298,77 +306,140 @@ class DesktopServices:
             native.update(await self._call('media_library'))
         except Exception as error:
             native['playlist_message'] = str(error)
-        try:
-            local = await asyncio.wait_for(asyncio.to_thread(self._scan_media), self.timeout)
-        except Exception:
-            local = {}
+        self._current_session = native.get('current', {}).get('session_id', '')
         self._sessions = {session.get('id', session.get('session_id')): session
                           for session in native.get('sessions', []) if isinstance(session, dict)
                           and isinstance(session.get('id', session.get('session_id')), str)}
         catalog = {item['id']: dict(item) for item in native.get('items', [])
                    if isinstance(item, dict) and isinstance(item.get('id'), str)
                    and item.get('kind') == 'queue'}
-        for identifier, session in self._sessions.items():
-            item_id = 'session:' + identifier
-            catalog[item_id] = {'id': item_id, 'title': session.get('title') or session.get('app', 'Current player'),
-                                'subtitle': session.get('artist') or session.get('app', ''),
-                                'kind': 'session', 'session_id': identifier}
-        catalog.update(local)
-        self._media_catalog = catalog
+        if not native.get('playlist_supported'):
+            catalog = {}
+        self._media_catalog = dict(list(catalog.items())[:MAX_MEDIA_ITEMS])
         items = [{key: item.get(key, '') for key in ('id', 'title', 'subtitle', 'kind')}
                  for item in list(catalog.values())[:MAX_MEDIA_ITEMS]]
         message = str(native.get('playlist_message', ''))
-        if not native.get('playlist_supported'):
-            message += ' Current sessions and local Music/Videos files are shown when available.'
         return {'sessions': list(self._sessions.values()), 'items': items,
                 'playlist_supported': bool(native.get('playlist_supported')), 'playlist_message': message.strip()}
 
-    async def media_command(self, action, session_id='', item_id=''):
+    async def media_command(self, action, session_id='', item_id='', value=None):
         aliases = {'playpause': 'play_pause', 'previous': 'prev', 'nexttrack': 'next', 'prevtrack': 'prev'}
         if not isinstance(action, str):
             return {'success': False, 'message': 'Unsupported media action.', 'handled': False}
         action = aliases.get(action, action)
-        if action not in ('play_pause', 'play', 'pause', 'next', 'prev', 'stop'):
+        if action not in ('play_pause', 'play', 'pause', 'next', 'prev', 'stop', 'seek', 'shuffle', 'repeat', 'rate'):
             return {'success': False, 'message': 'Unsupported media action.', 'handled': False}
         if not isinstance(session_id, str) or not isinstance(item_id, str):
             return {'success': False, 'message': 'Choose a valid player or media item.', 'handled': True}
+        advanced = action in ('seek', 'shuffle', 'repeat', 'rate')
+        valid = (action == 'seek' and type(value) in (int, float) and math.isfinite(value) and value >= 0 or
+                 action == 'shuffle' and type(value) is bool or
+                 action == 'repeat' and value in ('none', 'track', 'list') or
+                 action == 'rate' and type(value) in (int, float) and math.isfinite(value) and .25 <= value <= 4)
+        if advanced and not valid:
+            return {'success': False, 'message': 'Choose a valid media value.', 'handled': True}
         try:
             if item_id:
                 item = self._media_catalog.get(item_id)
                 if item is None or action != 'play':
                     return {'success': False, 'message': 'Refresh the media list and choose an item.', 'handled': True}
                 payload = {'kind': item['kind'], 'item_id': item_id}
-                if item['kind'] == 'local':
-                    payload['path'] = item['path']
-                elif item['kind'] == 'session':
-                    payload['session_id'] = item['session_id']
                 result = await self._call('media_play', payload)
             else:
-                if session_id and session_id not in self._sessions:
+                if advanced or session_id:
                     await self.list_media()
+                    if not session_id:
+                        session_id = self._current_session
                     if session_id not in self._sessions:
                         return {'success': False, 'message': 'This player is no longer available.', 'handled': True}
-                result = await self._call('media_command', {'action': action, 'session_id': session_id})
+                    session = self._sessions[session_id]
+                    capabilities = session.get('capabilities', {})
+                    if not capabilities.get(action, False):
+                        return {'success': False, 'message': 'This player does not support that action.', 'handled': True}
+                    if action == 'seek':
+                        low, high = session.get('min_seek'), session.get('max_seek')
+                        if type(low) not in (int, float) or type(high) not in (int, float) or not low <= value <= high:
+                            return {'success': False, 'message': 'Seek is outside the current player timeline.', 'handled': True}
+                payload = {'action': action, 'session_id': session_id}
+                if advanced:
+                    payload['value'] = value
+                result = await self._call('media_command', payload)
             return {'success': bool(result.get('success')), 'message': str(result.get('message', 'Media action unavailable.')),
                     'handled': bool(result.get('handled', False))}
         except Exception as error:
             return {'success': False, 'message': str(error), 'handled': bool(session_id or item_id)}
 
-    async def presentation_command(self, action):
+    async def presentation_command(self, action, slide=None):
         aliases = {'slide_next': 'next', 'previous': 'prev', 'slide_prev': 'prev',
                    'slide_start': 'start', 'slide_current': 'start_current', 'current': 'start_current',
                    'slide_end': 'end', 'exit': 'end', 'slide_black': 'black', 'slide_white': 'white'}
         if not isinstance(action, str):
             return {'success': False, 'message': 'Unsupported presentation action.', 'handled': False}
         action = aliases.get(action, action)
-        if action not in ('next', 'prev', 'start', 'start_current', 'end', 'black', 'white'):
+        if action not in ('next', 'prev', 'start', 'start_current', 'end', 'black', 'white', 'goto'):
             return {'success': False, 'message': 'Unsupported presentation action.', 'handled': False}
+        if action == 'goto' and (type(slide) is not int or not 1 <= slide <= 10000):
+            return {'success': False, 'message': 'Choose a valid slide.', 'handled': True}
         try:
-            result = await self._call('presentation_command', {'action': action})
+            payload = {'action': action}
+            if action == 'goto':
+                payload['slide'] = slide
+            result = await self._call('presentation_command', payload)
             return {'success': bool(result.get('success')), 'message': str(result.get('message', '')),
                     'handled': bool(result.get('handled', False))}
         except Exception as error:
-            return {'success': False, 'message': str(error), 'handled': False}
+            return {'success': False, 'message': str(error), 'handled': True}
+
+    async def presentation_details(self):
+        try:
+            return await self._call('presentation_details')
+        except Exception as error:
+            return dict(available=False, current=None, next=None, notes='', slides=[],
+                        capabilities={}, message=str(error))
+
+    async def displays(self):
+        try:
+            return await self._call('displays')
+        except Exception as error:
+            return dict(displays=[], selected_id=None, message=str(error))
+
+    def _pin(self, app_id, pinned):
+        self._load_usage()
+        with self._usage_lock:
+            previous = set(self._pinned)
+            if pinned:
+                self._pinned.add(app_id)
+            else:
+                self._pinned.discard(app_id)
+            try:
+                self._save_usage()
+            except Exception:
+                self._pinned = previous
+                raise
+
+    async def app_action(self, app_id, action, window_id=''):
+        if not isinstance(app_id, str) or not isinstance(window_id, str) or action not in ('focus', 'pin', 'unpin', 'details'):
+            return dict(success=False, message='Choose a valid app action.')
+        if not self._apps or time.monotonic() - self._apps_at > 30:
+            await self.list_apps()
+        app = self._apps.get(app_id)
+        if app is None:
+            return dict(success=False, message='Refresh Apps and choose a registered app.')
+        try:
+            if action in ('pin', 'unpin'):
+                await asyncio.to_thread(self._pin, app_id, action == 'pin')
+                return dict(success=True, message='App pinned.' if action == 'pin' else 'App unpinned.')
+            if action == 'details':
+                return dict(success=True, message='', details=dict(app, pinned=app_id in self._pinned,
+                                                                   launches=(self._usage or {}).get(app_id, 0)))
+            windows = app.get('windows', [])
+            if not window_id and len(windows) == 1:
+                window_id = windows[0]['id']
+            if not any(window['id'] == window_id for window in windows):
+                return dict(success=False, message='Refresh Apps and choose an available window.')
+            return await self._call('app_action', {'app_id': app_id, 'action': 'focus', 'window_id': window_id})
+        except Exception as error:
+            return dict(success=False, message=str(error))
 
     async def close(self):
         if self._closed:

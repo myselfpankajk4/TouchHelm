@@ -29,7 +29,8 @@ class Bridge:
         if command == 'apps':
             return {'apps': [
                 {'id': 'registered:alpha', 'name': 'Alpha', 'running': False},
-                {'id': 'registered:zeta', 'name': 'Zeta', 'running': True},
+                {'id': 'registered:zeta', 'name': 'Zeta', 'running': True,
+                 'windows': [{'id':'zeta-window','title':'Verified Zeta window'}]},
                 {'id': 'registered:beta', 'name': 'Beta', 'running': False},
             ]}
         if command == 'snapshot':
@@ -68,7 +69,7 @@ class DesktopServiceTests(unittest.IsolatedAsyncioTestCase):
         apps = await self.service.list_apps()
         self.assertEqual([app['name'] for app in apps], ['Zeta', 'Beta', 'Alpha'])
         self.assertEqual(apps[1]['launches'], 2)
-        self.assertEqual(json.loads(self.usage.read_text())['registered:beta'], 2)
+        self.assertEqual(json.loads(self.usage.read_text())['launches']['registered:beta'], 2)
         other = DesktopServices(bridge=Bridge(), usage_file=self.usage, media_dirs=[])
         try:
             self.assertEqual((await other.list_apps())[1]['launches'], 2)
@@ -103,32 +104,25 @@ class DesktopServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(state['media']['session_id'], 'one')
         self.assertEqual(state['media'].get('sessions'), sessions)
 
-    async def test_local_media_is_bounded_and_only_catalog_ids_can_play(self):
+    async def test_local_media_is_not_scanned_and_forged_ids_cannot_play(self):
         folder = Path(self.folder.name)
         (folder / 'Song.mp3').write_bytes(b'media fixture')
         (folder / 'Ignore.txt').write_text('not media')
         library = await self.service.list_media()
         self.assertFalse(library['playlist_supported'])
-        self.assertEqual(len(library['items']), 1)
-        song = library['items'][0]
-        self.assertEqual(song['title'], 'Song')
-        self.assertEqual(song['kind'], 'local')
-        self.assertNotIn('path', song)
+        self.assertEqual(library['items'], [])
         forged = await self.service.media_command('play', item_id='../../windows/system32/cmd.exe')
         self.assertFalse(forged['success'])
         self.assertNotIn('media_play', [call[0] for call in self.bridge.calls])
-        result = await self.service.media_command('play', item_id=song['id'])
-        self.assertTrue(result['success'])
-        self.assertEqual(self.bridge.calls[-1][0], 'media_play')
-        self.assertEqual(self.bridge.calls[-1][1]['path'], str(folder / 'Song.mp3'))
 
-    async def test_media_catalog_bounds_and_exposed_queue_and_session_items(self):
+    async def test_media_catalog_bounds_only_exposed_queue_items(self):
         from server import desktop_services
         base_request = self.bridge.request
         def request(command, payload=None, **kwargs):
             if command == 'media_library':
                 return {'sessions': [{'id': 'session-player', 'title': 'Current song', 'app': 'Real player'}],
-                        'items': [{'id': 'queue-real', 'title': 'Queued track', 'subtitle': 'Artist', 'kind': 'queue'}],
+                        'items': [{'id': 'queue-real', 'title': 'Queued track', 'subtitle': 'Artist', 'kind': 'queue'},
+                                  *[{'id':f'queue-{index}','title':f'Track {index}','kind':'queue'} for index in range(6)]],
                         'playlist_supported': True, 'playlist_message': 'Actual exposed queue'}
             return base_request(command, payload)
         self.bridge.request = request
@@ -140,11 +134,10 @@ class DesktopServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(len(library['items']), 3)
         self.assertTrue(library['playlist_supported'])
         self.assertEqual(library['items'][0]['title'], 'Queued track')
-        self.assertEqual(library['items'][1]['kind'], 'session')
+        self.assertEqual(library['items'][1]['kind'], 'queue')
         self.assertTrue((await self.service.media_command('play', item_id='queue-real'))['success'])
         self.assertEqual(self.bridge.calls[-1][1], {'kind': 'queue', 'item_id': 'queue-real'})
-        self.assertTrue((await self.service.media_command('play', item_id='session:session-player'))['success'])
-        self.assertEqual(self.bridge.calls[-1][1]['session_id'], 'session-player')
+        self.assertFalse((await self.service.media_command('play', item_id='session:session-player'))['success'])
 
     async def test_stale_and_forged_player_ids_do_not_fall_back_to_another_player(self):
         result = await self.service.media_command('next', session_id='missing-player')

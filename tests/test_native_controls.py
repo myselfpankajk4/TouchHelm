@@ -10,6 +10,14 @@ from server import windows_input as native
 
 
 class NativeControlsTests(unittest.TestCase):
+    def test_multiline_chat_text_uses_shift_enter_without_app_submit(self):
+        ctrl=native.WindowsInputController.__new__(native.WindowsInputController)
+        ctrl.type_unicode_char=Mock();ctrl.key_tap=Mock();ctrl.hotkey=Mock()
+        ctrl.type_text('one\ntwo', newline_mode='shift_enter')
+        ctrl.hotkey.assert_called_once_with('shift','enter')
+        ctrl.key_tap.assert_not_called()
+        self.assertEqual(ctrl.type_unicode_char.call_count,6)
+
     def setUp(self):
         self.ctrl = native.WindowsInputController.__new__(native.WindowsInputController)
         self.ctrl.ensure_input_desktop = Mock()
@@ -123,8 +131,8 @@ class NativeControlsTests(unittest.TestCase):
             brightness.set_brightness(72)
             brightness.close()
             brightness._apply_worker()
-            self.assertEqual(brightness.set_brightness(50), 72)
-            self.assertEqual(brightness.change_brightness(-10), 72)
+            self.assertIsNone(brightness.set_brightness(50))
+            self.assertIsNone(brightness.change_brightness(-10))
             thread.return_value.join.assert_called_once_with(timeout=3.5)
             run.assert_not_called()
 

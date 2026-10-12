@@ -22,7 +22,9 @@ DEFAULT_CONFIG = {
     "pin_code": "1234",
     "laser_color": "red",
     "theme": "cyber",
-    "haptics_enabled": True
+    "haptics_enabled": True,
+    "https_enabled": False,
+    "https_port": 8766
 }
 
 
@@ -84,16 +86,16 @@ class ConfigManager:
         if key in numeric:
             low, high = numeric[key]
             valid = type(value) in (int, float) and low <= value <= high and math.isfinite(value)
-        elif key == "port":
+        elif key in ("port","https_port"):
             valid = type(value) is int and 1 <= value <= 65535
-        elif key in ("require_pin", "invert_scroll", "haptics_enabled"):
+        elif key in ("require_pin", "invert_scroll", "haptics_enabled","https_enabled"):
             valid = type(value) is bool
         elif key == "pin_code":
             valid = value == "" or cls._valid_pin(value)
         elif key == "laser_color":
             valid = isinstance(value, str) and value in ("red", "green", "blue", "amber")
         elif key == "theme":
-            valid = isinstance(value, str) and value in ("cyber", "oled", "matrix", "nordic", "light")
+            valid = isinstance(value, str) and value in ("cyber", "oled", "matrix", "nordic", "light","bloom","resonance","companion","clay","glass","soft","ink")
         else:
             valid = isinstance(value, str) and 1 <= len(value.strip()) <= 100
         if not valid:

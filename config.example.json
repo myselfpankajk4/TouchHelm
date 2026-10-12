@@ -9,5 +9,7 @@
   "pin_code": "",
   "laser_color": "red",
   "theme": "cyber",
-  "haptics_enabled": true
+  "haptics_enabled": true,
+  "https_enabled": false,
+  "https_port": 8766
 }

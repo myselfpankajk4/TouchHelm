@@ -1,0 +1,29 @@
+/* Ink: clarity on paper. No illustration, shimmer, blur, or ambient motion. */
+:root[data-theme="ink"][data-appearance="light"] {
+  --th-bg:#fafaf8; --th-panel:#f0f0ec; --th-surface:#e4e5df; --th-hover:#d7d9d1;
+  --th-text:#171b22; --th-muted:#50575f; --th-accent:#171b22; --th-on-accent:#fff;
+  --th-border:#7b8187; --th-danger:#a11d34; --th-success:#2f624a;
+}
+:root[data-theme="ink"][data-appearance="dark"] {
+  --th-bg:#101215; --th-panel:#1a1d22; --th-surface:#2a2e35; --th-hover:#373c45;
+  --th-text:#f8f8f5; --th-muted:#c3c7cc; --th-accent:#f1f3f0; --th-on-accent:#14181e;
+  --th-border:#969ca4; --th-danger:#ffb4be; --th-success:#b8d5c4;
+}
+:root[data-theme="ink"] { --th-radius:6px; --th-key-radius:4px; --th-pad-radius:9px; --th-shadow:none; }
+:root[data-theme="ink"] :is(.touch-surface,.laser-surface) { border:1.5px solid var(--th-border); background:var(--th-bg); }
+:root[data-theme="ink"] :is(.touch-surface,.laser-surface)::before,:root[data-theme="ink"] :is(.touch-surface,.laser-surface)::after { display:none; }
+:root[data-theme="ink"] .trackpad-hints strong { font-weight:650; }
+:root[data-theme="ink"] :is(.top-bar,.bottom-nav) { background:var(--th-bg); }
+:root[data-theme="ink"] :is(.trackpad-btn,.tool-btn,.native-key,.macro-btn,.shortcut-btn,.media-btn) { border:1.5px solid var(--th-border); background:var(--th-bg); box-shadow:none; }
+:root[data-theme="ink"] :is(.btn-next,.send-btn,.play-btn,.native-key.held) { border-color:var(--th-accent); background:var(--th-accent); color:var(--th-on-accent); }
+:root[data-theme="ink"] .nav-tab.active { background:var(--th-panel); color:var(--th-text); box-shadow:inset 0 -3px var(--th-accent); border-radius:0; }
+:root[data-theme="ink"] :is(.ui-icon,.nav-tab>svg) { stroke-width:1.9; stroke-linecap:square; stroke-linejoin:miter; }
+:root[data-theme="ink"] :is(.desktop-context h1,.media-context h1,.section-toolbar h1) { font-weight:700; letter-spacing:-.03em; }
+:root[data-theme="ink"] :is(.desktop-context,.catalog-section,.keyboard-group,.timer-details) { border-color:var(--th-border); }
+:root[data-theme="ink"] :is(.typing-dock,.search-field,.segmented-control,.modal-card,.desktop-panel) { border:1.5px solid var(--th-border); box-shadow:none; background:var(--th-bg); }
+:root[data-theme="ink"] .app-monogram { border:1px solid var(--th-border); background:var(--th-panel); border-radius:4px; font-weight:650; }
+:root[data-theme="ink"] :is(.catalog-item,.device-row,.activity-row) { border-bottom:1px solid var(--th-border); }
+:root[data-theme="ink"] .catalog-text strong { font-weight:600; }
+:root[data-theme="ink"] :is(.trackpad-btn,.native-key,.tool-btn):hover:not(:disabled) { background:var(--th-panel); }
+:root[data-theme="ink"] .theme-swatch { border-radius:4px; }
+:root[data-theme="ink"] *, :root[data-theme="ink"] *::before, :root[data-theme="ink"] *::after { animation:none; transition:none; }

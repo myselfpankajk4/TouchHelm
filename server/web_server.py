@@ -5,6 +5,8 @@ Handles HTTP static serving (PWA client) and real-time low-latency WebSocket com
 
 import os
 import json
+import secrets
+from pathlib import Path
 import time
 import asyncio
 import math
@@ -50,6 +52,10 @@ class TouchHelmServer:
         self.volume_monitor_task = None
         self.desktop_monitor_task = None
         self.desktop_services = DesktopServices()
+        self.secure_pairing = None
+        self.https_site = None
+        self._handoffs = {}
+        self._displays = {}
         self._service_tasks = {}
         self._native_action_lock = asyncio.Lock()
 
@@ -85,29 +91,40 @@ class TouchHelmServer:
                 reply = {'type': 'apps_sync', 'apps': await self.desktop_services.list_apps()}
             elif kind == 'get_media_library':
                 reply = {'type': 'media_library', **await self.desktop_services.list_media()}
+            elif kind == 'get_presentation_details':
+                reply = {'type':'presentation_details', **await self.desktop_services.presentation_details()}
+            elif kind == 'get_displays':
+                displays=await self.desktop_services.displays()
+                self._displays={display['id']:display for display in displays.get('displays',[]) if isinstance(display,dict) and isinstance(display.get('id'),str)}
+                reply={'type':'displays',**displays}
             else:
                 if kind == 'launch_app':
                     result = await self.desktop_services.launch_app(data.get('app_id', ''))
+                elif kind == 'app_action':
+                    result = await self.desktop_services.app_action(data.get('app_id',''),data.get('action',''),data.get('window_id',''))
                 elif kind == 'play_media':
                     result = await self.desktop_services.media_command('play',
                         session_id=data.get('session_id', ''), item_id=data.get('item_id', ''))
                 elif kind == 'presentation':
                     action = data.get('action', '')
-                    if action not in ('next', 'prev', 'start', 'start_current', 'end', 'black', 'white'):
+                    if action not in ('next', 'prev', 'start', 'start_current', 'end', 'black', 'white','goto'):
                         result = {'success': False, 'handled': True, 'message': 'Unsupported presentation action.'}
                     else:
-                        result = await self.desktop_services.presentation_command(action)
+                        result = await self.desktop_services.presentation_command(action,slide=data.get('slide')) if action=='goto' else await self.desktop_services.presentation_command(action)
                         if not result.get('handled'):
                             await self._native_call('presentation_action', action)
                             result = {'success': True, 'message': 'Presentation key sent to the active app.'}
                 else:
                     action = data.get('action', '')
-                    result = await self.desktop_services.media_command(action, session_id=data.get('session_id', ''))
-                    if not result.get('handled') and not data.get('session_id'):
+                    kwargs={'session_id':data.get('session_id','')}
+                    if 'value' in data: kwargs['value']=data['value']
+                    result = await self.desktop_services.media_command(action, **kwargs)
+                    if action in ('play_pause','play','pause','next','prev','stop') and not result.get('handled') and not data.get('session_id'):
                         await self._native_call('media_action', action)
                         result = {'success': True, 'message': 'Media key sent to the active player.'}
                 reply = {'type': 'command_result', 'command': kind,
                          'success': bool(result.get('success')), 'message': result.get('message', '')}
+                if isinstance(result.get('details'),dict):reply['details']=result['details']
             if client.authenticated and client.ws in self.clients and not client.ws.closed:
                 await client.ws.send_json(reply)
         except asyncio.CancelledError:
@@ -157,6 +174,7 @@ class TouchHelmServer:
             last_vol, last_mute = await self._native_call('get_volume')
         except Exception:
             last_vol, last_mute = None, None
+        last_brightness = self.input_ctrl.get_brightness()
         while True:
             try:
                 await asyncio.sleep(0.5)
@@ -167,6 +185,10 @@ class TouchHelmServer:
                     last_vol = vol
                     last_mute = muted
                     await self.broadcast({"type": "volume_sync", "volume": vol, "muted": muted})
+                brightness = self.input_ctrl.get_brightness()
+                if brightness != last_brightness:
+                    last_brightness = brightness
+                    await self.broadcast({'type':'brightness_sync','level':brightness})
             except asyncio.CancelledError:
                 break
             except Exception:
@@ -210,6 +232,7 @@ class TouchHelmServer:
         for _, client in clients:
             self._cancel_desktop_requests(client)
             self._release_client_input(client)
+        self.laser_client.hide()
         for ws, client in clients:
             if not ws.closed:
                 try:
@@ -225,11 +248,14 @@ class TouchHelmServer:
         return isinstance(pin, str) and pin.isascii() and hmac.compare_digest(pin, self.config.get("pin_code", ""))
 
     async def _send_auth_success(self, client):
-        vol, muted = self.input_ctrl.get_volume()
+        vol, muted = await self._native_call('get_volume')
+        if not client.authenticated or client.ws.closed:
+            return False
         await client.ws.send_json({"type": "auth_res", "success": True,
                                    "message": "Connected", "volume": vol, "muted": muted,
                                    "brightness": self.input_ctrl.get_brightness(),
                                    "config": self.config.public_data()})
+        return True
 
     def _release_client_input(self, client):
         for button in list(client.held_buttons):
@@ -248,7 +274,7 @@ class TouchHelmServer:
         kind = data["type"]
         numeric_fields = {"ping": ("t",), "move": ("dx", "dy"),
                           "scroll": ("dx", "dy"), "laser": ("x", "y"),
-                          "volume": ("level",), "brightness": ("level",)}
+                          "volume": ("level",), "brightness": ("level",),"zoom":("delta",),"presentation":("slide",)}
         for field in numeric_fields.get(kind, ()):
             if field in data:
                 value = data[field]
@@ -260,7 +286,7 @@ class TouchHelmServer:
                          "presentation": ("action",), "media": ("action", "session_id"),
                          "launch_app": ("app_id",), "play_media": ("item_id", "session_id"),
                          "shortcut": ("name",), "volume": ("action",),
-                         "brightness": ("action",), "laser": ("color",)}
+                         "brightness": ("action",), "laser": ("color","display_id"),"app_action":("app_id","action","window_id")}
         for field in string_fields.get(kind, ()):
             if field in data:
                 if not isinstance(data[field], str):
@@ -281,6 +307,17 @@ class TouchHelmServer:
                 return False
         if kind == "text" and len(data.get("text", "")) > 10000:
             return False
+        if kind=='text' and data.get('newline_mode','enter') not in ('enter','shift_enter'):return False
+        if kind=='zoom' and ('delta' not in data or abs(data['delta'])>10):return False
+        if kind=='keydown' and 'repeat' in data and type(data['repeat']) is not bool:return False
+        if kind=='media' and data.get('action') in ('seek','rate','shuffle','repeat'):
+            action,value=data['action'],data.get('value')
+            if action=='shuffle' and type(value) is not bool:return False
+            if action=='repeat' and value not in ('none','track','list'):return False
+            if action in ('seek','rate'):
+                if type(value) not in (int,float) or not math.isfinite(value):return False
+                if action=='seek' and value<0:return False
+                if action=='rate' and not .25<=value<=4:return False
         return True
 
     @staticmethod
@@ -299,7 +336,7 @@ class TouchHelmServer:
         """API info route returning PC details and configuration."""
         w, h = self.input_ctrl.get_screen_size()
         ips = get_local_ip_addresses()
-        vol, muted = self.input_ctrl.get_volume()
+        vol, muted = await self._native_call('get_volume')
         bright = self.input_ctrl.get_brightness()
         return web.json_response({
             "service": "touchhelm",
@@ -337,7 +374,7 @@ class TouchHelmServer:
                 data = await request.json()
                 if not isinstance(data, dict):
                     raise ValueError("Settings must be an object")
-                if "port" in data:
+                if any(key in data for key in ('port','https_port','https_enabled')):
                     raise ValueError("Changing the port requires a server restart")
                 pin_setting_changed = any(k in data and self.config.get(k) != data[k]
                                           for k in ("require_pin", "pin_code"))
@@ -397,13 +434,14 @@ class TouchHelmServer:
                         if not authorized:
                             self._cancel_desktop_requests(client)
                             self._release_client_input(client)
+                            self.laser_client.hide()
                             client.authenticated = False
                             await ws.send_json({"type": "auth_res", "success": False, "message": "Invalid PIN"})
                             self._notify_client_change()
                             continue
                         client.authenticated = True
-                        await self._send_auth_success(client)
-                        self._log_event(f"Connected as {client.device_name}", client.remote_ip)
+                        if await self._send_auth_success(client):
+                            self._log_event(f"Connected as {client.device_name}", client.remote_ip)
                         self._notify_client_change()
                         continue
 
@@ -411,9 +449,10 @@ class TouchHelmServer:
                         continue
 
                     desktop_query = msg_type in ('get_desktop_state', 'get_apps', 'launch_app',
-                                                  'get_media_library', 'play_media', 'presentation')
+                                                  'get_media_library', 'play_media', 'presentation','get_presentation_details','get_displays','app_action')
                     media_query = msg_type == 'media' and data.get('action') in (
-                        'play_pause', 'playpause', 'play', 'pause', 'next', 'prev', 'previous', 'stop', 'nexttrack', 'prevtrack')
+                        'play_pause', 'playpause', 'play', 'pause', 'next', 'prev', 'previous', 'stop', 'nexttrack', 'prevtrack',
+                        'seek','shuffle','repeat','rate')
                     if desktop_query or media_query:
                         await self._queue_desktop_request(client, data)
                         continue
@@ -425,7 +464,7 @@ class TouchHelmServer:
 
                     # System status queries
                     if msg_type == "get_volume":
-                        cur_vol, cur_muted = self.input_ctrl.get_volume()
+                        cur_vol, cur_muted = await self._native_call('get_volume')
                         await ws.send_json({"type": "volume_sync", "volume": cur_vol, "muted": cur_muted})
                         continue
 
@@ -435,7 +474,7 @@ class TouchHelmServer:
                         continue
 
                     elif msg_type == "get_system_status":
-                        cur_vol, cur_muted = self.input_ctrl.get_volume()
+                        cur_vol, cur_muted = await self._native_call('get_volume')
                         cur_bright = self.input_ctrl.get_brightness()
                         await ws.send_json({"type": "volume_sync", "volume": cur_vol, "muted": cur_muted})
                         await ws.send_json({"type": "brightness_sync", "level": cur_bright})
@@ -528,6 +567,8 @@ class TouchHelmServer:
 
                     elif msg_type == "keydown":
                         k = self._canonical_key(data.get("key", ""))
+                        if data.get('repeat') and k in client.held_keys and k in ('backspace','delete','left','right','up','down','pageup','pagedown','home','end'):
+                            self.input_ctrl.key_down(k)
                         if k:
                             if not any(k in c.held_keys for c in self.clients.values()):
                                 self.input_ctrl.key_down(k)
@@ -542,7 +583,8 @@ class TouchHelmServer:
 
                     elif msg_type == "text":
                         txt = data.get("text", "")
-                        self.input_ctrl.type_text(txt)
+                        if data.get('newline_mode')=='shift_enter':await self._native_call('type_text',txt,'shift_enter')
+                        else:await self._native_call('type_text',txt)
                         self._log_event(f"Typed text ({len(txt)} chars)", client.device_name)
 
                     elif msg_type == "hotkey":
@@ -550,6 +592,8 @@ class TouchHelmServer:
                         if keys:
                             self.input_ctrl.hotkey(*keys)
                             self._log_event(f"Hotkey: {'+'.join(keys)}", client.device_name)
+                    elif msg_type=='zoom':
+                        await self._native_call('zoom',data['delta'])
 
                     elif msg_type == "presentation":
                         action = data.get("action", "")
@@ -585,7 +629,10 @@ class TouchHelmServer:
                         active = bool(data.get("active", True))
                         color = data.get("color", self.config.get("laser_color", "red"))
                         self.laser_client.set_color(color)
-                        self.laser_client.update(norm_x, norm_y, active)
+                        display=self._displays.get(data.get('display_id'))
+                        if data.get('display_id') and display is None:continue
+                        if display:self.laser_client.update(norm_x,norm_y,active,display.get('rect'))
+                        else:self.laser_client.update(norm_x, norm_y, active)
 
                     elif msg_type == "laser_hide":
                         self.laser_client.hide()
@@ -603,6 +650,92 @@ class TouchHelmServer:
                 self._log_event("Device disconnected", client.device_name)
 
         return ws
+
+    def _http_authorized(self,request):
+        return not self.config.get('require_pin',False) or self._pin_matches(request.headers.get('X-TouchHelm-Pin'))
+
+    async def handle_asset(self,request):
+        if not self._http_authorized(request):return web.Response(status=401)
+        data=await asyncio.to_thread(self.desktop_services.assets.get,request.match_info['asset_id'])
+        if data is None:return web.Response(status=404)
+        return web.Response(body=data,content_type='image/png',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
+
+    async def handle_pairing(self,request):
+        if not self._http_authorized(request):return web.Response(status=401)
+        info={};certificate_available=False
+        if self.secure_pairing:
+            try:
+                info=self.secure_pairing.public_info()
+                certificate_available=True
+            except (OSError,ValueError):
+                info={'message':'The public pairing certificate is unavailable. Retry HTTPS setup on the desktop.'}
+        return web.json_response(dict(info,enabled=bool(self.https_site),certificate_available=certificate_available,
+                                      https_port=self.config.get('https_port',8766)))
+
+    async def handle_certificate(self,request):
+        if not self._http_authorized(request):return web.Response(status=401)
+        if self.secure_pairing is None:return web.Response(status=404)
+        try:
+            data=self.secure_pairing.public_certificate_der()
+        except (OSError,ValueError):
+            return web.Response(status=404)
+        return web.Response(body=data,content_type='application/x-x509-ca-cert',headers={'Content-Disposition':'attachment; filename="touchhelm-ca.crt"','Cache-Control':'no-store'})
+
+    async def handle_handoff(self,request):
+        if not self._http_authorized(request):return web.Response(status=401)
+        if request.method not in ('GET','POST'):
+            return web.Response(status=405,headers={'Allow':'GET, POST'})
+        now=time.monotonic()
+        self._handoffs={key:value for key,value in self._handoffs.items() if value['expires']>now}
+        if request.method=='GET':
+            if not request.secure:return web.Response(status=400)
+            value=self.consume_handoff(request.query.get('token',''),request.remote)
+            return web.json_response(value) if value is not None else web.Response(status=404)
+        if not self.https_site:return web.json_response({'error':'Enable HTTPS on the desktop first.'},status=409)
+        try:
+            data=await request.json()
+            if not isinstance(data,dict) or not isinstance(data.get('draft',''),str) or len(data.get('draft',''))>10000:raise ValueError('Draft exceeds transfer limit')
+            allowed={'theme','appearance','motion','contrast','newline_mode','haptics'}
+            preferences=data.get('preferences',{})
+            if not isinstance(preferences,dict):raise ValueError('Invalid preferences')
+            preferences={key:value for key,value in preferences.items() if key in allowed and type(value) in (str,bool) and len(str(value))<=32}
+            if len(self._handoffs)>=32:raise ValueError('Too many pending transfers')
+            token=secrets.token_urlsafe(32)
+            self._handoffs[token]={'expires':now+60,'ip':request.remote,'data':{'draft':data.get('draft',''),'preferences':preferences}}
+            return web.json_response({'token':token})
+        except (ValueError,TypeError):return web.Response(status=400)
+
+    def consume_handoff(self,token,remote_ip):
+        value=self._handoffs.pop(token,None)
+        if not value or value['expires']<=time.monotonic() or value['ip']!=remote_ip:return None
+        return value['data']
+
+    async def enable_https(self):
+        if self.https_site:return
+        from server.secure_pairing import SecurePairingManager
+        from server.discovery import get_local_ip_addresses
+        if self.secure_pairing is None:self.secure_pairing=SecurePairingManager()
+        context=await asyncio.to_thread(self.secure_pairing.prepare,get_local_ip_addresses()+['localhost','127.0.0.1'])
+        site=web.TCPSite(self.runner,'0.0.0.0',int(self.config.get('https_port',8766)),ssl_context=context)
+        await site.start();self.https_site=site
+
+    async def disable_https(self):
+        if self.https_site:await self.https_site.stop()
+        self.https_site=None;self._handoffs.clear()
+
+    async def handle_desktop_preview(self,request):
+        root=Path(__file__).resolve().parents[1]/'gui'/'web'
+        relative=request.match_info.get('path','') or 'index.html'
+        if relative=='index.html':
+            from gui.webview_window import render_preview_html
+            return web.Response(text=render_preview_html(),content_type='text/html')
+        if relative.startswith(('themes/','icons/')) or relative in ('themes.js','themes.css'):
+            root=Path(WEB_DIR)
+        candidate=(root/relative).resolve()
+        if not candidate.is_relative_to(root.resolve()) or candidate.suffix not in ('.html','.js','.css','.svg','.png','.webp'):return web.Response(status=404)
+        if not candidate.is_file():return web.Response(status=404)
+        # Static shell contains no privileged values; native bridge is absent.
+        return web.FileResponse(candidate)
 
     async def handle_index(self, request):
         with open(os.path.join(WEB_DIR, 'index.html'), encoding='utf-8') as source:
@@ -628,6 +761,12 @@ class TouchHelmServer:
         self.app.router.add_get('/index.html', self.handle_index)
         self.app.router.add_get('/sw.js', self.handle_worker)
         self.app.router.add_get('/api/version', self.handle_version)
+        self.app.router.add_get('/api/assets/{asset_id}',self.handle_asset)
+        self.app.router.add_get('/api/pairing',self.handle_pairing)
+        self.app.router.add_get('/api/pairing/certificate',self.handle_certificate)
+        self.app.router.add_route('*','/api/pairing/handoff',self.handle_handoff)
+        self.app.router.add_get('/preview/desktop/',self.handle_desktop_preview)
+        self.app.router.add_get('/preview/desktop/{path:.*}',self.handle_desktop_preview)
         self.app.router.add_get("/api/info", self.handle_info)
         self.app.router.add_route("*", "/api/config", self.handle_config)
         self.app.router.add_get("/ws", self.handle_ws)
@@ -640,11 +779,13 @@ class TouchHelmServer:
         await self.runner.setup()
         self.site = web.TCPSite(self.runner, "0.0.0.0", port)
         await self.site.start()
+        if self.config.get('https_enabled',False):await self.enable_https()
         self.volume_monitor_task = asyncio.create_task(self._volume_monitor_loop())
         self.desktop_monitor_task = asyncio.create_task(self._desktop_monitor_loop())
         print(f"TouchHelm Server listening on port {port}")
 
     async def stop(self):
+        await self.disable_https()
         if self.desktop_monitor_task:
             self.desktop_monitor_task.cancel()
             with suppress(asyncio.CancelledError):

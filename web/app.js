@@ -80,10 +80,10 @@ class TouchHelmClient {
     this.timerDeadline = null;
 
     // Volume & Brightness tracking state
-    this.lastVolumeVal = 50;
+    this.lastVolumeVal = null;
     this.isUserDraggingVol = false;
     this.lastVolSendTime = 0;
-    this.lastBrightnessVal = 80;
+    this.lastBrightnessVal = null;
     this.isUserDraggingBright = false;
     this.lastBrightSendTime = 0;
 
@@ -93,6 +93,7 @@ class TouchHelmClient {
     this.applyTheme(this.currentTheme, false);
     this.bindEvents();
     if (window.TouchHelmControls) this.controls = new window.TouchHelmControls(this);
+    if (window.TouchHelmExperience) this.experience = new window.TouchHelmExperience(this);
     this.connect();
     this.initPwa();
     this.fetchServerConfig();
@@ -250,6 +251,11 @@ class TouchHelmClient {
   // THEME MANAGEMENT
   // --------------------------------------------------------------------------
   applyTheme(themeName, persist = true) {
+    if (window.TouchHelmThemes) {
+      const preference=window.TouchHelmThemes.apply(themeName,{},persist);
+      this.currentTheme=preference.id;
+      return;
+    }
     if (!["cyber", "oled", "matrix", "nordic", "light"].includes(themeName)) return;
     this.currentTheme = themeName;
     document.documentElement.setAttribute("data-theme", themeName);
@@ -290,10 +296,10 @@ class TouchHelmClient {
       if (resp.ok && host === this.host) {
         const info = await resp.json();
         this.applyServerConfig(info);
-        if (typeof info.volume === "number") {
+        if ('volume' in info) {
           this.onVolumeSync(info.volume, info.muted);
         }
-        if (typeof info.brightness === "number") {
+        if ('brightness' in info) {
           this.onBrightnessSync(info.brightness);
         }
       }
@@ -379,7 +385,7 @@ class TouchHelmClient {
       if (this.chkInvertScroll) this.chkInvertScroll.checked = config.invert_scroll;
       localStorage.setItem("touchhelm_invert", config.invert_scroll);
     }
-    if (config.theme) this.applyTheme(config.theme, false);
+    // Theme is local to each device; host updates must not restyle other phones.
     if (config.laser_color) this.setLaserColor(config.laser_color, false);
   }
 
@@ -440,10 +446,10 @@ class TouchHelmClient {
           this.clearFeedback("typing");
           this.startPing();
           if (msg.config) this.applyServerConfig(msg.config);
-          if (typeof msg.volume === "number") {
+          if ('volume' in msg) {
             this.onVolumeSync(msg.volume, msg.muted);
           }
-          if (typeof msg.brightness === "number") {
+          if ('brightness' in msg) {
             this.onBrightnessSync(msg.brightness);
           }
         } else if (msg.type === "auth_required") {
@@ -464,6 +470,10 @@ class TouchHelmClient {
           this.controls?.renderApps(msg.apps || []);
         } else if (msg.type === "media_library") {
           this.controls?.renderMediaLibrary(msg);
+        } else if (msg.type === 'presentation_details') {
+          this.experience?.presentationDetails(msg);
+        } else if (msg.type === 'displays') {
+          this.experience?.displays(msg);
         } else if (msg.type === "command_result") {
           if (this.controls) this.controls.commandResult(msg);
           else if (!msg.success) this.showFeedback(msg.message || "The PC could not complete this action.", "error", "command");
@@ -687,6 +697,11 @@ class TouchHelmClient {
     for (const button of buttons) {
       if (button) button.disabled = !this.isConnected;
     }
+    if(this.sliderVol)this.sliderVol.disabled=!this.isConnected||this.lastVolumeVal===null;
+    for(const button of [this.sliderBright,this.btnBrightUp,this.btnBrightDown])if(button)button.disabled=!this.isConnected||this.lastBrightnessVal===null;
+    for (const name of ['btnSendChord','presentationDisplay','btnOpenApp','btnFocusApp','btnPinApp','btnAppDetails']) {
+      const button=document.getElementById?.(name);if(button)button.disabled=!this.isConnected;
+    }
     for (const surface of [this.touchSurface, this.scrollStrip, this.laserSurface]) {
       surface?.setAttribute("aria-disabled", String(!this.isConnected));
     }
@@ -704,12 +719,12 @@ class TouchHelmClient {
 
   updateTypingUi() {
     const live = !!this.chkRealtimeTyping?.checked;
-    this.setButtonLabel(this.btnSendText, live ? "Enter" : "Send", live ? "enter" : "send");
-    if (this.typeInput) this.typeInput.setAttribute?.("enterkeyhint", live ? "enter" : "send");
+    this.setButtonLabel(this.btnSendText, live ? "PC Enter" : "Send", live ? "enter" : "send");
+    if (this.typeInput) this.typeInput.setAttribute?.("enterkeyhint", "enter");
     if (this.typingHint) this.typingHint.textContent = !this.isConnected
       ? "Offline. Your draft stays here until you reconnect."
-      : live ? "Text appears on your PC as you type. Enter sends a new line."
-      : "Write a draft, then Send it to your PC.";
+      : live ? "Live sync is on. Return adds a line; PC Enter presses Enter on your PC."
+      : "Return adds a new line. Send or Ctrl+Enter sends your draft.";
   }
 
   send(data) {
@@ -717,6 +732,8 @@ class TouchHelmClient {
     if (data.type === "media" && this.selectedMediaSession && !data.session_id) {
       data = { ...data, session_id: this.selectedMediaSession };
     }
+    if (data.type === 'text' && this.newlineMode === 'shift_enter') data = {...data,newline_mode:'shift_enter'};
+    if (data.type === 'laser' && (this.presentationDisplay||this.autoPresentationDisplay)) data = {...data,display_id:this.presentationDisplay||this.autoPresentationDisplay};
     try { this.ws.send(JSON.stringify(data)); return true; } catch (e) { return false; }
   }
 
@@ -1018,9 +1035,18 @@ class TouchHelmClient {
     let twoFingerMoved = false;
     let twoFingerTapFired = false;
     let twoFingerStartTime = 0;
+    let dismissingTyping = false;
+    let pinchDistance=0,gestureMode='scroll',pinchAccumulator=0;
 
     const onStart = (e) => {
       e.preventDefault();
+      if (dismissingTyping) return;
+      if (this.controls?.ids.typingDock?.classList.contains('expanded')) {
+        dismissingTyping = true;
+        this.controls.collapseTyping();
+        return;
+      }
+      window.TouchHelmThemes?.setInteractionActive(true);
       const count = e.touches.length;
       maxTouches = Math.max(maxTouches, count);
 
@@ -1054,6 +1080,8 @@ class TouchHelmClient {
         clearTimeout(this.tapTimer);
         const t1 = e.touches[0];
         const t2 = e.touches[1];
+        pinchDistance=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);
+        gestureMode=this.pinchZoom?'pending':'scroll';pinchAccumulator=0;
         lastScrollX = (t1.clientX + t2.clientX) / 2;
         lastScrollY = (t1.clientY + t2.clientY) / 2;
         twoFingerStartTime = Date.now();
@@ -1064,6 +1092,7 @@ class TouchHelmClient {
 
     const onMove = (e) => {
       e.preventDefault();
+      if (dismissingTyping) return;
       const count = e.touches.length;
       maxTouches = Math.max(maxTouches, count);
       this.updateTouchFps();
@@ -1106,6 +1135,20 @@ class TouchHelmClient {
         const currentY = (t1.clientY + t2.clientY) / 2;
         const currentX = (t1.clientX + t2.clientX) / 2;
 
+        const distance=Math.hypot(t2.clientX-t1.clientX,t2.clientY-t1.clientY);
+        const distanceDelta=distance-pinchDistance;
+        if(gestureMode==='pending') {
+          if(Math.abs(distanceDelta)>8&&Math.abs(distanceDelta)>Math.hypot(currentX-lastScrollX,currentY-lastScrollY)*2)gestureMode='pinch';
+          else if(Math.hypot(currentX-lastScrollX,currentY-lastScrollY)>6)gestureMode='scroll';
+          else return;
+        }
+        if(gestureMode==='pinch') {
+          twoFingerMoved=true;pinchAccumulator+=distanceDelta;pinchDistance=distance;
+          const steps=Math.trunc(pinchAccumulator/20);
+          if(steps){this.send({type:'zoom',delta:Math.max(-3,Math.min(3,steps))});pinchAccumulator-=steps*20;}
+          return;
+        }
+
         const dy = currentY - lastScrollY;
         const dx = currentX - lastScrollX;
 
@@ -1132,6 +1175,8 @@ class TouchHelmClient {
 
     const onEnd = (e) => {
       e.preventDefault();
+      if (dismissingTyping) { if (!e.touches.length) dismissingTyping=false; return; }
+      if (!e.touches.length) window.TouchHelmThemes?.setInteractionActive(false);
       clearTimeout(this.tapTimer);
       const remainingTouches = e.touches.length;
 
@@ -1188,6 +1233,8 @@ class TouchHelmClient {
     };
 
     const onCancel = (e) => {
+      dismissingTyping = false;
+      window.TouchHelmThemes?.setInteractionActive(false);
       e.preventDefault();
       clearTimeout(this.tapTimer);
       if (this.touchIndicator) this.touchIndicator.classList.remove("active");
@@ -1311,6 +1358,8 @@ class TouchHelmClient {
       this.disableGyro();
       return;
     }
+
+    if(window.isSecureContext===false){this.btnGyro?.setAttribute('aria-pressed','false');this.showFeedback('Air Mouse needs a trusted HTTPS connection. Complete Secure pairing in Settings first.','error','capability');return;}
 
     if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
       try {
@@ -1475,6 +1524,7 @@ class TouchHelmClient {
         e.preventDefault();
         if (!this.isConnected) return;
         this.isLaserActive = true;
+        window.TouchHelmThemes?.setInteractionActive(true);
         this.updateLaserPosition(e.touches[0]);
         this.vibrate(25);
       }, { passive: false });
@@ -1489,6 +1539,7 @@ class TouchHelmClient {
       const endLaser = (e) => {
         if (e && e.cancelable) e.preventDefault();
         this.isLaserActive = false;
+        window.TouchHelmThemes?.setInteractionActive(false);
         if (this.laserReticle) this.laserReticle.classList.remove("active");
         this.send({ type: "laser", active: false });
         this.send({ type: "laser_hide" });
@@ -1503,6 +1554,7 @@ class TouchHelmClient {
         if (!this.isConnected) return;
         isLaserMouseDown = true;
         this.isLaserActive = true;
+        window.TouchHelmThemes?.setInteractionActive(true);
         this.updateLaserPosition(e);
         this.vibrate(25);
       });
@@ -1536,6 +1588,7 @@ class TouchHelmClient {
   }
 
   stopLaser() {
+    window.TouchHelmThemes?.setInteractionActive(false);
     if (!this.isLaserActive) return;
     this.isLaserActive = false;
     if (this.laserReticle) this.laserReticle.classList.remove("active");
@@ -1617,7 +1670,10 @@ class TouchHelmClient {
   // VOLUME & BRIGHTNESS SYNCHRONIZATION
   // --------------------------------------------------------------------------
   onVolumeSync(volume, muted) {
-    if (typeof volume === "number") {
+    const known=typeof volume==='number'&&Number.isFinite(volume)&&volume>=0&&volume<=100;
+    if(!known){this.lastVolumeVal=null;if(this.lblVolLevel)this.lblVolLevel.textContent='Unavailable';}
+    if(this.sliderVol){this.sliderVol.disabled=!this.isConnected||!known;this.sliderVol.setAttribute('aria-valuetext',known?`${volume}%`:'Volume readback unavailable');}
+    if (known) {
       this.lastVolumeVal = volume;
       if (this.sliderVol && !this.isUserDraggingVol) {
         this.sliderVol.value = volume;
@@ -1635,7 +1691,11 @@ class TouchHelmClient {
   }
 
   onBrightnessSync(level) {
-    if (typeof level === "number") {
+    const known=typeof level==='number'&&Number.isFinite(level)&&level>=0&&level<=100;
+    if(!known){this.lastBrightnessVal=null;if(this.lblBrightLevel)this.lblBrightLevel.textContent='Unavailable';}
+    for(const button of [this.sliderBright,this.btnBrightUp,this.btnBrightDown])if(button)button.disabled=!this.isConnected||!known;
+    this.sliderBright?.setAttribute('aria-valuetext',known?`${level}%`:'Brightness readback unavailable');
+    if (known) {
       this.lastBrightnessVal = level;
       if (this.sliderBright && !this.isUserDraggingBright) {
         this.sliderBright.value = level;
@@ -1673,7 +1733,7 @@ class TouchHelmClient {
         const val = parseInt(e.target.value, 10);
         this.isUserDraggingVol = true;
         if (this.lblVolLevel) {
-          this.lblVolLevel.textContent = `Level: ${val}%`;
+          this.lblVolLevel.textContent = `Target: ${val}%`;
         }
         if (volDragTimeout) clearTimeout(volDragTimeout);
         volDragTimeout = setTimeout(() => {
@@ -1691,7 +1751,6 @@ class TouchHelmClient {
         if (this.isUserDraggingVol) {
           this.isUserDraggingVol = false;
           const val = parseInt(this.sliderVol.value, 10);
-          this.lastVolumeVal = val;
           this.send({ type: "volume", level: val });
           this.vibrate(8);
         }
@@ -1727,7 +1786,7 @@ class TouchHelmClient {
         const val = parseInt(e.target.value, 10);
         this.isUserDraggingBright = true;
         if (this.lblBrightLevel) {
-          this.lblBrightLevel.textContent = `Level: ${val}%`;
+          this.lblBrightLevel.textContent = `Target: ${val}%`;
         }
         if (brightDragTimeout) clearTimeout(brightDragTimeout);
         brightDragTimeout = setTimeout(() => {
@@ -1745,7 +1804,6 @@ class TouchHelmClient {
         if (this.isUserDraggingBright) {
           this.isUserDraggingBright = false;
           const val = parseInt(this.sliderBright.value, 10);
-          this.lastBrightnessVal = val;
           this.send({ type: "brightness", level: val });
           this.vibrate(8);
         }
@@ -1763,7 +1821,10 @@ class TouchHelmClient {
     // Playback buttons
     this.onTap(this.btnMediaPlay, () => {
       this.vibrate(18);
-      this.send({ type: "media", action: "play_pause" });
+      const state=String(this.experience?.media?.status||'').toLowerCase();
+      const action=state==='playing'?'pause':['paused','stopped'].includes(state)?'play':'play_pause';
+      if(this.experience)this.experience.mediaAction(action);
+      else this.send({ type: "media", action: "play_pause" });
     });
 
     this.onTap(this.btnMediaPrev, () => {
@@ -1795,7 +1856,7 @@ class TouchHelmClient {
     if (this.btnSendText) {
       this.onTap(this.btnSendText, () => {
         const text = this.typeInput ? this.typeInput.value : "";
-        if (text && !this.isComposing) {
+        if ((text || this.chkRealtimeTyping?.checked) && !this.isComposing) {
           this.vibrate(15);
           let sent;
           if (this.chkRealtimeTyping && this.chkRealtimeTyping.checked) {
@@ -1839,18 +1900,11 @@ class TouchHelmClient {
       });
 
       this.typeInput.addEventListener("keydown", (e) => {
-        if (e.key === "Enter") {
+        if (e.key === "Enter" && e.ctrlKey) {
           if (e.isComposing || this.isComposing || e.keyCode === 229) return;
           e.preventDefault();
           this.vibrate(12);
-          if (this.chkRealtimeTyping && this.chkRealtimeTyping.checked) {
-            if (this.syncLiveText() && this.send({ type: "key", key: "enter" })) {
-              this.typeInput.value = "";
-              this.liveTextValue = "";
-            }
-          } else if (this.btnSendText) {
-            this.btnSendText.click();
-          }
+          this.btnSendText?.click();
         }
       });
     }
@@ -2016,6 +2070,7 @@ class TouchHelmClient {
 
   async requestWakeLock() {
     try {
+      if(window.isSecureContext===false)throw new Error('A trusted secure context is required');
       if (!navigator.wakeLock?.request) throw new Error("Wake lock unavailable");
       const lock = await navigator.wakeLock.request("screen");
       if (!this.wakeLockRequested) { await lock.release(); return; }

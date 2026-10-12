@@ -1,0 +1,27 @@
+/* Soft: quiet blue and sage, fine outlines, softly rounded precise controls. */
+:root[data-theme="soft"][data-appearance="light"] {
+  --th-bg:#eef3f6; --th-panel:#e3ebf0; --th-surface:#d4e0e8; --th-hover:#c4d4df;
+  --th-text:#283d4d; --th-muted:#496071; --th-accent:#355e86; --th-on-accent:#fff;
+  --th-border:#647f92; --th-danger:#ab3154; --th-success:#356c61;
+}
+:root[data-theme="soft"][data-appearance="dark"] {
+  --th-bg:#1b2631; --th-panel:#263644; --th-surface:#334957; --th-hover:#425d6c;
+  --th-text:#f0f6fa; --th-muted:#bfd0dc; --th-accent:#b2d4f0; --th-on-accent:#19324b;
+  --th-border:#7d97a8; --th-danger:#f9b1c9; --th-success:#b5ddd2;
+}
+:root[data-theme="soft"] { --th-radius:15px; --th-key-radius:10px; --th-pad-radius:22px; }
+:root[data-theme="soft"] .touch-surface { border:1px solid var(--th-border); background:var(--th-surface); }
+:root[data-theme="soft"] .touch-surface::before { content:""; position:absolute; bottom:24px; left:24px; width:36px; height:36px; border-radius:50%; border:8px solid color-mix(in srgb,var(--th-accent) 15%,transparent); }
+:root[data-theme="soft"] :is(.trackpad-btn,.tool-btn,.native-key,.macro-btn,.shortcut-btn,.media-btn) { background:var(--th-panel); border:1px solid var(--th-border); box-shadow:none; }
+:root[data-theme="soft"] :is(.btn-next,.send-btn,.play-btn,.native-key.held) { background:var(--th-accent); color:var(--th-on-accent); }
+:root[data-theme="soft"] .nav-tab.active { background:var(--th-surface); border-radius:11px; }
+:root[data-theme="soft"] :is(.ui-icon,.nav-tab>svg) { stroke-width:1.65; }
+:root[data-theme="soft"] .trackpad-hints strong { font-weight:500; }
+:root[data-theme="soft"] :is(.desktop-context h1,.media-context h1) { font-weight:550; letter-spacing:-.025em; }
+:root[data-theme="soft"] :is(.typing-dock,.search-field,.segmented-control) { background:var(--th-panel); border-color:var(--th-border); }
+:root[data-theme="soft"] .laser-surface { background:var(--th-surface); border:1px solid var(--th-border); }
+:root[data-theme="soft"] :is(.catalog-item,.device-row) { padding-inline:6px; border-radius:10px; }
+:root[data-theme="soft"] .app-monogram { background:var(--th-surface); border-radius:12px; }
+:root[data-theme="soft"] .desktop-panel { border:1px solid var(--th-border); box-shadow:none; }
+:root[data-theme="soft"] :is(.trackpad-btn,.native-key,.tool-btn):hover:not(:disabled) { background:var(--th-hover); }
+:root[data-theme="soft"] :is(.nav-tab,.trackpad-btn,.tool-btn,.native-key) { transition:background-color 120ms ease-out,color 120ms ease-out; }

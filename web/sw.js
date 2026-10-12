@@ -10,9 +10,21 @@ const ASSETS = [
   "/app.js?v=__TOUCHHELM_BUILD__",
   "/controls.js",
   "/controls.js?v=__TOUCHHELM_BUILD__",
+  "/themes.css?v=__TOUCHHELM_BUILD__",
+  "/themes.js?v=__TOUCHHELM_BUILD__",
+  "/haptics.js?v=__TOUCHHELM_BUILD__",
+  "/experience.js?v=__TOUCHHELM_BUILD__",
+  "/demo.js?v=__TOUCHHELM_BUILD__",
+  "/themes/ink.css?v=__TOUCHHELM_BUILD__",
   "/manifest.json",
   "/icons/icon.svg"
 ];
+
+self.addEventListener('message',e=>{
+  if(e.data?.type!=='cache_theme'||!Array.isArray(e.data.paths))return;
+  const paths=e.data.paths.slice(0,8).filter(path=>typeof path==='string'&&/^\/themes\/(?:[a-z]+\.css|assets\/[a-z0-9-]+\.(?:webp|woff2))(?:\?v=[a-z0-9_]+)?$/i.test(path));
+  if(paths.length)e.waitUntil(caches.open(CACHE_NAME).then(cache=>cache.addAll(paths)).catch(()=>{}));
+});
 
 self.addEventListener("install", (e) => {
   e.waitUntil(caches.open(CACHE_NAME).then(cache => cache.addAll(ASSETS)).then(() => self.skipWaiting()));

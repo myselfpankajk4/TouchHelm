@@ -1,0 +1,106 @@
+/* Shared theme vocabulary. A single active material sheet supplies its values. */
+:root[data-theme] {
+  --th-bg:#0b1929; --th-panel:#12283b; --th-surface:#1a344a; --th-hover:#24465e;
+  --th-text:#eef8fc; --th-muted:#b0c8d8; --th-accent:#8cdef4; --th-on-accent:#08232c;
+  --th-border:#557085; --th-danger:#ffa4b2; --th-success:#a3e6bb;
+  --th-radius:12px; --th-key-radius:8px; --th-pad-radius:22px; --th-shadow:none;
+  --bg-main:var(--th-bg); --bg-card:var(--th-panel); --bg-surface:var(--th-surface); --bg-card-hover:var(--th-hover);
+  --text-main:var(--th-text); --text-muted:var(--th-muted); --text-dim:var(--th-muted);
+  --primary:var(--th-accent); --primary-contrast:var(--th-on-accent); --primary-gradient:var(--th-accent);
+  --accent:var(--th-accent); --primary-glow:transparent; --accent-glow:transparent; --danger-gradient:var(--th-danger);
+  --warning:#ffd48a; --theme-color-meta:var(--th-bg);
+  --border-color:var(--th-border); --border-active:var(--th-accent); --danger:var(--th-danger); --success:var(--th-success);
+  --surface-gradient:var(--th-surface); --laser-surface-bg:var(--th-surface);
+  color-scheme:dark; accent-color:var(--th-accent);
+}
+:root[data-theme][data-appearance="light"] { color-scheme:light; --warning:#825c0d; }
+:root[data-theme] body { color:var(--th-text); background:var(--th-bg); }
+:root[data-theme] :is(button,input,textarea,select) { font-family:inherit; }
+:root[data-theme] :is(input,textarea)::placeholder { color:var(--th-muted); opacity:1; }
+:root[data-theme] :is(input,textarea) { caret-color:var(--th-accent); }
+:root[data-theme] ::selection { background:var(--th-accent); color:var(--th-on-accent); }
+:root[data-theme] :is(button,input,textarea,select,summary,[tabindex]):focus-visible { outline:3px solid var(--th-accent); outline-offset:3px; }
+:root[data-theme] * { scrollbar-color:var(--th-border) var(--th-bg); }
+:root[data-theme] :is(.app-container,.desktop-shell) { background:var(--th-bg); color:var(--th-text); }
+:root[data-theme] :is(.top-bar,.bottom-nav,.desktop-header,.sidebar) { background:var(--th-panel); border-color:var(--th-border); }
+:root[data-theme] :is(.touch-surface,.laser-surface) { isolation:isolate; position:relative; overflow:hidden; border-radius:var(--th-pad-radius); background:var(--th-surface); }
+:root[data-theme] :is(.touch-surface,.laser-surface)::before,
+:root[data-theme] :is(.touch-surface,.laser-surface)::after { pointer-events:none; z-index:-1; }
+:root[data-theme] .trackpad-hints { z-index:1; }
+:root[data-theme] :is(.typing-dock,.modal-card,.desktop-panel,.pairing-panel,.settings-panel,.device-panel) { background:var(--th-panel); border-radius:var(--th-radius); border-color:var(--th-border); }
+:root[data-theme] :is(.trackpad-btn,.tool-btn,.macro-btn,.shortcut-btn,.media-btn,.send-btn,.dock-done,.quick-clear-btn,.win-start-bar-btn,.btn-primary,.btn-sm) { border-radius:var(--th-key-radius); }
+:root[data-theme] .native-key { border-radius:var(--th-key-radius); }
+:root[data-theme] :is(.catalog-item,.device-row,.activity-row) { border-color:var(--th-border); }
+:root[data-theme] :is(.nav-tab,.sidebar button)[aria-selected="true"],
+:root[data-theme] .nav-tab.active { background:var(--th-surface); color:var(--th-accent); }
+:root[data-theme][data-appearance="light"] .nav-tab.active .nav-label { color:var(--th-text); }
+:root[data-theme] :is(.ui-icon,.nav-tab>svg,.tool-btn>svg,.media-btn>svg,.shortcut-btn>svg,.icon-btn>svg) { stroke-linecap:round; stroke-linejoin:round; }
+:root[data-theme] :is(.app-logo,.brand-logo,#mediaArtwork,.media-artwork,.presentation-preview img) { filter:none; }
+:root[data-theme] :is(.native-key.held,.native-key[aria-pressed="true"],.send-btn,.btn-primary,.btn-next) { background:var(--th-accent); color:var(--th-on-accent); }
+:root[data-theme] .native-numpad .native-key[data-key="numpadenter"] { background:var(--th-accent); color:var(--th-on-accent); }
+:root[data-theme] :is(.status-dot.connected,.connection-indicator.ready) { background:var(--th-success); }
+:root[data-theme] .status-dot.disconnected { background:var(--th-danger); }
+:root[data-theme] :is(.timer-display,.media-timing,.volume-level,.status-ping,.activity-time) { font-variant-numeric:tabular-nums; }
+:root[data-theme] :is(.desktop-context,.media-context,.catalog-section,.keyboard-container) { position:relative; isolation:isolate; }
+:root[data-theme] :is(.desktop-context,.media-context)>* { position:relative; z-index:1; }
+:root[data-theme] :is(.catalog-text,.context-title,.device-copy,.pairing-address) { min-width:0; overflow-wrap:anywhere; }
+:root[data-theme] :is(.desktop-button,.theme-test-button) { min-height:44px; min-width:44px; }
+
+.th-picker-heading { margin:0 0 12px; font-size:18px; font-weight:650; color:var(--th-text); }
+.th-theme-choices { display:grid; grid-template-columns:1fr; gap:6px; }
+.th-theme-choice { min-width:0; min-height:76px; width:100%; display:flex; gap:12px; align-items:center; text-align:left; padding:10px 12px; border:1px solid transparent; border-radius:var(--th-radius); background:transparent; color:var(--th-text); }
+.th-theme-choice:hover { background:var(--th-surface); }
+.th-theme-choice[aria-pressed="true"] { border-color:var(--th-accent); background:var(--th-surface); }
+.th-theme-swatch { width:48px; height:48px; border-radius:13px; display:grid; place-items:center; flex-shrink:0; overflow:hidden; border:1px solid currentColor; }
+.th-theme-copy { display:flex; flex-direction:column; min-width:0; gap:4px; }
+.th-theme-copy strong { font-weight:650; font-size:15px; }
+.th-theme-copy>span { color:var(--th-muted); font-size:12px; line-height:1.45; }
+.th-swatch-shape { width:23px; height:23px; border:2px solid currentColor; border-radius:8px; }
+.th-swatch-bloom { border-radius:45% 45% 12% 45%; transform:rotate(-35deg); }
+.th-swatch-resonance { border-radius:50%; box-shadow:inset 0 0 0 4px currentColor; width:28px; height:28px; }
+.th-swatch-companion { position:relative; width:27px; height:21px; border-radius:9px; }
+.th-swatch-companion::after { content:""; position:absolute; inset:6px; border-inline:3px solid currentColor; border-radius:3px; }
+.th-swatch-clay { border-radius:9px; box-shadow:2px 4px 6px color-mix(in srgb,currentColor 25%,transparent); }
+.th-swatch-glass { transform:rotate(-15deg); border-radius:7px; background:color-mix(in srgb,currentColor 20%,transparent); }
+.th-swatch-soft { border-radius:50%; width:24px; height:24px; border-width:5px; }
+.th-swatch-ink { border-radius:0; height:27px; border-width:0 0 0 5px; transform:rotate(15deg); }
+.th-theme-preferences { display:grid; grid-template-columns:1fr; gap:12px; padding-top:18px; margin-top:18px; border-top:1px solid var(--th-border); }
+.th-theme-preference { display:flex; align-items:center; justify-content:space-between; gap:12px; min-width:0; color:var(--th-text); font-size:14px; }
+.th-theme-preference select { min-height:44px; min-width:145px; padding:8px 28px 8px 10px; border:1px solid var(--th-border); border-radius:8px; background:var(--th-surface); color:var(--th-text); font:inherit; }
+
+/* High contrast removes decorative translucency; it never recolors real artwork. */
+:root[data-theme][data-contrast="increased"][data-appearance="light"] { --th-text:#080b10; --th-muted:#26313c; --th-border:#526270; --th-accent:#142d49; --th-on-accent:#fff; --th-danger:#9a1723; }
+:root[data-theme][data-contrast="increased"][data-appearance="dark"] { --th-text:#fff; --th-muted:#e4e9ef; --th-border:#b3c2d0; --th-accent:#c4edff; --th-on-accent:#06121c; --th-danger:#ffb5bf; }
+:root[data-theme][data-contrast="increased"] :is(.touch-surface,.laser-surface,.native-key,.modal-card,.search-field,.typing-dock,.desktop-panel,.surface,.top-bar,.bottom-nav,.desktop-header,.desktop-nav) { border:2px solid var(--th-border); box-shadow:none; backdrop-filter:none; }
+:root[data-theme][data-contrast="increased"] :is(.touch-surface,.laser-surface,.desktop-context,.pairing-panel,.desktop-pairing)::before,
+:root[data-theme][data-contrast="increased"] :is(.touch-surface,.laser-surface,.desktop-context,.pairing-panel,.desktop-pairing)::after { opacity:.12!important; }
+:root[data-theme][data-contrast="increased"] button { border:1px solid var(--th-border); box-shadow:none; }
+:root[data-theme-paused="true"] *, :root[data-theme-paused="true"] *::before, :root[data-theme-paused="true"] *::after { animation-play-state:paused!important; }
+:root[data-motion="reduced"] *, :root[data-motion="reduced"] *::before, :root[data-motion="reduced"] *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; }
+@media(prefers-reduced-motion:reduce) { :root[data-theme] *, :root[data-theme] *::before, :root[data-theme] *::after { animation:none!important; transition:none!important; scroll-behavior:auto!important; } }
+@media(forced-colors:active) { :root[data-theme] :is(.touch-surface,.laser-surface,.desktop-context,.pairing-panel)::before, :root[data-theme] :is(.touch-surface,.laser-surface,.desktop-context,.pairing-panel)::after { display:none!important; } }
+
+/* The owned desktop shell uses the same materials without copying phone geometry. */
+:root[data-theme] body[data-surface="desktop"] :is(.desktop-nav,.desktop-header) { background:var(--th-panel); color:var(--th-text); border-color:var(--th-border); }
+:root[data-theme] body[data-surface="desktop"] .desktop-nav button { color:var(--th-muted); border-radius:var(--th-key-radius); }
+:root[data-theme] body[data-surface="desktop"] .desktop-nav button[aria-selected="true"] { color:var(--th-accent); background:var(--th-surface); }
+:root[data-theme] body[data-surface="desktop"] .desktop-nav button[aria-current="page"] { color:var(--th-accent); background:var(--th-surface); }
+:root[data-theme] body[data-surface="desktop"] :is(.surface,.control-group,.device-table,.activity-log) { background:var(--th-panel); color:var(--th-text); border-color:var(--th-border); border-radius:var(--th-radius); }
+:root[data-theme] body[data-surface="desktop"] .desktop-pairing { position:relative; isolation:isolate; }
+:root[data-theme] body[data-surface="desktop"] .desktop-pairing>* { position:relative; z-index:1; }
+:root[data-theme] body[data-surface="desktop"] .desktop-pairing::after { content:""; position:absolute; pointer-events:none; right:0; bottom:0; width:165px; height:130px; background:var(--th-art,none) right bottom/contain no-repeat; opacity:.6; z-index:0; }
+:root[data-theme] body[data-surface="desktop"] :is(.desktop-button,.desktop-nav button) { min-height:44px; min-width:44px; }
+:root[data-theme] body[data-surface="desktop"] :is(input,select,textarea) { background:var(--th-surface); color:var(--th-text); border-color:var(--th-border); }
+:root[data-theme="clay"] body[data-surface="desktop"] .surface { border:0; box-shadow:var(--th-shadow); }
+:root[data-theme="glass"] body[data-surface="desktop"] .surface { box-shadow:var(--th-shadow); }
+:root[data-theme="resonance"] body[data-surface="desktop"] .control-group { border:1px solid var(--th-border); border-radius:7px; }
+:root[data-theme="ink"] body[data-surface="desktop"] .surface { border:1.5px solid var(--th-border); box-shadow:none; }
+:root[data-theme][data-contrast="increased"] body[data-surface="desktop"] :is(.surface,.control-group,.desktop-panel) { border:2px solid var(--th-border); box-shadow:none; }
+@media(min-width:701px) {
+  :root[data-theme] body[data-surface="desktop"] .desktop-nav { position:relative; isolation:isolate; overflow:hidden; }
+  :root[data-theme] body[data-surface="desktop"] .desktop-nav::after { content:""; position:absolute; bottom:18px; left:22px; width:180px; height:170px; background:var(--th-art,none) center bottom/contain no-repeat; opacity:.78; pointer-events:none; z-index:-1; }
+  :root[data-theme="resonance"] body[data-surface="desktop"] .desktop-nav::after { width:150px; height:150px; left:30px; border-radius:50%; background:radial-gradient(circle,var(--th-bg) 0 5%,var(--th-accent) 6% 17%,#161116 18% 33%,#332833 34% 35%,#161116 36% 48%,#332833 49% 50%,#161116 51% 64%,#332833 65% 66%,#161116 67%); opacity:.35; }
+  :root[data-theme="glass"] body[data-surface="desktop"] .desktop-nav::after { width:170px; height:170px; left:-48px; border:22px solid color-mix(in srgb,var(--th-accent) 16%,transparent); border-radius:50%; background:none; }
+  :root[data-theme="companion"] body[data-surface="desktop"] .desktop-nav::after { height:125px; bottom:25px; }
+  :root[data-theme][data-contrast="increased"] body[data-surface="desktop"] .desktop-nav::after { opacity:.12; }
+}
