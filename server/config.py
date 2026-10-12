@@ -9,10 +9,9 @@ import math
 import threading
 import tempfile
 import secrets
-import string
 
 def random_password():
-    return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(12))
+    return f'{secrets.randbelow(10000):04d}'
 
 CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
 

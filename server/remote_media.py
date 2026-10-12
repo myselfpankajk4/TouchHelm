@@ -47,7 +47,7 @@ def fix_dxcam_030_release():
 
 def capabilities():
     video=all(importlib.util.find_spec(name) is not None for name in ('aiortc','av','dxcam','cv2'))
-    audio=importlib.util.find_spec('pyaudiowpatch') is not None
+    audio=all(importlib.util.find_spec(name) is not None for name in ('pyaudiowpatch','aiortc','av'))
     return {'video':video,'audio':audio,'message':'Ready for desktop streaming.' if video else
         'Install requirements-remote.txt on this PC to enable streaming.',
         'casting':{'receiver':'unknown','message':'Miracast support depends on this PC and phone. Open Windows Projecting to this PC to check.'}}
@@ -99,9 +99,11 @@ class MediaWorker:
         from aiortc import RTCPeerConnection, RTCConfiguration
         configure_video_encoding(quality)
         self.pc=RTCPeerConnection(RTCConfiguration(iceServers=[]))
-        self.video=DesktopTrack(display,quality,self.on_state,self.capture_pool)
-        await self.loop.run_in_executor(self.capture_pool,self.video.capture.open)
-        self.video_sender=self.pc.addTrack(self.video.track)
+        self.video_sender=None
+        if display is not None:
+            self.video=DesktopTrack(display,quality,self.on_state,self.capture_pool)
+            await self.loop.run_in_executor(self.capture_pool,self.video.capture.open)
+            self.video_sender=self.pc.addTrack(self.video.track)
         # Always negotiate an audio transceiver; capture is opt-in, silence otherwise.
         if capabilities()['audio']:
             self.audio=AudioSource(self.on_state)
@@ -109,6 +111,7 @@ class MediaWorker:
                 try:await asyncio.to_thread(self.audio.enable,True)
                 except Exception as error:
                     self.audio.close();self.on_state('audio_unavailable','PC audio unavailable: '+str(error)[:160])
+                    if display is None:raise RuntimeError('PC audio could not start: '+str(error)[:160]) from error
             self.pc.addTrack(self.audio.track)
         @self.pc.on('connectionstatechange')
         async def connection():
@@ -136,7 +139,7 @@ class MediaWorker:
         return await self._call(self._configure(display,quality,audio))
 
     async def _configure(self,display,quality,audio):
-        await self.loop.run_in_executor(self.capture_pool,self.video.capture.configure,display,quality)
+        if self.video:await self.loop.run_in_executor(self.capture_pool,self.video.capture.configure,display,quality)
         budget=configure_video_encoding(quality)
         # Pinned aiortc exposes no public encoder policy. Keep this compatibility
         # seam guarded, and let subsequent REMB feedback lower the bitrate.

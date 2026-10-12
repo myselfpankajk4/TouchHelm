@@ -12,15 +12,41 @@ Keyboard and Apps remain available. No TouchHelm Android app is required.
    ```
 
 2. In desktop Settings, enable **Remote screen access**. TouchHelm enables password
-   protection automatically and has a random 12-character password ready for new
-   setups. Existing four-digit PINs remain compatible. Use **Generate password**
-   to rotate the password when needed.
+   protection automatically and has a random four-digit numeric PIN ready for new
+   setups. Existing four-digit PINs remain compatible. Use **Generate four-digit PIN**
+   to rotate the PIN when needed. Previously configured passwords remain compatible.
    It is disabled by default. The desktop bridge is the only interface that can
    enable it; the phone settings API cannot.
 3. Connect using trusted local HTTPS or private Tailscale HTTPS from desktop Pairing.
    For Tailscale, install/sign in on both devices and join the same tailnet.
 4. Open **Remote → Control PC** or **View PC**. PC audio starts off; enable it and
    tap Unmute when the browser requires a playback gesture.
+
+For less manual setup, use desktop Pairing → **Set up trusted pairing**. This
+installs Tailscale on Windows through App Installer when missing, installs missing
+screen/audio providers, enables a host PIN, prepares the private HTTPS endpoint,
+and enables screen/audio access after HTTPS setup succeeds. Sign-in/Windows
+approval remains a user step; install/sign in to Tailscale on the phone using the
+same account. The selected private connection is saved. No phone certificate
+download is required. No public relay, Funnel or router port forwarding is added.
+
+Browser-only automatic trust of a private LAN address is not available: public CAs
+cannot issue certificates for reserved IPs/internal names, and a website cannot
+silently install a CA on the phone. A future browser-only trusted setup would need
+a registered domain and certificate provisioning infrastructure. See the
+[CA/Browser Forum requirements](https://cabforum.org/working-groups/server/baseline-requirements/requirements/)
+and [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve).
+
+## Listening without screen access
+
+Media → **Hear PC audio on this phone** starts an authenticated audio-only stream:
+it creates no desktop capture, sends no video track, and grants no input lease.
+Tap **Unmute PC audio** if requested by the browser. Media and Remote use one audio
+controller and one stream; both checkboxes reflect confirmed host state, including
+pending requests, failures and Stop. Turning audio off during screen viewing leaves
+video running. From audio-only listening, choosing Control/View ends the audio-only
+transport cleanly and starts the requested screen stream with audio retained.
+Backgrounding the phone still pauses the stream; returning requires explicit Resume.
 
 The PC must remain powered on, signed in and running TouchHelm. Remote access does
 not unlock Windows, cross UAC, start the PC or control elevated applications.
@@ -37,6 +63,10 @@ the supported alternative without installing TouchHelm's CA.
   in every mode. Two-finger vertical/horizontal scrolling controls the PC in
   Control mode. A gesture cannot change from scrolling into zoom midway through.
 - **View PC:** streaming input is disabled. Switching into it releases held input.
+- **Fullscreen:** request landscape after entering fullscreen. Unsupported browser
+  orientation locks receive a manual-rotation hint. Exit fullscreen and Stop remain
+  available over the video. The cursor marker uses measured PC pointer position;
+  the SVG visibility attribute is updated explicitly.
 - Open **Typing, keys & combinations** for multiline buffered text, PC Enter,
   held/sticky native keys, numpad and combinations such as Ctrl+Shift+A. Return in
   the text field creates a newline; sending remains explicit.
@@ -134,3 +164,14 @@ pointers twice. This addresses the native capture cleanup failure also tracked i
 [DXcam issue 144](https://github.com/ra1nty/DXcam/issues/144). No installed library
 files are modified. Desktop encoding budgets are increased, with congestion feedback
 retained; the locally verified results are not Android/network performance claims.
+
+Phone multiline text now defaults to Shift+Enter on the PC, keeping two phone
+Return presses from becoming ordinary submit keys in apps that support that
+convention. **PC Enter** stays explicit; the target application determines how it
+interprets these keys. The editor-style Enter option remains selectable.
+
+All seven existing themes support bounded procedural SVG/CSS/JavaScript reactions.
+Bloom and Companion no longer load background photographs. Branch growth, flowers,
+robot eyes, musical motifs, clay compression, glass droplets, soft contours and ink
+strokes use generated elements with randomized movement. Rich/Calm/Off and reduced
+motion remain available; large scenes pause around live remote video and input.

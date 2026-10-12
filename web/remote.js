@@ -17,6 +17,7 @@
     constructor(client){
       this.client=client;this.session='';this.revision='';this.state='stopped';this.mode='control';this.scale=1;this.panX=this.panY=0;
       this.points=new Map();this.video=$('remoteVideo');this.stage=$('remoteStage');this.selectedMode='control';this.previousFrames=0;
+      this.audioRequested=false;this.audioConfirmed=false;this.audioPending=false;this.previousAudio=0;
       try{$('remoteText').value=(localStorage.getItem('touchhelm_remote_draft')||'').slice(0,10000);}catch{}
       try{const saved=localStorage.getItem('touchhelm_remote_quality');$('remoteQuality').value=['saver','balanced','clear','detail'].includes(saved)?saved:'clear';}catch{}
       $('remoteQuality').addEventListener('change',()=>{try{localStorage.setItem('touchhelm_remote_quality',$('remoteQuality').value);}catch{}});
@@ -28,9 +29,15 @@
       $('remoteCastOpen').addEventListener('click',()=>{$('remoteCastGuide').hidden=!$('remoteCastGuide').hidden;});
       $('remoteFit').addEventListener('click',()=>{this.scale=1;this.panX=this.panY=0;this.transform();});
       $('remoteActual').addEventListener('click',()=>{const r=this.stage.getBoundingClientRect();this.scale=Math.max(1,1/Math.min(r.width/(this.video.videoWidth||r.width),r.height/(this.video.videoHeight||r.height)));this.panX=this.panY=0;this.transform();});
-      $('remoteFullscreen').addEventListener('click',()=>{const promise=document.fullscreenElement?document.exitFullscreen():this.stage.requestFullscreen?.();promise?.catch(()=>this.status('Fullscreen is unavailable. Rotate your phone for a larger view.'));});
-      for(const id of ['remoteMonitor','remoteQuality','remoteAudio','remoteMode'])$(id).addEventListener('change',()=>this.configure());
-      $('remoteUnmute').addEventListener('click',()=>{this.video.muted=!$('remoteAudio').checked;this.video.play().then(()=>{$('remoteUnmute').hidden=true;}).catch(()=>this.status('Tap the playback button again to allow browser playback.'));});
+      $('remoteFullscreen').addEventListener('click',()=>this.fullscreen());
+      $('remoteFullscreenExit').addEventListener('click',()=>this.fullscreen());
+      $('remoteFullscreenStop').addEventListener('click',()=>{if(document.fullscreenElement===this.stage)document.exitFullscreen().catch(()=>{});this.stop();});
+      document.addEventListener('fullscreenchange',()=>{if(document.fullscreenElement!==this.stage&&this.orientationLocked){screen.orientation?.unlock?.();this.orientationLocked=false;}this.renderCursor();});
+      window.addEventListener('resize',()=>this.renderCursor());
+      for(const id of ['remoteMonitor','remoteQuality','remoteMode'])$(id).addEventListener('change',()=>this.configure());
+      for(const id of ['remoteAudio','mediaPcAudio'])$(id).addEventListener('change',event=>this.setAudio(event.target.checked));
+      for(const id of ['remoteUnmute','mediaPcAudioUnmute','remoteAudioOnlyUnmute'])$(id).addEventListener('click',()=>this.unmute());
+      $('remoteAudioOnlyStop').addEventListener('click',()=>this.stop());
       $('remoteLeft').addEventListener('click',()=>this.input({type:'click',button:'left'}));
       $('remoteRight').addEventListener('click',()=>this.input({type:'click',button:'right'}));
       $('remoteDrag').addEventListener('click',()=>{this.drag=!this.drag;this.input({type:this.drag?'mousedown':'mouseup',button:'left'});$('remoteDrag').setAttribute('aria-pressed',String(this.drag));});
@@ -60,31 +67,63 @@
       this.timer=setInterval(()=>this.tick(),1000);
       this.render();
     }
-    status(text){$('remoteStatus').textContent=text;}
+    status(text){this.lastMessage=text||'';$('remoteStatus').textContent=this.lastMessage;if(this.mode==='audio')$('mediaPcAudioStatus').textContent=this.lastMessage;}
     query(){this.client.send({type:'remote_query'});}
     onView(view){
       this.cancelGesture();this.client.controls?.releaseKeys();
-      if(view==='viewRemote')this.query();
+      if(view==='viewRemote'){this.query();if(this.session&&this.mode!=='audio'){this.state='connecting';this.lastFrame=performance.now();this.render();}}
       // Navigation keeps media alive; phone backgrounding still pauses it.
       window.TouchHelmEffects?.suspend(view==='viewRemote'&&!!this.session);
     }
-    connected(value){if(value)this.query();else this.reset('disconnected','PC disconnected. Reconnect, then tap Resume.');}
+    connected(value){if(value){this.query();this.syncAudioControls();}else{this.restartMode=null;this.reset('disconnected','PC disconnected. Reconnect, then tap Resume.');}}
+    async fullscreen(){
+      try{
+        if(document.fullscreenElement===this.stage){await document.exitFullscreen();return;}
+        if(!this.stage.requestFullscreen)throw new Error('Fullscreen is unavailable in this browser.');
+        await this.stage.requestFullscreen();
+        try{if(!screen.orientation?.lock)throw new Error();await screen.orientation.lock('landscape');this.orientationLocked=true;$('remoteFullscreenHint').textContent='';}
+        catch{this.status('Landscape lock is unavailable. Rotate your phone manually.');$('remoteFullscreenHint').textContent='Rotate your phone for landscape';}
+        this.renderCursor();
+      }catch(error){this.status(error.message||'Fullscreen could not start.');}
+    }
+    setAudio(enabled){
+      if(this.audioPending)return this.syncAudioControls();
+      this.audioRequested=!!enabled;
+      if(!enabled&&this.mode==='audio'&&this.session){this.stop();return;}
+      if(!this.session){if(enabled){this.start('audio');this.audioPending=this.state==='connecting';}this.syncAudioControls();return;}
+      this.audioPending=true;this.configure();
+    }
+    unmute(){
+      if(!this.audioConfirmed)return;
+      this.video.muted=false;this.video.play().then(()=>this.syncAudioControls()).catch(()=>{this.video.muted=true;this.status('The browser blocked audio playback. Tap Unmute again.');this.syncAudioControls();});
+    }
+    syncAudioControls(){
+      const pending=this.audioPending||!!this.session&&this.state==='connecting';
+      for(const id of ['remoteAudio','mediaPcAudio']){const el=$(id);el.checked=this.audioPending?this.audioRequested:this.audioConfirmed;el.disabled=pending||!this.client.isConnected||this.caps?.audio===false;}
+      for(const id of ['remoteUnmute','mediaPcAudioUnmute','remoteAudioOnlyUnmute'])$(id).hidden=!this.audioConfirmed||!this.video.muted;
+      $('mediaPcAudioStatus').textContent=pending?'Connecting PC audio…':this.audioConfirmed?this.video.muted?'PC audio ready · tap Unmute to hear it.':this.state==='live'?'Listening to PC audio on this phone.':'Audio stream waiting for playback…':this.state==='unavailable'?this.lastMessage||'PC audio unavailable.':this.caps?.audio===false?'PC audio provider unavailable on the host.':!this.client.isConnected?'Connect to your PC to listen.':'Audio off · listening alone does not capture or control the screen.';
+    }
     wrap(data){return this.session&&document.querySelector('#viewRemote.active')&&inputs.has(data.type)?{type:'remote_input',session_id:this.session,revision:this.revision,command:data}:data;}
-    input(command){if(this.mode!=='control'||this.state!=='live')return false;if(command.type==='text'&&this.client.newlineMode==='shift_enter')command={...command,newline_mode:'shift_enter'};return this.client.send({type:'remote_input',session_id:this.session,revision:this.revision,command});}
+    input(command){if(this.mode!=='control'||this.state!=='live')return false;if(command.type==='text'&&command.text?.includes('\n')&&this.client.newlineMode==='shift_enter')command={...command,newline_mode:'shift_enter'};return this.client.send({type:'remote_input',session_id:this.session,revision:this.revision,command});}
     start(mode){
-      if(new URLSearchParams(location.search).get('preview')==='1'&&window.TouchHelmDemo)return window.TouchHelmDemo.setState(mode==='control'?'remote_control':'remote_view');
+      if(new URLSearchParams(location.search).get('preview')==='1'&&window.TouchHelmDemo)return window.TouchHelmDemo.setState(mode==='audio'?'remote_audio':mode==='control'?'remote_control':'remote_view');
       if(!this.client.isConnected)return this.status('Connect to your PC first.');
       if(!window.isSecureContext||location.protocol!=='https:')return this.status('Choose trusted HTTPS in desktop Pairing before starting Remote.');
       if(!window.RTCPeerConnection)return this.status('WebRTC is unavailable in this browser. Use current Android Chrome.');
+      if(this.session){
+        if((this.mode==='audio')!==(mode==='audio')){this.restartMode=mode;this.restartAudio=this.audioConfirmed;this.client.send({type:'remote_stop',session_id:this.session});this.reset('stopped','Switching stream mode…');return;}
+        return this.configure();
+      }
+      if(mode==='audio')this.audioRequested=true;
       this.selectedMode=mode;this.mode=mode;this.state='connecting';$('remoteMode').value=mode;this.status('Starting desktop stream…');this.render();
-      this.client.send({type:'remote_start',mode,quality:$('remoteQuality').value,display_id:$('remoteMonitor').value||undefined,audio:$('remoteAudio').checked});
+      this.client.send({type:'remote_start',mode,quality:$('remoteQuality').value,display_id:mode==='audio'?undefined:$('remoteMonitor').value||undefined,audio:this.audioRequested});
     }
     async connect(){
       const session=this.session;
       this.pc=new RTCPeerConnection({iceServers:[]});const pc=this.pc;
-      pc.addTransceiver('video',{direction:'recvonly'});pc.addTransceiver('audio',{direction:'recvonly'});
+      if(this.mode!=='audio')pc.addTransceiver('video',{direction:'recvonly'});pc.addTransceiver('audio',{direction:'recvonly'});
       this.stream=new MediaStream();this.video.srcObject=this.stream;
-      pc.ontrack=event=>{if(this.pc!==pc)return;this.stream.addTrack(event.track);this.video.muted=true;this.video.play().catch(()=>{$('remoteUnmute').hidden=false;$('remoteUnmute').textContent=$('remoteAudio').checked?'Unmute':'Play video';});};
+      pc.ontrack=event=>{if(this.pc!==pc)return;this.stream.addTrack(event.track);this.video.play().catch(()=>{});this.syncAudioControls();};
       pc.onconnectionstatechange=()=>{if(this.pc!==pc)return;if(['disconnected','failed'].includes(pc.connectionState)){this.state='reconnecting';this.status('Media connection interrupted. Waiting for a fresh frame…');this.render();}};
       try{
         await pc.setLocalDescription(await pc.createOffer());
@@ -110,7 +149,7 @@
         if(!this.session)this.status(!msg.enabled?'Enable Remote screen access and a PIN in desktop Settings.':!msg.secure?'Use trusted HTTPS from desktop Pairing.':msg.message);
         $('remoteAudio').disabled=!msg.audio;this.render();return;
       }
-      if(msg.success===false){if(this.state==='connecting'&&!this.session)this.state='unavailable';this.status(msg.message||'Remote request failed.');this.render();return;}
+      if(msg.success===false){this.restartMode=null;this.audioPending=false;this.audioRequested=this.audioConfirmed;if(this.state==='connecting')this.state=this.session?this.serverState||'reconnecting':'unavailable';this.status(msg.message||'Remote request failed.');this.render();return;}
       if(msg.type==='remote_answer'){
         if(msg.session_id!==this.session||!this.pc)return;
         try{await this.pc.setRemoteDescription({type:'answer',sdp:msg.sdp});}catch(error){this.stop();this.status(`Media negotiation: ${error.message}`);}return;
@@ -118,7 +157,9 @@
       if(msg.type!=='remote_state')return;
       if(!msg.session_id){
         if(msg.device){if(!this.session)this.status(`Remote is in use by ${msg.device}. Stop it on the desktop first.`);return;}
-        this.reset(msg.state||'stopped',msg.message);return;
+        this.reset(msg.state||'stopped',msg.message);
+        if(msg.success&&msg.request==='remote_stop'&&this.restartMode){const mode=this.restartMode;this.restartMode=null;this.audioRequested=this.restartAudio;this.start(mode);}
+        return;
       }
       if(this.session&&this.session!==msg.session_id)return;
       this.session=msg.session_id;this.revision=msg.revision;this.mode=msg.mode;this.serverState=msg.state;
@@ -126,37 +167,40 @@
       this.state=msg.state==='live'?'connecting':msg.state;
       this.geometry=msg.display?.rect;$('remoteMode').value=msg.mode;$('remoteQuality').value=msg.quality;
       if(msg.display)$('remoteMonitor').value=msg.display.id;
-      $('remoteAudio').checked=!!msg.audio;$('remoteUnmute').hidden=!msg.audio;
-      $('remoteUnmute').textContent=msg.audio?'Unmute':'Play video';
+      this.audioConfirmed=!!msg.audio;
+      if(msg.success){this.audioPending=false;this.audioRequested=this.audioConfirmed;}
       if(!msg.audio)this.video.muted=true;
       this.status(msg.message);this.render();
     }
     configure(){
       if(!this.session)return;
       this.cancelGesture();this.client.controls?.releaseKeys();this.state='connecting';this.render();
-      this.client.send({type:'remote_config',session_id:this.session,mode:$('remoteMode').value,display_id:$('remoteMonitor').value,quality:$('remoteQuality').value,audio:$('remoteAudio').checked});
+      this.client.send({type:'remote_config',session_id:this.session,mode:this.mode==='audio'?'audio':$('remoteMode').value,display_id:this.mode==='audio'?undefined:$('remoteMonitor').value,quality:$('remoteQuality').value,audio:this.audioRequested});
     }
-    stop(){this.cancelGesture();this.client.controls?.releaseKeys();this.client.send({type:'remote_stop',session_id:this.session||undefined});this.reset('stopped','Remote stopped.');}
-    pause(message){this.cancelGesture();this.client.controls?.releaseKeys();this.client.send({type:'remote_pause',session_id:this.session||undefined});this.reset('paused',message);}
+    stop(){this.restartMode=null;this.cancelGesture();this.client.controls?.releaseKeys();this.client.send({type:'remote_stop',session_id:this.session||undefined});this.reset('stopped','Remote stopped.');}
+    pause(message){this.restartMode=null;this.cancelGesture();this.client.controls?.releaseKeys();this.client.send({type:'remote_pause',session_id:this.session||undefined});this.reset('paused',message);}
     reset(state,message){
+      if(document.fullscreenElement===this.stage)document.exitFullscreen?.().catch(()=>{});
       this.cancelGesture();this.client.controls?.releaseKeys();this.session='';this.revision='';this.serverState='stopped';
       const pc=this.pc;this.pc=null;if(pc){pc.ontrack=pc.onconnectionstatechange=null;pc.close();}
-      this.stream?.getTracks().forEach(t=>t.stop());this.stream=null;this.video.srcObject=null;
-      this.cursor=null;$('remoteCursor').hidden=true;
+      this.stream?.getTracks().forEach(t=>t.stop());this.stream=null;this.video.srcObject=null;this.video.muted=true;this.previousAudio=0;
+      this.cursor=null;$('remoteCursor').setAttribute('hidden','');
+      this.audioConfirmed=false;this.audioRequested=false;this.audioPending=false;
       this.state=state;this.status(message||'Remote stopped.');this.render();
     }
     render(){
-      const active=!!this.session||this.state==='connecting';$('remoteWelcome').hidden=active;$('remoteViewer').hidden=!active;
+      const active=!!this.session||this.state==='connecting',audioOnly=active&&this.mode==='audio';$('remoteWelcome').hidden=active&&!audioOnly;$('remoteViewer').hidden=!active||audioOnly;$('remoteAudioOnly').hidden=!audioOnly;
       $('remoteResume').hidden=!['paused','disconnected'].includes(this.state);$('remoteState').textContent=this.state[0].toUpperCase()+this.state.slice(1);
       $('remoteStage').dataset.state=this.state;
       for(const id of ['remoteLeft','remoteRight','remoteDrag','remoteTextSend','remoteEnter','remoteChordSend','remoteRelease'])$(id).disabled=this.state!=='live'||this.mode!=='control';
       for(const button of $('remoteKeys').querySelectorAll('button'))button.disabled=this.state!=='live'||this.mode!=='control';
-      $('remoteTyping').hidden=this.mode!=='control';window.TouchHelmEffects?.suspend(active);
+      $('remoteTyping').hidden=this.mode!=='control';window.TouchHelmEffects?.suspend(active&&!audioOnly&&!!document.querySelector('#viewRemote.active'));
+      this.syncAudioControls();
       this.renderCursor();
     }
     transform(){this.video.style.transform=`translate(${this.panX}px,${this.panY}px) scale(${this.scale})`;this.renderCursor();}
     renderCursor(){
-      const marker=$('remoteCursor'),c=this.cursor;marker.hidden=!c?.visible||this.state!=='live';if(marker.hidden)return;
+      const marker=$('remoteCursor'),c=this.cursor,visible=!!c?.visible&&this.state==='live';marker.toggleAttribute('hidden',!visible);if(!visible)return;
       const r=this.stage.getBoundingClientRect(),width=this.video.videoWidth||this.geometry?.width,height=this.video.videoHeight||this.geometry?.height;
       if(!width||!height)return;
       const fit=Math.min(r.width/width,r.height/height),w=width*fit*this.scale,h=height*fit*this.scale;
@@ -164,6 +208,7 @@
     }
     point(event){return mapPoint({box:this.stage.getBoundingClientRect(),width:this.video.videoWidth||this.geometry?.width,height:this.video.videoHeight||this.geometry?.height,scale:this.scale,panX:this.panX,panY:this.panY},event.clientX,event.clientY);}
     pointer(type,event){
+      if(event.target.closest('button,input,select'))return;
       if(type==='pointercancel'||type==='lostpointercapture'){if(this.points.has(event.pointerId))this.cancelGesture();return;}
       if(this.state!=='live')return;
       if(type==='pointerdown'){
@@ -205,9 +250,18 @@
       try{
         const stats=await pc.getStats();if(pc!==this.pc)return;
         for(const stat of stats.values()){
+          if(stat.type==='inbound-rtp'&&stat.kind==='audio'&&this.mode==='audio'){
+            const count=stat.packetsReceived||0;
+            if(count>this.previousAudio){this.lastFrame=performance.now();if(this.serverState==='live'&&this.state!=='live'){this.state='live';this.status('PC audio connected · screen capture off.');this.render();}}
+            this.previousAudio=count;
+          }
           if(stat.type==='inbound-rtp'&&stat.kind==='video'){
             const count=stat.framesDecoded||0,frames=count-this.previousFrames;this.previousFrames=count;
-            if(frames>0){this.lastFrame=performance.now();if(this.serverState==='live'&&this.state!=='live'){this.state='live';this.status('Desktop stream connected.');this.render();}}
+            const packets=stat.packetsReceived||0,received=packets>(this.previousVideoPackets||0);this.previousVideoPackets=packets;
+            // Hidden video may stop decoding on mobile. Network receipt keeps
+            // the off-tab stream alive; the visible viewer requires fresh frames.
+            const offTab=!document.querySelector('#viewRemote.active');
+            if(frames>0||offTab&&received){this.lastFrame=performance.now();if(this.serverState==='live'&&this.state!=='live'){this.state='live';this.status('Desktop stream connected.');this.render();}}
             $('remoteStats').textContent=`${Math.max(0,frames)} fps · ${stat.frameWidth||this.video.videoWidth} × ${stat.frameHeight||this.video.videoHeight}`;
             // Low capture FPS is not evidence of network congestion. Keep the
             // selected resolution; WebRTC adjusts bitrate using receiver feedback.

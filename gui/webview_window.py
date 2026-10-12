@@ -261,6 +261,11 @@ class DesktopAPI:
         self._app.wireless_display.install()
         return {'success':True,'setup':self._app.wireless_display.snapshot()}
 
+    def prepare_trusted_pairing(self, token):
+        self._authorize(token)
+        self._app.trusted_setup.start()
+        return {'success':True,'setup':self._app.trusted_setup.snapshot()}
+
     def generate_password(self, token):
         self._authorize(token)
         from server.config import random_password
@@ -290,6 +295,8 @@ class WebViewDesktopApp:
         self.preference_path = Path(preference_path) if preference_path is not None else private_storage_root() / 'desktop-preferences.json'
         from server.wireless_display import WirelessDisplaySetup
         self.wireless_display=WirelessDisplaySetup(private_storage_root()/'wireless-display')
+        from server.trusted_setup import TrustedPairingSetup
+        self.trusted_setup=TrustedPairingSetup(self)
 
     def _submit(self, coroutine):
         if self.server_loop is None or self.server_loop.is_closed() or not self.server_loop.is_running():
@@ -365,7 +372,7 @@ class WebViewDesktopApp:
         return {'config': self.config.public_data(), 'pin_code': self.config.get('pin_code', '')
                     if self.config.get('require_pin', False) else '',
                 'devices': devices, 'activity': activity, 'pairing': self._pairing(),
-                'remote': self.server.remote.snapshot(), 'wireless_display':self.wireless_display.snapshot(),
+                'remote': self.server.remote.snapshot(), 'wireless_display':self.wireless_display.snapshot(), 'trusted_setup':self.trusted_setup.snapshot(),
                 'preferences': self._preferences(),
                 'diagnostics': {'engine': 'EdgeChromium / WebView2', 'python': platform.python_version(),
                     'build': self.build_id, 'source': str(ROOT), 'host': self.primary_ip,

@@ -47,5 +47,9 @@
 :root[data-contrast="increased"] .th-effects-stage { opacity:.3; }
 @media(forced-colors:active) { .th-effects-stage { display:none; } }
 @media(prefers-reduced-motion:reduce) { .th-effects-stage * { animation:none!important; transition:none!important; } }
+.th-glass-edge{fill:none;stroke:var(--th-accent);stroke-width:2;opacity:.65}.th-glass-droplet{fill:var(--th-panel);stroke:var(--th-accent);stroke-width:1;opacity:.65}.th-soft-contour{fill:none;stroke:var(--th-accent);stroke-width:2;opacity:.6}.th-ink-stroke{fill:none;stroke:var(--th-text);stroke-width:2;stroke-linecap:round}.th-ink-dot{fill:var(--th-accent)}
+:root[data-theme="bloom"]{--th-art:none}:root[data-theme="companion"]{--th-art:none}
+:root:is([data-theme="bloom"],[data-theme="companion"]) .touch-surface::before{background:radial-gradient(ellipse at var(--th-touch-x,30%) var(--th-touch-y,70%),color-mix(in srgb,var(--th-accent) 15%,transparent),transparent 65%);opacity:.8}
+:root:is([data-theme="bloom"],[data-theme="companion"]) :is(.desktop-context,.pairing-panel)::after{background:none}
 .th-effect-bloom.th-effect-idle .th-stem { stroke-dasharray:1; animation:th-vine-grow 1100ms steps(30,end) both; }
 @keyframes th-vine-grow { from { stroke-dashoffset:1; } to { stroke-dashoffset:0; } }

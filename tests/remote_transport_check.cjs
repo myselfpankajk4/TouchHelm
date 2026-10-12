@@ -49,6 +49,12 @@ const ready=new Promise((resolve,reject)=>{
     const stats=await touchhelm.remote.pc.getStats();return [...stats.values()].filter(s=>s.type==='inbound-rtp'&&s.kind==='audio').reduce((n,s)=>n+(s.packetsReceived||0),0);
   });
   assert.ok(receivedAudio>0,'browser received Opus audio packets');console.log('AUDIO PACKETS',receivedAudio);
+  await page.locator('#tabMedia').click();
+  await page.locator('#mediaPcAudio').uncheck();
+  await page.waitForFunction(()=>touchhelm.remote.state==='live'&&!touchhelm.remote.audioConfirmed);
+  assert.equal(await page.locator('#remoteAudio').isChecked(),false);
+  assert.equal(await page.evaluate(()=>remoteVideo.srcObject.getVideoTracks().length),1,'muting PC audio preserves video');
+  await page.locator('#tabRemote').click();
   }
   await page.locator('#remoteQuality').selectOption('saver');
   await page.waitForFunction(()=>touchhelm.remote.state==='live'&&remoteVideo.videoHeight<=540,null,{timeout:10000});
@@ -57,11 +63,21 @@ const ready=new Promise((resolve,reject)=>{
   await page.locator('#remoteLeft').click();
   if(!process.argv.includes('--stop-only')){
   await page.locator('#tabTrackpad').click();
-  await page.waitForTimeout(1500);
+  await page.waitForTimeout(18000);
   assert.equal(await page.evaluate(()=>touchhelm.isConnected),true,'main connection survives leaving Remote');
   assert.ok(await page.evaluate(()=>touchhelm.remote.session),'Remote stream survives tab switching');
   await page.locator('#tabRemote').click();
   }
+  await page.locator('#remoteStop').click();
+  await page.waitForTimeout(1500);
+  await page.locator('#tabMedia').click();
+  await page.locator('#mediaPcAudio').check();
+  await page.waitForFunction(()=>touchhelm.remote.state==='live'&&touchhelm.remote.mode==='audio',null,{timeout:30000});
+  const audioOnly=await page.evaluate(async()=>({width:remoteVideo.videoWidth,videoTracks:remoteVideo.srcObject.getVideoTracks().length,audioTracks:remoteVideo.srcObject.getAudioTracks().length,synced:remoteAudio.checked&&mediaPcAudio.checked,packets:[...await touchhelm.remote.pc.getStats()].map(([,s])=>s).filter(s=>s.type==='inbound-rtp'&&s.kind==='audio').reduce((n,s)=>n+(s.packetsReceived||0),0)}));
+  assert.equal(audioOnly.videoTracks,0);assert.equal(audioOnly.audioTracks,1);assert.equal(audioOnly.synced,true);assert.ok(audioOnly.packets>0);console.log('AUDIO ONLY',JSON.stringify(audioOnly));
+  await page.locator('#tabRemote').click();
+  await page.locator('[data-remote-mode="view"]').click();
+  await page.waitForFunction(()=>touchhelm.remote.state==='live'&&touchhelm.remote.mode==='view'&&remoteVideo.videoWidth>0,null,{timeout:30000});
   await page.locator('#remoteStop').click();
   await page.waitForTimeout(1500);
   for(let i=0;i<12;i++){

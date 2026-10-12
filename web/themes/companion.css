@@ -9,7 +9,7 @@
   --th-text:#f6efff; --th-muted:#d1bfe7; --th-accent:#cfbbff; --th-on-accent:#2b1b47;
   --th-border:#9581b4; --th-danger:#ffadd0; --th-success:#9be2d1;
 }
-:root[data-theme="companion"] { --th-radius:19px; --th-key-radius:13px; --th-pad-radius:28px; --th-shadow:0 5px 16px #4a34731c; --th-art:url('./assets/companion-face.webp'); }
+:root[data-theme="companion"] { --th-radius:19px; --th-key-radius:13px; --th-pad-radius:28px; --th-shadow:0 5px 16px #4a34731c; --th-art:none; }
 :root[data-theme="companion"] .touch-surface { border-color:var(--th-border); background:var(--th-surface); }
 :root[data-theme="companion"] .touch-surface::before { content:""; position:absolute; width:148px; height:148px; right:calc(50% - 74px); bottom:12%; background:var(--th-art) center/contain no-repeat; opacity:.92; transform:rotate(-7deg); }
 :root[data-theme="companion"][data-connected="true"] .touch-surface::before { animation:th-companion-nod 7s ease-in-out infinite; }

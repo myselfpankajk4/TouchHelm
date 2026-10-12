@@ -89,3 +89,39 @@ It passed tab switching, Stop/restart, and 12 consecutive paired page refreshes.
 These are short local samples, not guaranteed frame rates or Android performance.
 Trusted Android/Tailscale endurance and actual Miracast/Windows installation remain
 unverified on physical devices.
+
+## Shared audio and procedural-theme follow-up — 13 October 2026
+
+- Media and Remote share requested/pending/confirmed PC-audio state. Audio-only
+  mode creates no monitor capture, video track or input lease. Switching to screen
+  viewing cleanly replaces it. Disabling audio while viewing preserves video.
+  Missing/failed audio rolls both toggles back.
+- Fullscreen requests landscape after entering fullscreen and releases orientation
+  on exit. Unsupported browsers show manual rotation guidance; exit/Stop remain
+  over the video. Cursor visibility removes the SVG `hidden` attribute explicitly.
+- Phone text defaults to Shift+Enter for multiline Live typing; two phone Return
+  presses preserve the draft. Ordinary PC Enter remains explicit/selectable.
+- New PINs are four ASCII digits, including leading zeroes. Previously configured
+  passwords stay compatible; wrong-guess backoff is preserved.
+- All seven existing themes generate bounded SVG/CSS/JavaScript effects. Botanical
+  and robot bitmap backdrops are unused; logos and real app/media artwork remain.
+  Scenes use randomized motion, touch proximity, growth, eye tracking and material
+  reactions with reduced motion and Rich/Calm/Off support.
+- Desktop Set up trusted pairing installs missing PC providers/Tailscale, enables
+  a PIN, creates private HTTPS and enables screen/audio access after success.
+  Signed-out/unavailable states stay honest. Setup preserves theme preferences,
+  saves the selected origin, and adds no public endpoint or phone CA certificate.
+- Off-tab video receipt keeps streaming alive if mobile video decoding pauses.
+  The visible viewer still requires fresh decoded frames for Live.
+
+Evidence: 228 Python tests; 83 JavaScript tests (one optional skipped); 59 browser
+interactions; seven-theme appearance/viewport matrix passed. Real local Chrome
+received 1080p/1440p video and audio-only playback with zero video tracks. Shared
+audio-off preserved video; audio-only → screen, 18 seconds off-tab, Stop/restart
+and 12 paired refreshes passed. Native input was mocked; no personal screen footage
+was saved. Short local samples reached 12fps, not an Android performance guarantee.
+
+Physical Android orientation, destination-app double-Return behavior, listening,
+theme performance, Tailscale sign-in/endurance and real installer acceptance remain
+unperformed. Browser-only private-LAN trust requires domain/certificate provisioning
+infrastructure; reserved IP/internal-name certificates cannot be publicly trusted.

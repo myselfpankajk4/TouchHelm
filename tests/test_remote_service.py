@@ -6,6 +6,16 @@ from server.remote_service import RemoteService, absolute_point, private_sdp
 
 
 class RemoteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_audio_only_does_not_enumerate_or_capture_a_monitor(self):
+        self.service.capabilities=lambda:{'video':False,'audio':True}
+        result=await self.service.request(self.client,{'type':'remote_start','mode':'audio','audio':True},True)
+        self.assertTrue(result['success'])
+        self.service.displays.assert_not_awaited()
+        self.worker.start.assert_awaited_once_with(None,'balanced',True)
+        self.assertIsNone(result['display'])
+        self.service.state='live'
+        self.assertFalse(self.service.accept_input(self.client,{'session_id':self.service.session_id,'revision':self.service.revision}))
+
     def setUp(self):
         self.config = {'remote_enabled': True, 'require_pin': True}
         self.client = SimpleNamespace(authenticated=True, ws=SimpleNamespace(closed=False), device_name='Phone')

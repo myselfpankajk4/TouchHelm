@@ -5,6 +5,7 @@
   const preview = new URL(location.href).searchParams.get('preview') === '1' || !!window.__TOUCHHELM_DESKTOP_PREVIEW__;
   let state = null, busy = false, dirty = false, preferencesLoaded = false, deviceStamp = '', activityStamp = '', connectionMode = 'http', preferenceSave = Promise.resolve(), preferenceRevision = 0, tailscaleChecked = 0, tailscaleBusy = false;
   const fixture = () => ({preview:true,config:{mouse_sensitivity:1.3,mouse_acceleration:1.25,scroll_speed:1,invert_scroll:false,require_pin:true,laser_color:'blue'},pin_code:'5678',devices:[{device:'Android phone',ip:'192.168.1.40',authenticated:true,ping:12},{device:'Tablet',ip:'192.168.1.41',authenticated:false,ping:0}],activity:['[10:40:12] Android phone: Connected','[10:40:15] Android phone: Pointer moved'],pairing:{http_url:'http://192.168.1.25:8765/',https_url:null,secure_ready:false,qr:null,certificate:{},setup_url:'http://192.168.1.25:8765/pairing'},preferences:{theme:'glass',appearance:'dark',motion:'system',contrast:'system'},diagnostics:{engine:'EdgeChromium / WebView2',python:'Preview',build:'Sample build',source:'Sample workspace',host:'192.168.1.25',http_port:8765,https_port:8766,certificate_trust:'Manual installation only'}});
+  let trustedSetupApplied=false;
   function message(text,kind='error'){$('feedback').textContent=text;$('feedback').dataset.kind=kind;$('feedback').hidden=!text;if(text)window.TouchHelmEffects?.react($('feedback'),{kind});}
   async function invoke(method,...args){
     if(preview){if(method==='get_state')return state||fixture();if(method==='save_settings'){state.config={...state.config,...args[0]};state.pin_code=args[0].pin_code;return {success:true,config:state.config};}if(method==='save_preferences')return {success:true};return {success:false,error:'Native commands are disabled in the interface preview.'};}
@@ -25,6 +26,12 @@
     finally{$('saveSettings').disabled=false;}
   });
   function render(next){
+    const trusted=next.trusted_setup||{state:'idle',message:'Set up private HTTPS without downloading a phone certificate. Tailscale sign-in is required on both devices.'};
+    const trustedMessage=trusted.state==='ready'&&next.pairing?.tailscale?.ready===false?next.pairing.tailscale.message:trusted.message;
+    if($('trustedSetupStatus').textContent!==trustedMessage)$('trustedSetupStatus').textContent=trustedMessage;
+    $('prepareTrustedPairing').disabled=['checking','installing','configuring'].includes(trusted.state);
+    $('trustedSetupProgress').hidden=!['checking','installing','configuring'].includes(trusted.state);
+    if(trusted.state==='ready'&&!trustedSetupApplied){trustedSetupApplied=true;connectionMode='tailscale';preferencesLoaded=true;}
     const setup=next.wireless_display||{state:'unknown',progress:null,message:'First-time setup may take a few minutes. Install the Windows receiver here.'};
     $('wirelessDisplayStatus').textContent=setup.message;
     const installing=['checking','permission','installing'].includes(setup.state);
@@ -33,7 +40,7 @@
     $('installWirelessDisplay').disabled=installing||setup.state==='installed';
     $('installWirelessDisplay').textContent=setup.state==='installed'?'Installed':setup.state==='permission'?'Waiting for Windows approval…':setup.state==='installing'?'Installing…':'Install Wireless Display';
     const remote=next.remote||{state:'stopped'};
-    $('desktopRemoteStatus').textContent=remote.device?`${remote.device} · ${remote.mode==='control'?'Control PC':'View PC'} · ${remote.display?.name||remote.display?.id||'Monitor'} · ${remote.state} · Audio ${remote.audio?'on':'off'}`:remote.message||'No remote session.';
+    $('desktopRemoteStatus').textContent=remote.device?`${remote.device} · ${remote.mode==='audio'?'Listen to PC audio':remote.mode==='control'?'Control PC':'View PC'} · ${remote.mode==='audio'?'No screen captured':remote.display?.name||remote.display?.id||'Monitor'} · ${remote.state} · Audio ${remote.audio?'on':'off'}`:remote.message||'No remote session.';
     $('desktopStopRemote').disabled=!remote.device;
     $('desktopRemoteBanner').hidden=!remote.device;
     $('desktopRemoteBannerText').textContent=$('desktopRemoteStatus').textContent;
@@ -76,6 +83,7 @@
   $('installWirelessDisplay').addEventListener('click',async()=>{try{const result=await invoke('install_wireless_display');if(!result.success)throw new Error(result.error);await poll();}catch(error){message(error.message);}});
   $('generatePassword').addEventListener('click',async()=>{try{const result=await invoke('generate_password');if(!result.success)throw new Error(result.error);state.pin_code=result.password;state.config={...state.config,...result.config};$('pinInput').value=result.password;$('requirePIN').checked=true;labels();message('New pairing password saved. Pair connected phones again.','success');await poll();}catch(error){message(error.message);}});
   $('remoteEnabled').addEventListener('change',()=>{if($('remoteEnabled').checked)$('requirePIN').checked=true;labels();});
+  $('prepareTrustedPairing').addEventListener('click',async()=>{try{trustedSetupApplied=false;const result=await invoke('prepare_trusted_pairing');if(!result.success)throw new Error(result.error);await poll();}catch(error){message(error.message);}});
   if(window.TouchHelmThemes)window.TouchHelmThemes.mountPicker($('themePicker'),(id,prefs)=>savePreferences({theme:id,...prefs}));
   if(preview){window.TouchHelmDesktopPreview={setState(name){const value=window.__TOUCHHELM_DESKTOP_PREVIEW__||fixture();state=structuredClone(value);if(name.startsWith('remote_'))state.remote={device:['remote_control','remote_view','remote_connecting'].includes(name)?'Android phone · preview':null,mode:name==='remote_view'?'view':'control',state:name==='remote_connecting'?'connecting':name==='remote_paused'?'paused':name==='remote_unavailable'?'unavailable':'live',display:{name:'Sample monitor'},audio:false};if(name==='disconnected'){state.connection_state='disconnected';state.devices=[];}if(name==='loading'){state.connection_state='loading';state.devices=[];state.activity=['Loading device status…'];}if(name==='unavailable'){state.devices=[];state.activity=['Provider context unavailable. Native connection remains available.'];}if(name.startsWith('tailscale_')){connectionMode='tailscale';state.preferences.connection_mode='tailscale';const ready=name==='tailscale_ready';state.pairing.tailscale={state:ready?'ready':name==='tailscale_permission'?'permission_required':'unavailable',ready,url:ready?'https://sample-pc.example.ts.net:8443/':null,message:ready?'Preview: private HTTPS is ready. Connect the phone to this tailnet and enter the host PIN.':name==='tailscale_permission'?'Preview: your tailnet administrator must enable HTTPS certificates.':'Preview: Tailscale disconnected. Reconnect both devices and check again.'};state.pairing.tailscale_url=state.pairing.tailscale.url;state.pairing.qr_tailscale=ready?state.pairing.preview_trusted_qr:null;}render(state);}};window.addEventListener('touchhelm:preview-state',event=>window.TouchHelmDesktopPreview.setState(event.detail?.state||'ready'));window.TouchHelmDesktopPreview.setState('ready');}
   else{window.addEventListener('pywebviewready',poll);setInterval(()=>{poll();if(connectionMode==='tailscale'&&Date.now()-tailscaleChecked>10000&&!document.hidden)checkTailscale();},1000);if(window.pywebview?.api)poll();}

@@ -11,7 +11,7 @@
   --th-border:#6b886b; --th-danger:#ffafbb; --th-success:#bedfa5;
   --th-shadow:0 6px 18px #0004;
 }
-:root[data-theme="bloom"] { --th-radius:17px; --th-key-radius:12px; --th-pad-radius:25px; --th-art:url('./assets/bloom-forest.webp'); }
+:root[data-theme="bloom"] { --th-radius:17px; --th-key-radius:12px; --th-pad-radius:25px; --th-art:none; }
 :root[data-theme="bloom"] .touch-surface { border-color:var(--th-border); background:var(--th-surface); }
 :root[data-theme="bloom"] .touch-surface::before { content:""; position:absolute; inset:0; background:var(--th-art) center bottom/100% auto no-repeat; opacity:.9; }
 :root[data-theme="bloom"] .touch-surface::after { content:""; position:absolute; width:5px; height:5px; bottom:19%; left:17%; border-radius:50%; background:#fffbd2; box-shadow:0 2px 8px 3px #f8ed9c66; animation:th-bloom-light 5s ease-in-out infinite; }

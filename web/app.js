@@ -749,7 +749,7 @@ class TouchHelmClient {
     if (data.type === "media" && this.selectedMediaSession && !data.session_id) {
       data = { ...data, session_id: this.selectedMediaSession };
     }
-    if (data.type === 'text' && this.newlineMode === 'shift_enter') data = {...data,newline_mode:'shift_enter'};
+    if (data.type === 'text' && data.text?.includes('\n') && this.newlineMode === 'shift_enter') data = {...data,newline_mode:'shift_enter'};
     if (data.type === 'laser' && (this.presentationDisplay||this.autoPresentationDisplay)) data = {...data,display_id:this.presentationDisplay||this.autoPresentationDisplay};
     data = this.remote?.wrap(data) || data;
     try { this.ws.send(JSON.stringify(data)); return true; } catch (e) { return false; }
@@ -2141,6 +2141,7 @@ class TouchHelmClient {
   }
 
   async toggleFullscreen() {
+    if(this.remote?.session&&this.remote.mode!=='audio'&&document.querySelector('#viewRemote.active'))return this.remote.fullscreen();
     this.vibrate(15);
     const action = document.fullscreenElement
       ? document.exitFullscreen?.bind(document)

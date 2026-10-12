@@ -1,7 +1,7 @@
 import tempfile
 import unittest
 from pathlib import Path
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 from server.wireless_display import WirelessDisplaySetup, progress_percent
 from server.config import ConfigManager
 
@@ -27,9 +27,11 @@ class WirelessDisplayTests(unittest.TestCase):
 
     def test_generated_password_is_unique_valid_and_legacy_pin_still_works(self):
         with tempfile.TemporaryDirectory() as folder:
-            a=ConfigManager(str(Path(folder)/'a.json'));b=ConfigManager(str(Path(folder)/'b.json'))
-            self.assertNotEqual(a.get('pin_code'),b.get('pin_code'))
-            self.assertGreaterEqual(len(a.get('pin_code')),12)
+            with patch('server.config.secrets.randbelow',side_effect=[12,34]):
+                a=ConfigManager(str(Path(folder)/'a.json'));b=ConfigManager(str(Path(folder)/'b.json'))
+            self.assertEqual(a.get('pin_code'),'0012');self.assertEqual(b.get('pin_code'),'0034')
+            self.assertEqual(len(a.get('pin_code')),4)
+            self.assertTrue(a.get('pin_code').isascii() and a.get('pin_code').isdigit())
             self.assertTrue(a._valid_pin(a.get('pin_code')))
             self.assertTrue(a._valid_pin('5678'))
             a.save();self.assertEqual(ConfigManager(a.file_path).get('pin_code'),a.get('pin_code'))

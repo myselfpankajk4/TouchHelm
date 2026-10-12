@@ -127,7 +127,7 @@ test('v2 Return writes a local newline and Ctrl Enter explicitly sends a buffere
   assert.equal(await page.locator('#typeInput').inputValue(), 'first\na');
   assert.deepEqual(await packets(page), []);
   await page.locator('#typeInput').press('Control+Enter');
-  assert.deepEqual(await packets(page), [{type:'text',text:'first\na'}]);
+  assert.deepEqual(await packets(page), [{type:'text',text:'first\na',newline_mode:'shift_enter'}]);
 });
 
 test('v2 first pad contact dismisses the composer and preserves its draft without PC input', async page => {
@@ -1075,6 +1075,76 @@ async function fakeRemote(page,mode='control'){
     __packets.length=0;
   },mode);
 }
+
+test('Remote cursor removes the SVG hidden attribute for measured live positions',async page=>{
+  await fakeRemote(page);
+  await page.evaluate(()=>touchhelm.remote.handle({type:'remote_cursor',session_id:'fixture',revision:'geometry1',visible:true,x:.5,y:.5}));
+  assert.ok(await page.locator('#remoteCursor').isVisible());
+  await page.evaluate(()=>touchhelm.remote.handle({type:'remote_cursor',session_id:'fixture',revision:'geometry1',visible:false}));
+  assert.equal(await page.locator('#remoteCursor').isVisible(),false);
+});
+
+test('Media and Remote share pending audio state and rollback failures',async page=>{
+  await fakeRemote(page);
+  await page.evaluate(()=>{touchhelm.remote.audioConfirmed=false;touchhelm.remote.caps={audio:true};touchhelm.remote.render();});
+  await page.locator('#tabMedia').click();
+  await page.locator('#mediaPcAudio').check();
+  assert.equal(await page.locator('#remoteAudio').isChecked(),true);
+  assert.equal(await page.locator('#remoteAudio').isDisabled(),true);
+  const request=await page.evaluate(()=>__packets.find(p=>p.type==='remote_config'));
+  assert.equal(request.audio,true);assert.equal(request.session_id,'fixture');
+  await page.evaluate(()=>touchhelm.remote.handle({type:'remote_result',success:false,request:'remote_config',message:'Audio device unavailable'}));
+  assert.equal(await page.locator('#mediaPcAudio').isChecked(),false);
+  assert.equal(await page.locator('#remoteAudio').isChecked(),false);
+});
+
+test('Hidden viewer stays connected on incoming packets when mobile stops decoding',async page=>{
+  await fakeRemote(page);
+  await page.locator('#tabMedia').click();
+  await page.evaluate(async()=>{
+    const r=touchhelm.remote;r.lastFrame=performance.now()-20000;r.previousFrames=0;r.previousVideoPackets=0;
+    r.pc={connectionState:'connected',getStats:async()=>new Map([['video',{type:'inbound-rtp',kind:'video',framesDecoded:0,packetsReceived:40}]]),close(){}};
+    await r.tick();
+  });
+  assert.equal(await page.evaluate(()=>touchhelm.remote.session),'fixture');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.type==='remote_pause').length),0);
+});
+
+test('Remote fullscreen requests landscape and unlocks orientation on exit',async page=>{
+  await fakeRemote(page);
+  await page.evaluate(()=>{
+    window.__rotations=[];
+    Object.defineProperty(document,'fullscreenElement',{configurable:true,get:()=>window.__fullscreenNode||null});
+    remoteStage.requestFullscreen=async()=>{window.__fullscreenNode=remoteStage;document.dispatchEvent(new Event('fullscreenchange'));};
+    document.exitFullscreen=async()=>{window.__fullscreenNode=null;document.dispatchEvent(new Event('fullscreenchange'));};
+    Object.defineProperty(screen.orientation,'lock',{configurable:true,value:async value=>__rotations.push(value)});
+    Object.defineProperty(screen.orientation,'unlock',{configurable:true,value:()=>__rotations.push('unlock')});
+  });
+  await page.locator('#remoteFullscreen').click();
+  assert.deepEqual(await page.evaluate(()=>__rotations),['landscape']);
+  await page.evaluate(()=>touchhelm.remote.fullscreen());
+  assert.deepEqual(await page.evaluate(()=>__rotations),['landscape','unlock']);
+});
+
+test('Phone Return twice remains a draft and uses safe PC line breaks',async page=>{
+  await page.locator('#typeInput').focus();
+  await input(page,'Two lines','insertText','Two lines');
+  await page.locator('#typeInput').press('Enter');await page.locator('#typeInput').press('Enter');
+  assert.equal(await page.locator('#typeInput').inputValue(),'Two lines\n\n');
+  const packets=await page.evaluate(()=>__packets);
+  assert.equal(packets.filter(p=>p.type==='key'&&p.key==='enter').length,0);
+  assert.ok(packets.filter(p=>p.type==='text'&&p.text.includes('\n')).every(p=>p.newline_mode==='shift_enter'));
+});
+
+test('Existing seven themes generate bounded procedural reactions without background photos',async page=>{
+  for(const theme of ['bloom','companion','resonance','clay','glass','soft','ink']){
+    await page.evaluate(async theme=>{touchhelm.switchView('viewTrackpad');TouchHelmThemes.apply(theme,{appearance:'dark',effects:'rich',motion:'full'},false);await TouchHelmThemes.ready;TouchHelmEffects.reset();},theme);
+    await page.waitForFunction(theme=>TouchHelmEffects.diagnostics.theme===theme,theme);
+    assert.equal(await page.evaluate(()=>TouchHelmEffects.react(document.querySelector('#btnLeftClick'),{kind:'press'})),true);
+    const info=await page.evaluate(()=>({count:document.querySelectorAll('.th-effect:not([hidden])').length,procedural:TouchHelmEffects.diagnostics.procedural,background:getComputedStyle(touchSurface,'::before').backgroundImage}));
+    assert.ok(info.count>0&&info.count<=8);assert.equal(info.procedural,true);assert.equal(info.background.includes('.webp'),false);
+  }
+});
 
 test('Remote view mode cannot send input and direct coordinates stay scoped',async page=>{
   await fakeRemote(page,'view');

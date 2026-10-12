@@ -10,7 +10,7 @@
       this.client=client;this.controls=client.controls;this.assetUrls=new Map();this.assetRequests=new Map();this.assetGeneration=0;this.pending=false;
       this.playbackClock=new window.TouchHelmMediaClock();
       this.haptics=new window.TouchHelmHaptics(client);client.vibrate=pattern=>this.haptics.pulse(pattern);
-      this.client.newlineMode=stored('touchhelm_newline_mode','enter');if(!['enter','shift_enter'].includes(this.client.newlineMode))this.client.newlineMode='enter';
+      this.client.newlineMode=stored('touchhelm_newline_mode','shift_enter');if(!['enter','shift_enter'].includes(this.client.newlineMode))this.client.newlineMode='shift_enter';
       if(id('newlineMode')) {id('newlineMode').value=this.client.newlineMode;id('newlineMode').addEventListener('change',e=>{client.newlineMode=e.target.value;save('touchhelm_newline_mode',client.newlineMode);});}
       this.client.pinchZoom=stored('touchhelm_pinch',false);
       id('chkPinchZoom').checked=this.client.pinchZoom;

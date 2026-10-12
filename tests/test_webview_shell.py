@@ -14,14 +14,14 @@ class WebViewShellTests(unittest.TestCase):
     def test_wireless_install_and_password_commands_require_owned_desktop(self):
         self.app.wireless_display.install=Mock()
         self.app.window.get_current_url.return_value='https://attacker.invalid/'
-        for method in (self.api.install_wireless_display,self.api.generate_password):
+        for method in (self.api.install_wireless_display,self.api.generate_password,self.api.prepare_trusted_pairing):
             with self.assertRaises(PermissionError):method(self.app.token)
         self.app.wireless_display.install.assert_not_called()
 
     def test_remote_enable_uses_generated_password_without_manual_pin_setup(self):
         result=self.api.save_settings(self.app.token,{'remote_enabled':True})
         self.assertTrue(result['success']);self.assertTrue(self.config.get('require_pin'))
-        self.assertEqual(len(self.config.get('pin_code')),12)
+        self.assertEqual(len(self.config.get('pin_code')),4)
         self.assertNotIn('pin_code',result['config'])
 
     def test_tailscale_commands_restricted_to_owned_desktop_window(self):

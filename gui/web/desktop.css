@@ -5,3 +5,4 @@
 
 .remote-session-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 24px;background:var(--th-panel);border-bottom:1px solid var(--th-border);flex-shrink:0}.remote-session-banner span{overflow-wrap:anywhere}.remote-session-banner button{min-height:44px;background:var(--th-surface);color:var(--th-text);border:1px solid var(--th-border);border-radius:8px;padding:8px 12px}
 #wirelessDisplayProgress{width:100%;height:12px;accent-color:var(--th-accent);margin:8px 0 16px}#wirelessDisplayStatus{max-width:65ch}#pinCode{overflow-wrap:anywhere}
+#trustedSetupProgress{width:100%;height:12px;accent-color:var(--th-accent)}.trusted-quick-setup h2{font-size:18px;line-height:1.35}.trusted-quick-setup p{font-size:13px}

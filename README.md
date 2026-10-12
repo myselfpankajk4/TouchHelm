@@ -19,7 +19,13 @@ Remote now defaults to Clear 1080p, with a 1440p Detail option. Tab switches kee
 the stream; Stop leaves the rest of TouchHelm connected. Pairing survives refreshes
 in the same browser tab. New setups receive a generated password, and desktop
 Settings provides a Windows Wireless Display installer with installation progress
-and Windows administrator approval.
+and Windows administrator approval. Media can stream **PC audio only**, sharing
+its toggle with Remote while leaving screen capture off. Fullscreen requests
+landscape on supported browsers; measured cursor positions appear over the viewer.
+Generated PINs are four numeric digits. Desktop **Set up trusted pairing** prepares
+private HTTPS through Tailscale without a phone certificate download; sign-in on
+the PC and phone is still required. All seven existing themes use procedural
+CSS/JavaScript/SVG effects rather than the former botanical/robot background images.
 
 <img src="docs/images/remote.png" alt="Remote control tab showing a clearly labeled sample desktop" width="300">
 

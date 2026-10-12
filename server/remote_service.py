@@ -108,8 +108,9 @@ class RemoteService:
     @staticmethod
     def _options(data, mode='control', quality='balanced', audio=False):
         mode, quality, audio = data.get('mode',mode), data.get('quality',quality), data.get('audio',audio)
-        if mode not in ('control','view') or quality not in QUALITIES or type(audio) is not bool:
+        if mode not in ('control','view','audio') or quality not in QUALITIES or type(audio) is not bool:
             raise ValueError('Choose a valid remote mode, quality and audio setting.')
+        if mode=='audio':audio=True
         return mode, quality, audio
 
     async def request(self, client, data, secure=False):
@@ -126,8 +127,9 @@ class RemoteService:
             if kind=='remote_start':
                 if self.owner or self._closing: raise ValueError('A remote session is active or still stopping. Wait or stop it on the desktop first.')
                 mode, quality, audio=self._options(data)
-                if not caps.get('video'): raise RuntimeError(caps.get('message','Install remote streaming dependencies on the PC.'))
-                display=await self._monitor(data.get('display_id'))
+                if mode=='audio' and not caps.get('audio'):raise RuntimeError('PC audio streaming is unavailable. Check the desktop audio provider.')
+                if mode!='audio' and not caps.get('video'): raise RuntimeError(caps.get('message','Install remote streaming dependencies on the PC.'))
+                display=None if mode=='audio' else await self._monitor(data.get('display_id'))
                 if not (client.authenticated and not client.ws.closed and self.config.get('remote_enabled') and self.config.get('require_pin')):
                     raise PermissionError('Remote access or pairing changed while monitors were loading.')
                 if self.owner or self._closing: raise ValueError('A remote session is active or still stopping.')
@@ -144,6 +146,7 @@ class RemoteService:
                             if self.notify:self.notify({'type':'remote_cursor','session_id':sid,'revision':self.revision,**message})
                         elif state=='audio_unavailable':
                             self.audio=False; self.message=message; self._publish()
+                            if self.mode=='audio':asyncio.create_task(self.stop(message,'unavailable'))
                         elif state in ('failed','stopped'):
                             asyncio.create_task(self.stop(message,'unavailable'))
                         else:
@@ -162,9 +165,9 @@ class RemoteService:
                     raise
                 self._timeout=loop.call_later(30,lambda:asyncio.create_task(self.stop('WebRTC did not connect. Check Windows Firewall and LAN/tailnet connectivity.','unavailable')) if self.session_id==sid and self.state!='live' else None)
                 self._publish()
-                return {'success':True,**self.snapshot(),'capabilities':caps}
+                return {'success':True,'request':kind,**self.snapshot(),'capabilities':caps}
             if kind in ('remote_stop','remote_pause') and not self.owner:
-                return {'success':True,**self.snapshot()}
+                return {'success':True,'request':kind,**self.snapshot()}
             stopping_own_start=kind in ('remote_stop','remote_pause') and self.owner is client and not data.get('session_id')
             if not self._owned(client,data) and not stopping_own_start: raise PermissionError('Remote session is stale or belongs to another device.')
             sid=self.session_id
@@ -181,11 +184,12 @@ class RemoteService:
             elif kind=='remote_config':
                 if self._configuring: raise ValueError('Remote settings are still being applied.')
                 mode,quality,audio=self._options(data,self.mode,self.quality,self.audio)
+                if (mode=='audio') != (self.mode=='audio'):raise ValueError('Stop the current stream before switching between audio-only and screen access.')
                 audio=audio and bool(caps.get('audio'))
                 self._configuring=True
                 try:
                     previous_state=self.state
-                    display=await self._monitor(data.get('display_id',self.display['id']))
+                    display=None if mode=='audio' else await self._monitor(data.get('display_id',self.display['id']))
                     if self.session_id!=sid: raise ValueError('Session ended while settings were changing.')
                     self.release(client)
                     if mode=='control' and self.mode!='control' and self.before_control:self.before_control()
@@ -202,6 +206,6 @@ class RemoteService:
                     raise
                 finally: self._configuring=False
             else: raise ValueError('Unsupported remote request.')
-            return {'success':True,**self.snapshot()}
+            return {'success':True,'request':kind,**self.snapshot()}
         except Exception as error:
             return {'type':'remote_result','success':False,'request':kind,'message':str(error)[:500]}

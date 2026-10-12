@@ -1,7 +1,7 @@
 /* A passive, device-local scene director. It never reads editable text or sends input. */
 (function(global){
   'use strict';
-  const FAMILIES=new Set(['bloom','companion','resonance','clay']);
+  const FAMILIES=new Set(['bloom','companion','resonance','clay','glass','soft','ink']);
   function createDirector(){
     const slots=Array.from({length:8},(_,id)=>({id,kind:id<2?'idle':'touch',until:0}));
     let state={mode:'rich',reduced:false,hidden:false,active:false},quietUntil=0,lastFrame=-Infinity;
@@ -82,8 +82,20 @@
     path(svg,`M14 ${h-28} Q6 ${h-57} 24 ${h-65} M53 ${h-27} Q54 ${h-43} 70 ${h-36}`,'th-clay-highlight');
     path(svg,`M22 ${h-20} Q32 ${h-13} 41 ${h-26}`,'th-clay-impression');
   }
-  const draw={bloom,companion,resonance,clay};
-  function clearNode(n){for(const a of n.getAnimations())a.cancel();n.hidden=true;n.replaceChildren();}
+  function glass(svg,frame,w,h){
+    path(svg,frame?`M8 ${h-5} Q2 ${h/2} 8 5 H${w-8} Q${w+2} ${h/2} ${w-8} ${h-5}`:`M12 ${h*.8} Q${w*.9} ${h*.6} ${w*.5} 12 Q${w*.2} ${h*.6} 12 ${h*.8}`,'th-glass-edge');
+    for(let i=0;i<3;i++)svgNode('circle',{cx:w*.6+i*6,cy:frame?5:h*.4+i*18,r:frame?2:5+i*2,class:'th-glass-droplet'},svg);
+  }
+  function soft(svg,frame,w,h){
+    svgNode('rect',{x:4,y:4,width:w-8,height:h-8,rx:Math.min(18,h/3),class:'th-soft-contour'},svg);
+    if(!frame)for(let i=0;i<3;i++)svgNode('ellipse',{cx:w*.5,cy:h*.35+i*22,rx:14+i*3,ry:8,class:'th-soft-contour'},svg);
+  }
+  function ink(svg,frame,w,h){
+    path(svg,frame?`M7 ${h-4} H${w-7} M${w-5} ${h-9} V6 H${w*.7}`:`M12 ${h-10} Q${w*.7} ${h*.55} 18 18 M24 ${h-10} Q${w} ${h*.55} 30 18`,'th-ink-stroke');
+    svgNode('circle',{cx:frame?w-5:30,cy:frame?6:18,r:2.5,class:'th-ink-dot'},svg);
+  }
+  const draw={bloom,companion,resonance,clay,glass,soft,ink};
+  function clearNode(n){for(const a of n.getAnimations({subtree:true}))a.cancel();n.hidden=true;n.replaceChildren();}
   function reconcile(){const slots=director.snapshot().slots;for(const slot of slots)if(!slot.until&&!nodes[slot.id].hidden)clearNode(nodes[slot.id]);}
   const visible=el=>{const r=el.getBoundingClientRect();return r.width>20&&r.height>20&&r.top>=0&&r.bottom<=innerHeight&&r.left>=0&&r.right<=innerWidth&&!el.closest('[hidden],dialog:not([open])');};
   function protectedTarget(el){return !el||el.closest(sensitive)||el.matches(':focus-visible')||el.disabled;}
@@ -97,7 +109,7 @@
   function sceneRegion(){
     const hosts=[...doc.querySelectorAll('.touch-surface,.desktop-nav,[data-effects-region]')].filter(visible);
     for(const host of hosts.sort(()=>Math.random()-.5)){
-      const r=host.getBoundingClientRect(),w=Math.min(98,r.width*.29),h=Math.min(150,r.height*.42);
+      const r=host.getBoundingClientRect(),w=Math.min(98,r.width*.19),h=Math.min(195,r.height*.46);
       if(h<65)continue;
       const sides=Math.random()<.5?[false,true]:[true,false];
       for(const right of sides){const box={x:right?r.right-w-28:r.left+14,y:r.bottom-h-18,w,h};if(allowedArea({...box,w:w+14},host)&&!occupied(box))return {...box,frame:false,host};}
@@ -108,7 +120,8 @@
   function paint(slot,box,kind='idle'){
     const n=nodes[slot.id];clearNode(n);n.hidden=false;n.className=`th-effect th-effect-${theme} ${box.frame?'th-effect-frame':'th-effect-scene'} th-effect-${kind}`;n.dataset.kind=slot.kind;
     Object.assign(n.style,{left:`${box.x}px`,top:`${box.y}px`,width:`${box.w}px`,height:`${box.h}px`});
-    const svg=svgNode('svg',{viewBox:`0 0 ${box.w} ${box.h}`,width:box.w,height:box.h,'aria-hidden':'true',focusable:'false'});n.append(svg);draw[theme](svg,box.frame,box.w,box.h,kind);
+    const drawingWidth=box.frame?box.w:Math.max(90,box.w),drawingHeight=box.h*drawingWidth/box.w;
+    const svg=svgNode('svg',{viewBox:`0 0 ${drawingWidth} ${drawingHeight}`,width:box.w,height:box.h,'aria-hidden':'true',focusable:'false'});n.append(svg);draw[theme](svg,box.frame,drawingWidth,drawingHeight,kind);
     const duration=Math.max(1,slot.until-now()),calm=director.snapshot().mode==='calm';
     let frames=[{opacity:0},{opacity:1,offset:.15},{opacity:1,offset:.7},{opacity:0}];
     if(!calm&&!box.frame){
@@ -116,6 +129,19 @@
       frames=frames.map((f,i)=>({...f,transform:`translate(${i===2?movement:0}px,${i===1?-3:0}px) rotate(${theme==='bloom'&&i===2?3:0}deg)`}));
     }
     n.animate(frames,{duration,easing:calm?'linear':`steps(${Math.max(1,Math.floor(duration/34))},end)`,fill:'forwards'});
+    if(!calm){
+      // Procedural actors, each with independently randomized motion. Recycled
+      // slots bound every animation; no image textures or editable text reads.
+      for(const [i,part]of [...svg.querySelectorAll('.th-leaf,.th-flower,.th-notes,.th-clay-form,.th-glass-droplet,.th-soft-contour,.th-ink-dot')].entries()){
+        const period=random(1100,2600);part.style.transformBox='fill-box';part.style.transformOrigin='center';
+        const sway=theme==='bloom'?random(6,16):theme==='clay'?3:7;
+        part.animate([{rotate:`${-sway}deg`,scale:.88,translate:'0 0'},{rotate:`${sway}deg`,scale:1.05,translate:`${i%2?3:-3}px -4px`},{rotate:`${-sway}deg`,scale:.88,translate:'0 0'}],{duration:period,delay:i*43,iterations:Math.ceil(duration/period),easing:`steps(${Math.floor(period/34)},end)`});
+      }
+      for(const stem of svg.querySelectorAll('.th-stem,.th-glass-edge,.th-ink-stroke')){
+        stem.setAttribute('pathLength','1');stem.style.strokeDasharray='1';
+        stem.animate([{strokeDashoffset:1},{strokeDashoffset:0}],{duration:Math.min(duration*.5,1700),easing:'steps(40,end)',fill:'forwards'});
+      }
+    }
     if(!calm&&theme==='companion'&&!box.frame){const eyes=svg.querySelector('.th-eyes');eyes.animate([{transform:'scaleY(1)'},{transform:'scaleY(.12)',offset:.46},{transform:'scaleY(1)',offset:.53},{transform:'scaleY(1)'}],{duration:210,delay:random(900,1800),iterations:1,easing:'steps(6,end)'});}
   }
   function schedule(){if(timer!==null)clearTimeout(timer);timer=null;if(disposed||doc.hidden||!FAMILIES.has(theme)||director.snapshot().mode==='off')return;const snap=director.snapshot();const ends=snap.slots.filter(s=>s.until).map(s=>s.until);const scene=active||snap.mode!=='rich'?Infinity:nextScene;const due=Math.min(scene,...ends);if(Number.isFinite(due))timer=setTimeout(tick,Math.max(34,due-now()));}
@@ -131,7 +157,9 @@
     if(!FAMILIES.has(theme)||protectedTarget(element)||!visible(element))return false;
     const rect=element.getBoundingClientRect(),frame=element.matches(controls);
     let box={x:rect.left,y:rect.top,w:rect.width,h:rect.height,frame,host:element};
-    if(!frame){const w=Math.min(85,rect.width*.3),h=Math.min(115,rect.height*.35);box={x:rect.left+14,y:rect.bottom-h-14,w,h,frame:false,host:element};if(!allowedArea(box,element))return false;}
+    if(!frame){const w=Math.min(72,rect.width*.22),h=Math.min(115,rect.height*.35);box={x:rect.left+14,y:rect.bottom-h-14,w,h,frame:false,host:element};
+      if(Number.isFinite(x)&&Number.isFinite(y))for(const [dx,dy]of [[18,18],[-w-18,18],[18,-h-18],[-w-18,-h-18]]){const candidate={...box,x:Math.max(rect.left+8,Math.min(rect.right-w-8,x+dx)),y:Math.max(rect.top+8,Math.min(rect.bottom-h-8,y+dy))};if(allowedArea(candidate,element)){box=candidate;break;}}
+      if(!allowedArea(box,element))return false;}
     const slot=director.acquire('touch',now(),director.snapshot().mode==='calm'?260:kind==='key'?500:950);if(!slot)return false;
     paint(slot,box,kind);
     if(Number.isFinite(x)&&Number.isFinite(y)){nodes[slot.id].style.setProperty('--th-petal-x',`${Math.max(-30,Math.min(30,x-box.x-box.w/2))}px`);nodes[slot.id].style.setProperty('--th-petal-y',`${Math.max(-30,Math.min(30,y-box.y-box.h/2))}px`);}
@@ -139,6 +167,8 @@
   }
   function move(event){
     if(!director.frame(now())||director.snapshot().mode!=='rich'||doc.hidden)return;
+    const host=event.target.closest('.touch-surface,.laser-surface,.native-key,.desktop-nav');
+    if(host&&!protectedTarget(host)){const r=host.getBoundingClientRect();host.style.setProperty('--th-touch-x',`${Math.round((event.clientX-r.left)/r.width*100)}%`);host.style.setProperty('--th-touch-y',`${Math.round((event.clientY-r.top)/r.height*100)}%`);}
     for(const n of nodes){if(n.hidden)continue;const eyes=n.querySelector('.th-eyes');if(eyes){const r=n.getBoundingClientRect();eyes.style.translate=`${Math.max(-3,Math.min(3,(event.clientX-r.x-r.width/2)/35))}px ${Math.max(-2,Math.min(2,(event.clientY-r.y-r.height/2)/45))}px`;}else if(theme==='bloom'){const r=n.getBoundingClientRect();n.style.setProperty('--th-bend',`${Math.max(-4,Math.min(4,(event.clientX-r.x-r.width/2)/30))}deg`);}}
   }
   function scroll(){if(scrollTimer)clearTimeout(scrollTimer);director.clear();reconcile();scrollTimer=setTimeout(()=>{scrollTimer=null;nextScene=now()+1200;synchronize();},180);synchronize();}
@@ -153,6 +183,6 @@
   listen(doc,'visibilitychange',()=>{if(doc.hidden){pointers.clear();if(scrollTimer)clearTimeout(scrollTimer);scrollTimer=null;}nextScene=now()+1200;synchronize();});
   listen(global,'blur',()=>{pointers.clear();synchronize();});
   const observer=new MutationObserver(()=>{synchronize();});observer.observe(root,{attributes:true,attributeFilter:['data-theme','data-effects','data-motion','data-theme-paused']});
-  global.TouchHelmEffects=Object.freeze({react,suspend,reset,synchronize,destroy,get diagnostics(){return {...director.snapshot(),scheduled:timer!==null,theme};}});
+  global.TouchHelmEffects=Object.freeze({react,suspend,reset,synchronize,destroy,get diagnostics(){return {...director.snapshot(),scheduled:timer!==null,theme,procedural:true,families:[...FAMILIES]};}});
   synchronize();
 })(typeof window==='undefined'?globalThis:window);

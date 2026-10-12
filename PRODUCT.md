@@ -11,3 +11,17 @@ Preserve seven themes, the mouse mark, original app branding, system typography,
 Provider differences are product truth: PowerPoint exposes rich deck state and direct controls; other supported presenter windows may expose only a title and keyboard fallback. Windows media sessions expose playback metadata where supported, while queue access is adapter-specific. Never invent a playlist, slide count, elapsed value, running certainty, or successful command.
 
 Preserve authentication revocation, PIN backoff, held-input cleanup, catalog validation, bounded slow work and owned-helper shutdown. Pairing offers LAN HTTP, manual local-CA HTTPS or private Tailscale Serve HTTPS with a required host PIN. Setup belongs only to the owned desktop bridge. Proxy trust requires the dedicated loopback listener and hostname. No Funnel or public deployment is provided. The source launcher restores matching builds and gracefully restarts changed source; versioned browser assets refresh while preserving drafts and synchronization baselines.
+
+The sixth Remote tab supports screen control/viewing and a shared audio-only mode
+available from Media. One controller owns both PC-audio toggles; listening alone
+creates no screen capture or input lease. Fullscreen requests landscape where the
+browser allows it and retains exit/Stop controls. New generated PINs use four ASCII
+digits; actual wrong guesses remain rate limited. Multiline phone Return defaults
+to Shift+Enter on the PC, with an explicit PC Enter action.
+
+All seven themes now use procedural effects; Bloom/Companion bitmap backdrops are
+unused. Existing logos and provider artwork remain. Desktop one-click trusted
+setup installs missing providers/Tailscale, asks for required Windows/account steps,
+creates private HTTPS, and enables screen/audio access after setup succeeds.
+Phone-side Tailscale installation/sign-in remains necessary; browser-only private
+LAN trust cannot be installed silently. Manual local CA remains an explicit option.

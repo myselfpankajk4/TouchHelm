@@ -49,9 +49,10 @@
     if(name.startsWith('remote_')&&window.touchhelm?.remote){
       const client=window.touchhelm,r=client.remote;
       client.switchView('viewRemote');r.reset('stopped','Simulated Remote preview.');
-      const live=['remote_control','remote_view'].includes(name);
+      const live=['remote_control','remote_view','remote_audio'].includes(name);
       r.session=live||name==='remote_connecting'?'preview-session':'';r.revision='preview-geometry';
-      r.mode=name==='remote_view'?'view':'control';r.selectedMode=r.mode;
+      r.mode=name==='remote_audio'?'audio':name==='remote_view'?'view':'control';r.selectedMode=r.mode;
+      r.audioConfirmed=r.audioRequested=name==='remote_audio';
       r.state=live?'live':name==='remote_connecting'?'connecting':name==='remote_paused'?'paused':'unavailable';
       r.video.poster='/icons/remote-preview.svg';r.geometry={width:960,height:540};r.render();
       document.getElementById('remoteStats').textContent='Simulated 720p preview';document.getElementById('remoteLatency').textContent='No live connection';
