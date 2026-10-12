@@ -30,3 +30,11 @@
 :root[data-theme="resonance"] .app-monogram { border:1px solid var(--th-border); border-radius:6px; }
 :root[data-theme="resonance"] .desktop-panel { box-shadow:var(--th-shadow); }
 @keyframes th-vinyl-turn { to{transform:rotate(360deg)} }
+
+/* Four strings belong to the instrument's rim; touches pluck only local ornament. */
+:root[data-theme="resonance"] .touch-surface::after { content:""; position:absolute; left:10px; top:16px; bottom:16px; width:13px; border-inline:1px solid color-mix(in srgb,var(--th-accent) 45%,transparent); background:linear-gradient(90deg,transparent 27%,color-mix(in srgb,var(--th-accent) 30%,transparent) 28% 34%,transparent 35% 63%,color-mix(in srgb,var(--th-accent) 30%,transparent) 64% 70%,transparent 71%); }
+:root[data-theme="resonance"] :is(.native-key,.desktop-button) { border-radius:5px; box-shadow:inset 0 2px 0 #ffffff24,0 3px 5px #10051133; border-bottom-width:3px; }
+:root[data-theme="resonance"] :is(.native-key,.desktop-button):active { border-bottom-width:1px; translate:0 1px; }
+:root[data-theme="resonance"] .media-context::before { background:radial-gradient(circle,transparent 0 35%,#332833 36% 37%,transparent 38% 50%,#332833 51% 52%,transparent 53% 65%,#332833 66% 67%,transparent 68%),radial-gradient(circle,var(--th-bg) 0 5%,var(--th-accent) 6% 17%,transparent 18%),conic-gradient(#171116 0deg,#3d3239 55deg,#171116 100deg 240deg,#322730 275deg,#171116 320deg); animation:th-vinyl-turn 16s steps(470,end) infinite; animation-play-state:paused; }
+:root[data-theme="resonance"][data-playing="true"][data-effects="rich"] .media-context::before { animation-play-state:running; }
+:root[data-theme="resonance"]:is([data-effects="calm"],[data-effects="off"]) .media-context::before { animation-play-state:paused; }

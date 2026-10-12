@@ -98,13 +98,13 @@ components:
 
 ## Overview
 
-The approved direction is a compact control console: slate surfaces, clear context, and precise accent states. Large usable movement space and readable task feedback take priority. The mouse mark and five themes preserve TouchHelm's identity; controls use system typography and native semantics.
+The approved direction is a compact control console with seven distinct material families. Large usable movement space and readable feedback take priority. The mouse mark and original app branding preserve TouchHelm's identity; controls use system typography and native semantics.
 
-This is an operating interface. The phone uses compact toolbars, contextual titles, and broad touch surfaces. The Tk desktop groups QR pairing, security, device status, and secondary activity in a restrained dark panel. Product flows and capabilities are recorded in PRODUCT.md; these tokens describe their visual expression.
+The phone uses compact toolbars, contextual titles and broad touch surfaces. The WebView2 desktop groups QR pairing, explicit connection modes, security, devices and activity. Bloom, Companion, Resonance and Clay add randomized passive scenes and local press feedback. At most two idle and six touch actors run; pointer control, scrolling, hidden state and view changes interrupt them. Rich/Calm/Off is device-local and system reduced motion wins. Product flows are recorded in PRODUCT.md.
 
 ## Colors
 
-The frontmatter records actual values from `web/ui.css`, resolved over `web/style.css`, and desktop constants in `gui/app_window.py`. The phone CSS custom properties are the implementation source of truth. Cyber uses a pale cyan action accent on blue-black surfaces. OLED retains black and azure; Matrix green; Nordic slate and blue; Solarized Studio light surfaces and deep blue.
+The frontmatter records legacy fallback tokens. Current semantic colors and materials live in `web/themes.css` and the seven packages under `web/themes/`, shared by phone and desktop. Legacy IDs migrate through `web/themes.js`. Bloom, Resonance, Companion, Clay, Glass, Soft UI and Ink each provide light/dark and increased-contrast treatment.
 
 Primary indicates selected navigation, prominent actions, pressed keys, and focused controls. Main, muted, and dim text separate context from supporting labels without making essential information decorative. Danger marks destructive actions and persistent save failures. Alternate themes retain the same hierarchy and their own contrast color.
 

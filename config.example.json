@@ -11,5 +11,7 @@
   "theme": "cyber",
   "haptics_enabled": true,
   "https_enabled": false,
-  "https_port": 8766
+  "https_port": 8766,
+  "tailscale_enabled": false,
+  "tailscale_owned_host": ""
 }

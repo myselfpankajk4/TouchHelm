@@ -59,10 +59,10 @@ function Initialize-Media {
 
 function Empty-Media([string]$message) {
     return @{available=$false; session_id=''; app=''; title=''; artist=''; album='';
-             genre=@(); track=$null; album_tracks=$null; artwork_id=$null;
+             genre=@(); track=$null; album_tracks=$null; artwork_id=$null; artwork_status='not_provided';
              status='unavailable'; playback_rate=$null; shuffle=$null; repeat=$null;
              position=$null; duration=$null; min_seek=$null; max_seek=$null;
-             updated_at=([DateTimeOffset]::UtcNow.ToUnixTimeMilliseconds()/1000.0);
+             updated_at=$null;
              capabilities=(Media-Capabilities $null); message=$message}
 }
 
@@ -81,20 +81,20 @@ function Get-SessionProperties($session) {
 }
 
 function Read-Thumbnail($thumbnail) {
-    if ($null -eq $thumbnail) { return $null }
+    if ($null -eq $thumbnail) { return @{status='not_provided'; data=$null} }
     $stream = $null; $reader = $null
     try {
         $streamType = [Windows.Storage.Streams.IRandomAccessStreamWithContentType, Windows.Storage.Streams, ContentType=WindowsRuntime]
         $stream = Await-WinRT ($thumbnail.OpenReadAsync()) $streamType
-        if ($stream.Size -le 0 -or $stream.Size -gt 4194304) { return $null }
+        if ($stream.Size -le 0 -or $stream.Size -gt 4194304) { return @{status='read_error';data=$null} }
         $readerType = [Windows.Storage.Streams.DataReader, Windows.Storage.Streams, ContentType=WindowsRuntime]
         $reader = $readerType::new($stream.GetInputStreamAt(0))
         $count = Await-WinRT ($reader.LoadAsync([uint32]$stream.Size)) ([uint32])
-        if ($count -ne $stream.Size) { return $null }
+        if ($count -ne $stream.Size) { return @{status='read_error';data=$null} }
         $bytes = New-Object byte[] $count
         $reader.ReadBytes($bytes)
-        return [Convert]::ToBase64String($bytes)
-    } catch { return $null }
+        return @{status='available'; data=[Convert]::ToBase64String($bytes)}
+    } catch { return @{status='read_error';data=$null} }
     finally { if ($null -ne $reader) { $reader.Dispose() }; if ($null -ne $stream) { $stream.Dispose() } }
 }
 
@@ -110,8 +110,10 @@ function Read-MediaSession($session, [string]$identifier) {
         $result.genre = @($properties.Genres)
         if ($properties.TrackNumber -gt 0) { $result.track = [int]$properties.TrackNumber }
         if ($properties.AlbumTrackCount -gt 0) { $result.album_tracks = [int]$properties.AlbumTrackCount }
-        $result.artwork_data = Read-Thumbnail $properties.Thumbnail
-    } catch { $result.message = 'This player did not expose complete media metadata.' }
+        $artwork = Read-Thumbnail $properties.Thumbnail
+        $result.artwork_status = $artwork.status
+        $result.artwork_data = $artwork.data
+    } catch { $result.artwork_status = 'read_error'; $result.message = 'This player did not expose complete media metadata.' }
     try {
         $playback = $session.GetPlaybackInfo()
         $result.status = [string]$playback.PlaybackStatus
@@ -422,6 +424,7 @@ function Get-RegisteredApps {
 function Get-DesktopWindows { return [TouchHelmNative]::Windows() }
 function Read-AppIcon([string]$identifier) { return [TouchHelmNative]::ShellIcon($identifier) }
 function Focus-DesktopWindow([long]$handle) { return [TouchHelmNative]::Focus($handle) }
+function Close-DesktopWindow([long]$handle, [uint32]$processId) { return [TouchHelmNative]::PostClose($handle, $processId) }
 
 function Matches-AppWindow($app, $window) {
     return ($window.aumid -and $window.aumid.Equals([string]$app.id, [StringComparison]::OrdinalIgnoreCase)) -or
@@ -463,14 +466,21 @@ function Read-Apps {
 }
 
 function App-Action([string]$appId, [string]$action, [string]$windowId) {
-    if ($action -ne 'focus' -or -not $script:knownApps.ContainsKey($appId) -or -not $script:appWindows.ContainsKey($windowId)) {
+    if ($action -notin @('focus', 'close') -or -not $script:knownApps.ContainsKey($appId) -or -not $script:appWindows.ContainsKey($windowId)) {
         return @{success=$false;message='Refresh Apps and choose a verified app window.'}
     }
     $entry = $script:appWindows[$windowId]
     $app = $script:knownApps[$appId]
     $current = @((Get-DesktopWindows) | Where-Object { $_.identity -eq $entry.window.identity }) | Select-Object -First 1
-    if ($entry.app_id -ne $appId -or $null -eq $current -or -not (Matches-AppWindow $app $current)) {
+    if ($entry.app_id -ne $appId -or $null -eq $current -or
+        $current.handle -ne $entry.window.handle -or $current.pid -ne $entry.window.pid -or
+        -not (Matches-AppWindow $app $current)) {
         return @{success=$false;message='That window is no longer available.'}
+    }
+    if ($action -eq 'close') {
+        $requested = Close-DesktopWindow ([long]$current.handle) ([uint32]$current.pid)
+        return @{success=[bool]$requested;requested=[bool]$requested;confirmed=$false;
+                 message=$(if($requested){'Close requested. Windows may still show a save prompt.'}else{'Windows refused the close request.'})}
     }
     $success = Focus-DesktopWindow ([long]$current.handle)
     return @{success=[bool]$success;message=$(if($success){'Window focused.'}else{'Windows did not allow this window to take focus.'})}

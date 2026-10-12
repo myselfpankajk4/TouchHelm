@@ -21,6 +21,11 @@
       if(p.type==='ping')reply={type:'pong',t:p.t};
       if(p.type==='media'){if(p.action==='pause')media.status='Paused';if(p.action==='play')media.status='Playing';if(p.action==='play_pause')media.status=media.status==='Playing'?'Paused':'Playing';if(p.action==='seek')media.position=p.value;reply={type:'command_result',command:'media',success:true};}
       if(['launch_app','app_action','presentation'].includes(p.type))reply={type:'command_result',command:p.type,success:true,message:'Preview action only.'};
+      if(p.type==='app_action'&&p.action==='close'){
+        const app=apps.find(value=>value.id===p.app_id);
+        if(app){app.windows=app.windows.filter(value=>value.id!==p.window_id);app.running=app.windows.length>0;}
+        reply={type:'command_result',command:'app_action',action:'close',app_id:p.app_id,window_id:p.window_id,success:!!app,requested:!!app,confirmed:false,message:'Preview close requested.'};
+      }
       if(reply)setTimeout(()=>this.receive(reply),20);
     }
     close(){this.readyState=3;sockets.delete(this);this.onclose?.();}
@@ -42,7 +47,8 @@
   window.TouchHelmDemo={setState(name){
     stateName=name;const client=window.touchhelm;client?.controls?.releaseKeys();
     if(name!=='typing')client?.controls?.collapseTyping();
-    if(name!=='menu')client?.closeModal(document.getElementById('appActionsModal'));
+    if(!['menu','closing'].includes(name))client?.closeModal(document.getElementById('appActionsModal'));
+    client?.experience?.clearPending();
     if(name!=='notes')document.getElementById('presentationDetails').open=false;
     if(name==='offline'||name==='disconnected'){for(const socket of [...sockets])socket.close();client?.stopPing();clearTimeout(client?.reconnectTimer);return;}
     if(client&&!client.isConnected)client.connect();
@@ -51,6 +57,9 @@
     if(name==='loading'){if(client?.controls)client.controls.renderApps([]);document.getElementById('appsStatus').textContent='Loading installed apps…';}
     if(name==='held'){client?.controls?.down('lctrl');client?.controls?.latched.add('lctrl');client?.controls?.down('lshift');client?.controls?.latched.add('lshift');client?.controls?.updateHeld();}
     if(name==='menu'&&client?.experience)client.experience.openAppMenu(apps[0],document.getElementById('btnRefreshApps'));
+    if(name==='closing'&&client?.experience){client.experience.openAppMenu(apps[0],document.getElementById('btnRefreshApps'));document.getElementById('appActionDetails').textContent='Close requested. A save prompt may be waiting on your PC.';}
+    if(name==='seeking'&&client?.experience){client.experience.pending=true;client.experience.pendingSeek={value:180,requestedAt:performance.now(),session:media.session_id};document.getElementById('seekPreview').textContent='Seeking to 3:00';document.getElementById('mediaCommandStatus').textContent='Seeking to 3:00…';}
+    if(name==='touch')setTimeout(()=>window.TouchHelmEffects?.react(document.querySelector('#viewTrackpad .touch-surface'),{kind:'press'}),80);
     if(name==='notes')document.getElementById('presentationDetails').open=true;
   },state};
   document.addEventListener('DOMContentLoaded',()=>{const status=document.createElement('p');status.className='preview-notice';status.textContent='Interactive preview · simulated data · no PC input';document.body.prepend(status);});

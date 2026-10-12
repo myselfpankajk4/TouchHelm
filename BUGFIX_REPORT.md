@@ -1,6 +1,23 @@
 # TouchHelm bug fixes
 
-## Current v2 — 12 October 2026
+## Current v2.1 — living controls, 12 October 2026
+
+[Implementation, setup and remaining device acceptance](docs/LIVING_CONTROLS.md) · [Approved contract](docs/TOUCHHELM_LIVING_PLAN.md).
+
+- Presenter navigation fits its container; the dropdown no longer overlaps. The framed pad, monitor/color hierarchy and precise contact indicator replace the old surface. The native compact alpha laser is cached, click-through and non-activating.
+- One clock drives seek, progress and elapsed time. Missing rates advance at effective 1× without inventing rate metadata. Repeated snapshots preserve progress; selected sessions use sampled Windows timing. Cancelled scrubbing sends nothing; requests wait for readback or timeout. Artwork decoding, authenticated delivery, cache reuse, item changes and explicit missing/error states are covered.
+- Verified running-app windows offer normal Close window, with multiple-window selection and bounded disappearance checks. Save prompts are preserved; there is no force termination. Missing catalogs do not falsely announce closure.
+- New devices start with Live typing on and remember opt-out. Offline edits and restored unsynced drafts pause until explicit Send. Multiline/IME edits and secure-origin handoff do not duplicate text. Temporary handoff failures can retry.
+- Bloom, Companion, Resonance and Clay have randomized peripheral scenes and touch/key reactions. Rich/Calm/Off, reduced motion, two-idle/six-touch budgets, 30fps admission, interruption and protected labels/QR/PIN areas apply on phone and desktop. The preview's simulation badge has its own strip.
+- Private Tailscale HTTPS uses owned Serve 8443 → loopback 8767. Setup stays in the desktop bridge; unrelated/public configurations are preserved. Proxy trust and handoff destinations are validated. Failed ownership writes cannot create unmanaged endpoints. Eight invalid PIN attempts trigger global 60-second backoff.
+
+Final safe evidence: **191 Python tests, 81 JavaScript tests and 47 browser behavior regressions**. Visual confirmation checks **532 combinations**: 420 phone tab/theme/appearance/viewport cases plus 112 desktop panel/theme/appearance/size cases, with rich idle/touch captures and pairing states. Fixtures are marked simulated and send no PC input.
+
+Actual Windows smoke: four laser colors used cached layered sprites without changing foreground; an owned scratch form cancelled its first normal close and accepted its second; WebView2 loaded branding, QR, bridge/theme and four panels without overflow, then shut down normally. Same-build restoration and changed-source restart passed with normal host exits. A read-only Windows media query reported **zero sessions**, so no live-player thumbnail or seek success is claimed. Independent review findings were corrected and re-reviewed.
+
+**Unperformed:** physical Android typing/IME, vibration, trusted Tailscale HTTPS, phone animation performance; live supported-player/PowerPoint checks; 30-minute Tailscale WSS/background/resume/source-restart stability. Tailscale is not installed/logged in on this PC. Device acceptance remains explicit; no trust store was modified.
+
+## Historical v2 — 12 October 2026
 
 The approved v2 plan is implemented across the phone browser and WebView2 desktop. [Implementation and device acceptance](docs/TOUCHHELM_V2.md) · [Desktop/HTTPS setup](docs/desktop-v2.md).
 

@@ -32,3 +32,11 @@
 :root[data-theme="bloom"] .desktop-panel { box-shadow:var(--th-shadow); }
 @keyframes th-bloom-light { 0%,100%{opacity:.25} 50%{opacity:.9} }
 @media(max-height:560px) { :root[data-theme="bloom"] .trackpad-hints { padding-bottom:10%; } :root[data-theme="bloom"] .touch-surface::before { opacity:.5; } }
+
+/* Leaves hug the key rim; the engraved face and every label stay clear. */
+:root[data-theme="bloom"] { --th-vine:#47724b; --th-leaf:#85a870; --th-petal:#eeb7c1; --th-blossom:#fff1d0; --th-lilac:#bca7dc; --th-pollen:#cd9840; }
+:root[data-theme="bloom"][data-appearance="dark"] { --th-vine:#93b684; --th-leaf:#608e64; --th-petal:#d991a3; --th-blossom:#e6d9ae; --th-lilac:#ad9ad1; }
+:root[data-theme="bloom"] :is(.native-key,.desktop-button,.trackpad-btn) { background:linear-gradient(160deg,color-mix(in srgb,var(--th-panel) 85%,white),var(--th-panel) 55%); border-radius:12px 12px 7px 12px; box-shadow:inset 0 1px 0 #ffffff35,0 3px 7px #264c291c; }
+:root[data-theme="bloom"] .native-key.held { background:var(--th-accent); }
+:root[data-theme="bloom"] .touch-surface::after { animation:none; }
+:root[data-theme="bloom"] .desktop-button:active { box-shadow:inset 0 2px 4px #193d282c; }

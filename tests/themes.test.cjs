@@ -214,3 +214,26 @@ async function runVisualBatch(){
     await browser?.close();await new Promise(resolve=>server.close(resolve));
   }
 }
+
+test('effects default rich, persist locally, normalize invalid values and respect system reduction',()=>{
+  const {themes,root,storage,media}=setup();
+  assert.equal(themes.state.effects,'rich');
+  assert.equal(root.dataset.effects,'rich');
+  themes.apply('bloom',{effects:'off'});
+  assert.equal(storage.get('touchhelm_effects'),'off');
+  assert.equal(root.dataset.effects,'off');
+  themes.apply('bloom',{effects:'rich',motion:'full'});
+  const query=media.get('(prefers-reduced-motion: reduce)');query.matches=true;query.events.forEach(fn=>fn());
+  assert.equal(root.dataset.effects,'calm');
+  assert.equal(themes.state.effects,'rich');
+  themes.apply('bloom',{effects:'untrusted'});assert.equal(themes.state.effects,'rich');
+});
+
+test('effects picker can leave a legacy manual motion opt-out while system reduction still wins',()=>{
+  const {themes,root,body}=setup({touchhelm_motion:'reduced'});
+  themes.mountPicker(body);
+  const flatten=n=>[n,...n.children.flatMap(flatten)];
+  const effects=flatten(body).find(n=>n.id==='th-picker-effects');
+  effects.value='rich';effects.emit('change');
+  assert.equal(themes.state.motion,'system');assert.equal(root.dataset.effects,'rich');
+});

@@ -2,6 +2,8 @@
 
 The default desktop is a pywebview EdgeChromium window. Python still owns the host server, native controllers, tray and shutdown. The phone interface remains separate from the privileged desktop bridge.
 
+**v2.1:** Pairing now has explicit HTTP, local-certificate HTTPS and private Tailscale HTTPS modes. Tailscale avoids manually installing TouchHelm's CA, while still requiring installation/login on both devices and a host PIN. It serves private HTTPS 8443 over a dedicated loopback backend on 8767. Existing Serve conflicts are preserved. [Setup, living effects and current verification](LIVING_CONTROLS.md).
+
 ## Launch and rollback
 
 Run `run.bat` from the project checkout. It changes to its own folder and launches that folder’s `main.py`, so it reads the saved source rather than a packaged copy. An isolated worktree can use the parent workspace’s `.venv`; its source and assets still come from the worktree. The launcher checks that Python runs and installs missing desktop dependencies into the selected workspace environment.

@@ -102,7 +102,10 @@ class DesktopServiceTests(unittest.IsolatedAsyncioTestCase):
         self.bridge.request = request
         state = await self.service.snapshot()
         self.assertEqual(state['media']['session_id'], 'one')
-        self.assertEqual(state['media'].get('sessions'), sessions)
+        sampled = state['media']['sessions']
+        self.assertEqual([{key: value for key, value in row.items() if key != 'sampled_at'}
+                          for row in sampled], sessions)
+        self.assertTrue(all(row['sampled_at'] == state['media']['sampled_at'] for row in sampled))
 
     async def test_local_media_is_not_scanned_and_forged_ids_cannot_play(self):
         folder = Path(self.folder.name)
@@ -295,6 +298,38 @@ $stale = Dispatch-Request @{command='media_play'; payload=@{kind='queue'; item_i
         self.assertTrue(result['success'])
         self.assertEqual(result['played'], ['D:\\fixture\\first.mp3'])
         self.assertFalse(result['stale']['success'])
+
+    def test_thumbnail_reports_absence_and_stream_failure(self):
+        result = self.run_provider_fixture(r'''
+$broken = [pscustomobject]@{}
+$broken | Add-Member ScriptMethod OpenReadAsync { throw 'fixture stream failed' }
+@{absent=(Read-Thumbnail $null); broken=(Read-Thumbnail $broken)} | ConvertTo-Json -Depth 5 -Compress
+''')
+        self.assertEqual(result['absent']['status'], 'not_provided')
+        self.assertEqual(result['broken']['status'], 'read_error')
+
+    def test_close_rejects_reused_identity_and_posts_only_to_current_window(self):
+        result = self.run_provider_fixture(r'''
+$app = @{id='app'; exe='C:\Fixture\app.exe'}
+$old = [pscustomobject]@{identity='same'; handle=77L; pid=12; aumid=''; exe='C:\Fixture\app.exe'}
+$script:knownApps['app'] = $app
+$script:appWindows['opaque'] = @{app_id='app'; window=$old}
+$script:posted = @()
+function Get-DesktopWindows { return ,$script:fixtureWindows }
+function Close-DesktopWindow([long]$handle, [uint32]$processId) {
+    $script:posted += "$handle/$processId"
+    return $true
+}
+$script:fixtureWindows = @([pscustomobject]@{identity='same'; handle=88L; pid=99; aumid=''; exe='C:\Fixture\app.exe'})
+$stale = App-Action 'app' 'close' 'opaque'
+$script:fixtureWindows = @($old)
+$requested = App-Action 'app' 'close' 'opaque'
+@{stale=$stale; requested=$requested; posted=$script:posted} | ConvertTo-Json -Depth 5 -Compress
+''')
+        self.assertFalse(result['stale']['success'])
+        self.assertEqual(result['posted'], ['77/12'])
+        self.assertTrue(result['requested']['requested'])
+        self.assertFalse(result['requested']['confirmed'])
 
 if __name__ == '__main__':
     unittest.main()

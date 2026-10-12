@@ -1,255 +1,362 @@
-"""
-TouchHelm - Digital Laser Pointer & Spotlight Overlay
-Creates a hardware-accelerated, transparent, click-through overlay
-on Windows desktop to project laser pointer dots and presentation spotlights.
-"""
-
-import sys
-import os
-import json
-import time
+"""Compact, click-through, per-pixel-alpha Windows laser overlay."""
 import ctypes
 from ctypes import wintypes
-import tkinter as tk
+from functools import lru_cache
+import json
+import math
+import os
+import queue
+import subprocess
+import sys
+import threading
 
-user32 = ctypes.windll.user32
-GWL_EXSTYLE = -20
-WS_EX_TRANSPARENT = 0x00000020
-WS_EX_LAYERED = 0x00080000
-WS_EX_TOOLWINDOW = 0x00000080
+from PIL import Image
+
 
 COLOR_PRESETS = {
-    "red": {"outer": "#ff4466", "mid": "#ff0033", "core": "#ffffff"},
-    "green": {"outer": "#44ff88", "mid": "#00ee44", "core": "#ffffff"},
-    "blue": {"outer": "#33bbff", "mid": "#0088ff", "core": "#ffffff"},
-    "amber": {"outer": "#ffbb33", "mid": "#ff8800", "core": "#ffffff"},
+    'red': ((255, 68, 102), (255, 0, 51)),
+    'green': ((68, 255, 136), (0, 238, 68)),
+    'blue': ((51, 187, 255), (0, 136, 255)),
+    'amber': ((255, 187, 51), (255, 136, 0)),
 }
+SPRITE_SIZE = 64
+
+
+@lru_cache(maxsize=4)
+def glow_sprite(color_name):
+    outer, middle = COLOR_PRESETS.get(color_name, COLOR_PRESETS['red'])
+    image = Image.new('RGBA', (SPRITE_SIZE, SPRITE_SIZE))
+    pixels = image.load()
+    for y in range(SPRITE_SIZE):
+        for x in range(SPRITE_SIZE):
+            radius = math.hypot(x - 31.5, y - 31.5)
+            if radius <= 4:
+                pixels[x, y] = (255, 255, 255, 255)
+            elif radius <= 10:
+                fraction = (radius - 4) / 6
+                pixels[x, y] = (*(round(255 * (1 - fraction) + c * fraction) for c in middle),
+                                round(245 - 35 * fraction))
+            elif radius < 29:
+                fraction = (radius - 10) / 19
+                pixels[x, y] = (*(round(middle[i] * (1 - fraction) + outer[i] * fraction)
+                                  for i in range(3)), round(130 * (1 - fraction) ** 2))
+    return image
+
+
+def laser_geometry(norm_x, norm_y, rect, size=SPRITE_SIZE):
+    x = rect['x'] + round(max(0., min(1., float(norm_x))) * rect['width']) - size // 2
+    y = rect['y'] + round(max(0., min(1., float(norm_y))) * rect['height']) - size // 2
+    return x, y, size
+
+
+class POINT(ctypes.Structure):
+    _fields_ = [('x', ctypes.c_long), ('y', ctypes.c_long)]
+
+
+class SIZE(ctypes.Structure):
+    _fields_ = [('cx', ctypes.c_long), ('cy', ctypes.c_long)]
+
+
+class BLEND(ctypes.Structure):
+    _fields_ = [('op', ctypes.c_byte), ('flags', ctypes.c_byte),
+                ('constant_alpha', ctypes.c_byte), ('alpha_format', ctypes.c_byte)]
+
+
+class BITMAPINFOHEADER(ctypes.Structure):
+    _fields_ = [('size', wintypes.DWORD), ('width', ctypes.c_long),
+                ('height', ctypes.c_long), ('planes', wintypes.WORD),
+                ('bits', wintypes.WORD), ('compression', wintypes.DWORD),
+                ('image_size', wintypes.DWORD), ('xppm', ctypes.c_long),
+                ('yppm', ctypes.c_long), ('colors', wintypes.DWORD),
+                ('important', wintypes.DWORD)]
+
+
+class BITMAPINFO(ctypes.Structure):
+    _fields_ = [('header', BITMAPINFOHEADER), ('colors', wintypes.DWORD * 3)]
+
+
+def _signature(dll, name, result, *args):
+    method = getattr(dll, name)
+    method.restype, method.argtypes = result, list(args)
+    return method
+
+
+def _premultiplied_bgra(image):
+    pixels = bytearray(image.tobytes())
+    for offset in range(0, len(pixels), 4):
+        red, green, blue, alpha = pixels[offset:offset + 4]
+        pixels[offset:offset + 4] = bytes((blue * alpha // 255, green * alpha // 255,
+                                          red * alpha // 255, alpha))
+    return bytes(pixels)
+
 
 class LaserOverlayApp:
-    def __init__(self, color_name="red"):
-        self.root = tk.Tk()
-        self.root.title("TouchHelm Laser Overlay")
-        self.root.overrideredirect(True)
-        self.root.attributes("-topmost", True)
-
-        # Transparent background color key
-        self.bg_color = "#000001"
-        self.root.attributes("-transparentcolor", self.bg_color)
-        self.root.config(bg=self.bg_color)
-
-        # Screen dimensions
-        self.sw = user32.GetSystemMetrics(0)
-        self.sh = user32.GetSystemMetrics(1)
-        self.root.geometry(f"{self.sw}x{self.sh}+0+0")
-
-        self.canvas = tk.Canvas(
-            self.root,
-            width=self.sw,
-            height=self.sh,
-            bg=self.bg_color,
-            highlightthickness=0,
-            bd=0
-        )
-        self.canvas.pack(fill="both", expand=True)
-
-        self.color_name = color_name
-        self.is_active = False
-        self.last_x = self.sw // 2
-        self.last_y = self.sh // 2
-        self.items = []
-
-        # Make window click-through and toolwindow (hidden from taskbar)
-        self._apply_click_through()
-
-    def _apply_click_through(self):
+    """A 64px layered popup whose four color DIBs stay cached until exit."""
+    def __init__(self, color_name='red'):
+        self.api, self.gdi, self.kernel = (ctypes.windll.user32, ctypes.windll.gdi32,
+                                           ctypes.windll.kernel32)
         try:
-            self.root.update_idletasks()
-            hwnd = user32.GetParent(self.root.winfo_id()) or self.root.winfo_id()
-            ex_style = user32.GetWindowLongW(hwnd, GWL_EXSTYLE)
-            user32.SetWindowLongW(
-                hwnd,
-                GWL_EXSTYLE,
-                ex_style | WS_EX_TRANSPARENT | WS_EX_LAYERED | WS_EX_TOOLWINDOW
-            )
-        except Exception as e:
-            sys.stderr.write(f"Click-through setup error: {e}\n")
+            self.api.SetProcessDpiAwarenessContext(ctypes.c_void_p(-4))
+        except (AttributeError, OSError):
+            self.api.SetProcessDPIAware()
+        self._configure()
+        self.color_name = color_name if color_name in COLOR_PRESETS else 'red'
+        self.display_rect = None
+        self.is_active = False
+        self._bitmaps = {}
+        proc_type = ctypes.WINFUNCTYPE(ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT,
+                                      wintypes.WPARAM, wintypes.LPARAM)
 
-    def set_color(self, color_name: str):
+        class WNDCLASS(ctypes.Structure):
+            _fields_ = [('style', wintypes.UINT), ('proc', proc_type),
+                        ('cls_extra', ctypes.c_int), ('wnd_extra', ctypes.c_int),
+                        ('instance', wintypes.HINSTANCE), ('icon', wintypes.HICON),
+                        ('cursor', wintypes.HANDLE), ('background', wintypes.HBRUSH),
+                        ('menu', wintypes.LPCWSTR), ('name', wintypes.LPCWSTR)]
+
+        @proc_type
+        def window_proc(hwnd, message, wparam, lparam):
+            if message == 0x0021:  # WM_MOUSEACTIVATE
+                return 3  # MA_NOACTIVATE
+            if message == 0x0084:  # WM_NCHITTEST
+                return -1  # HTTRANSPARENT
+            return self.api.DefWindowProcW(hwnd, message, wparam, lparam)
+
+        self._window_proc = window_proc
+        self._class = WNDCLASS()
+        self._class.proc = window_proc
+        self._class.instance = self.kernel.GetModuleHandleW(None)
+        self._class.name = f'TouchHelmLaser{os.getpid()}'
+        self.api.RegisterClassW(ctypes.byref(self._class))
+        # LAYERED | TRANSPARENT | TOOLWINDOW | NOACTIVATE, initially hidden.
+        self.hwnd = self.api.CreateWindowExW(0x080800A8, self._class.name,
+            'TouchHelm laser', 0x80000000, 0, 0, SPRITE_SIZE, SPRITE_SIZE,
+            None, None, self._class.instance, None)
+        if not self.hwnd:
+            raise OSError('Could not create laser overlay window')
+
+    def _configure(self):
+        api, gdi, kernel = self.api, self.gdi, self.kernel
+        _signature(kernel, 'GetModuleHandleW', wintypes.HMODULE, wintypes.LPCWSTR)
+        _signature(api, 'DefWindowProcW', ctypes.c_ssize_t, wintypes.HWND, wintypes.UINT,
+                   wintypes.WPARAM, wintypes.LPARAM)
+        _signature(api, 'RegisterClassW', wintypes.ATOM, ctypes.c_void_p)
+        _signature(api, 'CreateWindowExW', wintypes.HWND, wintypes.DWORD, wintypes.LPCWSTR,
+                   wintypes.LPCWSTR, wintypes.DWORD, ctypes.c_int, ctypes.c_int,
+                   ctypes.c_int, ctypes.c_int, wintypes.HWND, wintypes.HMENU,
+                   wintypes.HINSTANCE, ctypes.c_void_p)
+        _signature(api, 'UpdateLayeredWindow', wintypes.BOOL, wintypes.HWND, wintypes.HDC,
+                   ctypes.POINTER(POINT), ctypes.POINTER(SIZE), wintypes.HDC,
+                   ctypes.POINTER(POINT), wintypes.DWORD, ctypes.POINTER(BLEND), wintypes.DWORD)
+        _signature(api, 'GetDC', wintypes.HDC, wintypes.HWND)
+        _signature(api, 'ReleaseDC', ctypes.c_int, wintypes.HWND, wintypes.HDC)
+        _signature(api, 'ShowWindow', wintypes.BOOL, wintypes.HWND, ctypes.c_int)
+        _signature(api, 'DestroyWindow', wintypes.BOOL, wintypes.HWND)
+        _signature(api, 'PeekMessageW', wintypes.BOOL, ctypes.POINTER(wintypes.MSG),
+                   wintypes.HWND, wintypes.UINT, wintypes.UINT, wintypes.UINT)
+        _signature(api, 'TranslateMessage', wintypes.BOOL, ctypes.POINTER(wintypes.MSG))
+        _signature(api, 'DispatchMessageW', ctypes.c_ssize_t, ctypes.POINTER(wintypes.MSG))
+        _signature(gdi, 'CreateCompatibleDC', wintypes.HDC, wintypes.HDC)
+        _signature(gdi, 'CreateDIBSection', wintypes.HBITMAP, wintypes.HDC,
+                   ctypes.POINTER(BITMAPINFO), wintypes.UINT,
+                   ctypes.POINTER(ctypes.c_void_p), wintypes.HANDLE, wintypes.DWORD)
+        _signature(gdi, 'SelectObject', wintypes.HANDLE, wintypes.HDC, wintypes.HANDLE)
+        _signature(gdi, 'DeleteObject', wintypes.BOOL, wintypes.HANDLE)
+        _signature(gdi, 'DeleteDC', wintypes.BOOL, wintypes.HDC)
+
+    def _bitmap(self, color):
+        if color in self._bitmaps:
+            return self._bitmaps[color]
+        info = BITMAPINFO()
+        info.header.size = ctypes.sizeof(BITMAPINFOHEADER)
+        info.header.width, info.header.height = SPRITE_SIZE, -SPRITE_SIZE
+        info.header.planes, info.header.bits = 1, 32
+        bits = ctypes.c_void_p()
+        dc = self.gdi.CreateCompatibleDC(None)
+        bitmap = self.gdi.CreateDIBSection(dc, ctypes.byref(info), 0,
+                                           ctypes.byref(bits), None, 0)
+        if not bitmap or not bits.value:
+            self.gdi.DeleteDC(dc)
+            raise OSError('Could not prepare laser bitmap')
+        ctypes.memmove(bits, _premultiplied_bgra(glow_sprite(color)), SPRITE_SIZE ** 2 * 4)
+        previous = self.gdi.SelectObject(dc, bitmap)
+        self._bitmaps[color] = (dc, bitmap, previous)
+        return self._bitmaps[color]
+
+    def set_color(self, color_name):
         if color_name in COLOR_PRESETS:
             self.color_name = color_name
 
-    def draw_laser(self, x: int, y: int):
-        self.canvas.delete("laser")
-        preset = COLOR_PRESETS.get(self.color_name, COLOR_PRESETS["red"])
+    def set_display(self, rect):
+        if not isinstance(rect, dict):
+            return
+        values = [rect.get(key) for key in ('x', 'y', 'width', 'height')]
+        if any(type(value) is not int for value in values):
+            return
+        if values[2] <= 0 or values[3] <= 0 or values[2] > 40000 or values[3] > 40000:
+            return
+        self.display_rect = dict(zip(('x', 'y', 'width', 'height'), values))
 
-        # Outer glow
-        r_outer = 22
-        self.canvas.create_oval(
-            x - r_outer, y - r_outer, x + r_outer, y + r_outer,
-            fill=preset["outer"], outline="", tags="laser"
-        )
-
-        # Mid beam
-        r_mid = 13
-        self.canvas.create_oval(
-            x - r_mid, y - r_mid, x + r_mid, y + r_mid,
-            fill=preset["mid"], outline="", tags="laser"
-        )
-
-        # Intense core
-        r_core = 5
-        self.canvas.create_oval(
-            x - r_core, y - r_core, x + r_core, y + r_core,
-            fill=preset["core"], outline="", tags="laser"
-        )
-
-    def update_position(self, norm_x: float, norm_y: float, active: bool = True):
-        self.is_active = active
-        if active:
-            px = int(norm_x * self.sw)
-            py = int(norm_y * self.sh)
-            self.last_x = px
-            self.last_y = py
-            self.draw_laser(px, py)
-        else:
-            self.canvas.delete("laser")
-
-    def set_display(self,rect):
-        """Move the owned click-through window to a validated monitor rectangle."""
-        if not isinstance(rect,dict):return
-        values=[rect.get(key) for key in ('x','y','width','height')]
-        if any(type(value) is not int for value in values):return
-        x,y,width,height=values
-        if width<=0 or height<=0 or width>40000 or height>40000:return
-        if getattr(self,'display_rect',None)==tuple(values):return
-        self.display_rect=tuple(values);self.sw=width;self.sh=height
-        self.root.geometry(f'{width}x{height}')
-        self.canvas.configure(width=width,height=height)
-        self.root.update_idletasks()
-        hwnd=user32.GetParent(self.root.winfo_id()) or self.root.winfo_id()
-        user32.SetWindowPos(hwnd,0,x,y,width,height,0x0010|0x0004)
+    def update_position(self, norm_x, norm_y, active=True):
+        if not active:
+            self.hide()
+            return
+        if self.display_rect is None:
+            self.set_display({'x': 0, 'y': 0, 'width': self.api.GetSystemMetrics(0),
+                              'height': self.api.GetSystemMetrics(1)})
+        try:
+            if not math.isfinite(float(norm_x)) or not math.isfinite(float(norm_y)):
+                return
+            x, y, size = laser_geometry(norm_x, norm_y, self.display_rect)
+        except (TypeError, ValueError):
+            return
+        dc, _, _ = self._bitmap(self.color_name)
+        position, dimensions, source = POINT(x, y), SIZE(size, size), POINT(0, 0)
+        blend = BLEND(0, 0, 255, 1)
+        screen = self.api.GetDC(None)
+        try:
+            updated = self.api.UpdateLayeredWindow(self.hwnd, screen,
+                ctypes.byref(position), ctypes.byref(dimensions), dc,
+                ctypes.byref(source), 0, ctypes.byref(blend), 2)
+        finally:
+            self.api.ReleaseDC(None, screen)
+        if updated:
+            self.api.ShowWindow(self.hwnd, 4)  # SW_SHOWNOACTIVATE
+            self.is_active = True
 
     def hide(self):
+        self.api.ShowWindow(self.hwnd, 0)
         self.is_active = False
-        self.canvas.delete("laser")
+
+    def pump_messages(self):
+        message = wintypes.MSG()
+        while self.api.PeekMessageW(ctypes.byref(message), None, 0, 0, 1):
+            self.api.TranslateMessage(ctypes.byref(message))
+            self.api.DispatchMessageW(ctypes.byref(message))
 
     def close(self):
-        try:
-            self.root.destroy()
-        except Exception:
-            pass
+        if self.hwnd:
+            self.api.DestroyWindow(self.hwnd)
+            self.hwnd = None
+        for dc, bitmap, previous in self._bitmaps.values():
+            self.gdi.SelectObject(dc, previous)
+            self.gdi.DeleteObject(bitmap)
+            self.gdi.DeleteDC(dc)
+        self._bitmaps.clear()
 
 
 def run_overlay_process():
-    """Reads JSON commands line-by-line from stdin via thread for responsiveness."""
-    import threading
     app = LaserOverlayApp()
+    commands = queue.Queue(maxsize=1)
+    disconnected = threading.Event()
 
-    def handle_command(data):
-        cmd = data.get("cmd")
-        if cmd == "quit":
-            app.close()
-            sys.exit(0)
-        elif cmd == "update":
-            if data.get('display_rect'):app.set_display(data['display_rect'])
-            x = data.get("x", 0.5)
-            y = data.get("y", 0.5)
-            active = data.get("active", True)
-            app.update_position(x, y, active)
-        elif cmd == "color":
-            app.set_color(data.get("color", "red"))
-        elif cmd == "hide":
-            app.hide()
+    def read_commands():
+        try:
+            for line in sys.stdin:
+                try:
+                    command = json.loads(line)
+                    if not isinstance(command, dict):
+                        continue
+                    if commands.full():
+                        commands.get_nowait()
+                    commands.put_nowait(command)
+                except (ValueError, queue.Empty, queue.Full):
+                    continue
+        finally:
+            disconnected.set()
 
-    def stdin_worker():
-        for line in sys.stdin:
-            if not line:
-                break
-            line = line.strip()
-            if not line:
-                continue
+    threading.Thread(target=read_commands, daemon=True).start()
+    try:
+        while not disconnected.is_set() or not commands.empty():
             try:
-                data = json.loads(line)
-                app.root.after(0, handle_command, data)
-            except Exception:
-                pass
-
-    t = threading.Thread(target=stdin_worker, daemon=True)
-    t.start()
-    app.root.mainloop()
+                command = commands.get(timeout=.01)
+            except queue.Empty:
+                app.pump_messages()
+                continue
+            name = command.get('cmd')
+            if name == 'quit':
+                break
+            if name == 'update':
+                if command.get('display_rect'):
+                    app.set_display(command['display_rect'])
+                app.update_position(command.get('x', .5), command.get('y', .5),
+                                    command.get('active', True))
+            elif name == 'color':
+                app.set_color(command.get('color'))
+            elif name == 'hide':
+                app.hide()
+            app.pump_messages()
+    finally:
+        app.close()
 
 
 class LaserOverlayClient:
-    """Helper client used by the WebSocket server to control the overlay."""
+    """Existing JSON command interface to an owned, lazy helper process."""
     def __init__(self):
         self.proc = None
         self._is_enabled = False
-        self.color = "red"
+        self.color = 'red'
 
     def start(self):
-        import subprocess
+        if self.proc and self.proc.poll() is None:
+            return
         try:
-            self.proc = subprocess.Popen(
-                [sys.executable, "-m", "server.laser_overlay"],
-                stdin=subprocess.PIPE,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                bufsize=1,
+            self.proc = subprocess.Popen([sys.executable, '-u', '-m', 'server.laser_overlay'],
+                stdin=subprocess.PIPE, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                text=True, bufsize=1,
                 cwd=os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-                creationflags=subprocess.CREATE_NO_WINDOW
-            )
+                creationflags=subprocess.CREATE_NO_WINDOW)
             self._is_enabled = True
             self.set_color(self.color)
-        except Exception as e:
-            print(f"Failed to start laser overlay process: {e}")
+        except OSError:
+            self.proc = None
+            self._is_enabled = False
 
-    def update(self, x: float, y: float, active: bool = True, display_rect=None):
+    def _send(self, command):
+        if self.proc and self.proc.poll() is None:
+            try:
+                self.proc.stdin.write(json.dumps(command) + '\n')
+                self.proc.stdin.flush()
+            except (OSError, ValueError):
+                pass
+
+    def update(self, x, y, active=True, display_rect=None):
         if not self.proc or self.proc.poll() is not None:
             if active:
                 self.start()
             else:
                 return
-        try:
-            payload={"cmd":"update","x":x,"y":y,"active":active}
-            if display_rect is not None:payload['display_rect']=display_rect
-            msg = json.dumps(payload) + "\n"
-            self.proc.stdin.write(msg)
-            self.proc.stdin.flush()
-        except Exception:
-            pass
+        command = {'cmd': 'update', 'x': x, 'y': y, 'active': active}
+        if display_rect is not None:
+            command['display_rect'] = display_rect
+        self._send(command)
 
-    def set_color(self, color: str):
-        if color not in COLOR_PRESETS:
-            return
-        self.color = color
-        if self.proc and self.proc.poll() is None:
-            try:
-                msg = json.dumps({"cmd": "color", "color": color}) + "\n"
-                self.proc.stdin.write(msg)
-                self.proc.stdin.flush()
-            except Exception:
-                pass
+    def set_color(self, color):
+        if color in COLOR_PRESETS:
+            self.color = color
+            self._send({'cmd': 'color', 'color': color})
 
     def hide(self):
-        if self.proc and self.proc.poll() is None:
-            try:
-                msg = json.dumps({"cmd": "hide"}) + "\n"
-                self.proc.stdin.write(msg)
-                self.proc.stdin.flush()
-            except Exception:
-                pass
+        self._send({'cmd': 'hide'})
 
     def stop(self):
-        if self.proc:
+        process, self.proc = self.proc, None
+        self._is_enabled = False
+        if process is None:
+            return
+        try:
+            if process.poll() is None:
+                process.stdin.write(json.dumps({'cmd': 'quit'}) + '\n')
+                process.stdin.flush()
+            process.wait(timeout=.5)
+        except (OSError, ValueError, subprocess.TimeoutExpired):
             try:
-                self.proc.stdin.write(json.dumps({"cmd": "quit"}) + "\n")
-                self.proc.stdin.flush()
-                self.proc.terminate()
-            except Exception:
-                pass
-            self.proc = None
+                process.terminate()
+                process.wait(timeout=.5)
+            except (OSError, subprocess.TimeoutExpired):
+                process.kill()
+                process.wait(timeout=.5)
 
 
-if __name__ == "__main__":
+if __name__ == '__main__':
     run_overlay_process()

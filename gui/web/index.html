@@ -6,7 +6,9 @@
   <link rel="icon" href="__DESKTOP_ASSET_BASE__icons/icon.svg">
   <link id="th-themes-base" rel="stylesheet" href="__DESKTOP_ASSET_BASE__themes.css">
   <link rel="stylesheet" href="__DESKTOP_ASSET_BASE__desktop.css">
+  <link rel="stylesheet" href="__DESKTOP_ASSET_BASE__theme-effects.css">
   <script defer src="__DESKTOP_ASSET_BASE__themes.js"></script>
+  <script defer src="__DESKTOP_ASSET_BASE__theme-effects.js"></script>
   <script defer src="__DESKTOP_ASSET_BASE__desktop.js"></script>
 </head>
 <body data-surface="desktop">
@@ -23,12 +25,13 @@
       <button type="button" data-panel="devices"><svg viewBox="0 0 24 24" aria-hidden="true"><rect x="7" y="2" width="10" height="20" rx="2"/><path d="M10 18h4"/></svg>Devices & activity</button>
       <button type="button" data-panel="settings"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16M4 17h16"/><circle cx="8" cy="7" r="3"/><circle cx="16" cy="17" r="3"/></svg>Settings</button>
       <button type="button" data-panel="diagnostics"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Diagnostics</button>
-      <p class="nav-note">Your phone controls this PC over your local network.</p>
+      <p class="nav-note">Your phone, connected to your PC. Choose local Wi-Fi or your private tailnet.</p>
     </nav>
     <main class="desktop-content">
       <p id="feedback" role="status" class="desktop-feedback" hidden></p>
       <section class="desktop-panel" data-page="pairing">
-        <h1>Connect your phone</h1><p class="lead">Use the same Wi-Fi as this PC, then scan the code with your phone camera.</p>
+        <h1>Connect your phone</h1><p class="lead" id="pairingLead">Use the same Wi-Fi as this PC, then scan the code with your phone camera.</p>
+        <div class="connection-choice"><label for="connectionMode">Connection mode</label><select id="connectionMode"><option value="http">Local Wi-Fi · HTTP</option><option value="local_ca">Local Wi-Fi · manual certificate HTTPS</option><option value="tailscale">Private Tailscale · trusted HTTPS</option></select></div>
         <div class="desktop-pairing">
           <div class="surface pairing-panel"><div class="qr-wrap"><img id="pairingQR" alt="QR code containing this PC’s connection address" width="224" height="224"></div>
             <label for="phoneURL">Phone address</label><input id="phoneURL" readonly spellcheck="false">
@@ -37,7 +40,7 @@
           </div>
           <div class="pairing-information">
             <div class="surface"><h2>Connection security</h2><p id="pinStatus"></p><p id="pinCode" class="pin-code" hidden></p><p class="muted">A PIN limits who can control your PC. Change it in Settings.</p></div>
-            <div class="surface secure-pairing"><h2>Secure pairing</h2><p>HTTPS gives Android Chrome a secure connection for supported phone capabilities.</p>
+            <div class="surface secure-pairing" id="localCASetup" hidden><h2>Local certificate HTTPS</h2><p>HTTPS gives Android Chrome a secure connection for supported phone capabilities.</p>
               <p id="secureStatus" class="muted">Optional. Certificate trust is never installed automatically.</p>
               <div class="button-row"><button id="enableHTTPS" class="secondary-button">Enable HTTPS</button><button id="useHTTP" class="quiet-button" hidden>Use HTTP instead</button></div>
               <details id="trustSetup"><summary>Android certificate setup</summary>
@@ -45,6 +48,7 @@
                 <p id="setupAddress" class="muted"></p>
               </details>
             </div>
+            <div class="surface secure-pairing" id="tailscaleSetup" hidden><h2>Private Tailscale HTTPS</h2><p id="tailscaleStatus" role="status">Check Tailscale to begin.</p><ol class="setup-steps"><li>Install Tailscale on this PC and your Android phone.</li><li>Open Tailscale on both devices and sign in to the same tailnet.</li><li>Check the connection, then enable private HTTPS. TouchHelm enables a host PIN before sharing.</li></ol><div class="button-row"><button class="quiet-button" data-tailscale-help="windows">Windows download ↗</button><button class="quiet-button" data-tailscale-help="android">Android download ↗</button><button class="quiet-button" data-tailscale-help="login">Sign-in guide ↗</button></div><div class="button-row"><button id="refreshTailscale" class="secondary-button">Check connection</button><button id="enableTailscale" class="primary-button" disabled>Enable private HTTPS</button></div><p class="muted">Private to your tailnet. No public Funnel and no manual CA certificate. Your tailnet may require an administrator to enable HTTPS certificates.</p></div>
           </div>
         </div>
       </section>

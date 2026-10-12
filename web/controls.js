@@ -223,7 +223,7 @@
         this.send({type:'get_displays'});
         this.client.experience?.consumeHandoff();
       }
-      if(!this.connected){this.client.experience?.clearAssets();this.client.experience?.clearPending();}
+      if(!this.connected){this.client.experience?.clearAssets();this.client.experience?.clearPending();this.client.experience?.cancelCloseChecks();}
     }
     updateConnection() {
       for (const button of this.keyButtons) button.disabled = !this.connected;
@@ -318,17 +318,17 @@
       this.text('presentationSlideTitle',presentation.slide_title || '');
       this.client.experience?.renderPresentation(presentation);
       if (this.ids.presentationSlideTitle) this.ids.presentationSlideTitle.hidden=!presentation.slide_title;
+      if(this.client.experience)media=this.client.experience.renderMedia(media)||media;
       this.text('mediaTitle',media.title || 'Nothing playing');
       this.text('mediaArtist',[media.artist,media.album].filter(Boolean).join(' · ') || media.app || 'Choose a player or open media on your PC.');
       this.text('mediaStatus',media.message || (media.available ? media.status || 'Playback status unavailable':'No media session available'));
       const playbackState=(media.status || '').toLowerCase();
       const action=playbackState==='playing'?'Pause':['paused','stopped'].includes(playbackState)?'Play':'Play / pause';
       this.client.setButtonLabel?.(document.getElementById('btnMediaPlay'),action,playbackState==='playing'?'pause':'play');
-      this.client.experience?.renderMedia(media);
       window.TouchHelmThemes?.updateContext({playing:playbackState==='playing',connected:this.connected});
-      this.text('mediaPosition',clock(media.position)); this.text('mediaDuration',clock(media.duration));
+      if(!this.client.experience){this.text('mediaPosition',clock(media.position));this.text('mediaDuration',clock(media.duration));}
       const position=number(media.position), duration=number(media.duration), progress=this.ids.mediaProgress;
-      if (progress) {
+      if (progress&&!this.client.experience) {
         progress.hidden=position===null || duration===null || duration<=0;
         if (!progress.hidden) {
           progress.style.setProperty('--progress',`${Math.max(0,Math.min(100,position/duration*100))}%`);

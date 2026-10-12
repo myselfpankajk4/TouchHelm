@@ -1,0 +1,51 @@
+/* All living artwork is a separate inert plane. Controls retain their own hit testing. */
+.th-effects-stage { position:fixed; inset:0; z-index:25; overflow:hidden; pointer-events:none!important; contain:strict; }
+.th-effects-stage *, .th-effects-stage *::before, .th-effects-stage *::after { pointer-events:none!important; }
+.th-effect { position:absolute; color:var(--th-accent); contain:layout style; isolation:isolate; }
+.th-effect[hidden] { display:none!important; }
+.th-effect svg { display:block; overflow:visible; }
+.th-effect-frame { opacity:.8; }
+.th-stem { fill:none; stroke:var(--th-vine,var(--th-accent)); stroke-width:1.8; stroke-linecap:round; }
+.th-leaf { fill:var(--th-leaf,var(--th-accent)); stroke:var(--th-vine,var(--th-accent)); stroke-width:.6; }
+.th-petal { fill:var(--th-petal,#edb5c0); }
+.th-flower-1 .th-petal { fill:var(--th-blossom,#fbecd0); }
+.th-flower-2 .th-petal { fill:var(--th-lilac,#b6a0d7); }
+.th-pollen { fill:var(--th-pollen,#dca452); }
+.th-drifting-petal { fill:var(--th-petal,#edb5c0); opacity:.7; }
+.th-effect-bloom.th-effect-press .th-flower, .th-effect-bloom.th-effect-key .th-flower { transform-box:fill-box; transform-origin:center; animation:th-flower-open 450ms steps(13,end) both; }
+.th-effect-bloom.th-effect-scene svg { transform:rotate(var(--th-bend,0deg)); transform-origin:20% 100%; transition:transform 170ms steps(5,end); }
+.th-effect-bloom.th-effect-press .th-drifting-petal { animation:th-petal-touch 700ms steps(20,end) both; }
+.th-shell { fill:var(--th-panel); stroke:var(--th-border); stroke-width:1.5; }
+.th-visor { fill:var(--th-visor,#372c52); }
+.th-eye { fill:var(--th-eye,#dce8ff); }
+.th-eyes { transform-origin:36px 34px; }
+.th-mouth, .th-circuit { fill:none; stroke:var(--th-accent); stroke-width:1.8; stroke-linecap:round; }
+.th-online { fill:var(--th-success); }
+.th-offline { fill:var(--th-muted); }
+.th-effect-error .th-circuit, .th-effect-error .th-mouth { stroke:var(--th-danger); }
+.th-effect-success .th-circuit { stroke:var(--th-success); }
+.th-effect-companion.th-effect-frame .th-circuit { stroke-dasharray:9 3; }
+.th-effect-companion.th-effect-key .th-circuit { animation:th-circuit-trace 400ms steps(11,end) both; }
+.th-string { fill:none; stroke:var(--th-accent); stroke-width:1; opacity:.65; stroke-linecap:round; }
+.th-note { fill:var(--th-accent); }
+.th-note-stem { fill:none; stroke:var(--th-accent); stroke-width:1.6; stroke-linecap:round; }
+.th-effect-resonance:is(.th-effect-press,.th-effect-key) .th-string { transform-box:fill-box; transform-origin:center; animation:th-string-pluck 500ms steps(14,end) both; }
+.th-effect-resonance.th-effect-scene .th-notes { animation:th-note-rise 5.6s steps(160,end) both; }
+.th-clay-form { fill:var(--th-clay-form,var(--th-surface)); stroke:var(--th-clay-edge,var(--th-border)); stroke-width:1; filter:drop-shadow(3px 5px 3px #341a2725); }
+.th-clay-small { fill:var(--th-clay-small,var(--th-panel)); }
+.th-clay-highlight { fill:none; stroke:var(--th-clay-light,#fff4e6); stroke-width:2.5; stroke-linecap:round; opacity:.66; }
+.th-clay-impression { fill:none; stroke:var(--th-clay-edge,var(--th-border)); stroke-width:2; stroke-linecap:round; opacity:.7; }
+.th-effect-clay:is(.th-effect-press,.th-effect-key) svg { transform-origin:center; animation:th-clay-knead 420ms steps(12,end) both; }
+@keyframes th-flower-open { from { scale:.45; opacity:.3; } to { scale:1; opacity:1; } }
+@keyframes th-petal-touch { to { translate:var(--th-petal-x,12px) var(--th-petal-y,-20px); opacity:0; } }
+@keyframes th-circuit-trace { from { stroke-dashoffset:24; } to { stroke-dashoffset:0; } }
+@keyframes th-string-pluck { 0%,100% { scale:1 1; } 20% { scale:1 1.65; } 45% { scale:1 .55; } 65% { scale:1 1.25; } 85% { scale:1 .9; } }
+@keyframes th-note-rise { 0% { translate:0 5px; } 65%,100% { translate:3px -7px; } }
+@keyframes th-clay-knead { 0%,100% { scale:1 1; } 30% { scale:1.04 .92; } 70% { scale:.99 1.02; } }
+:root[data-effects="calm"] .th-effects-stage *, :root[data-effects="off"] .th-effects-stage * { animation:none!important; transition:none!important; }
+:root[data-effects="off"] .th-effects-stage { display:none!important; }
+:root[data-contrast="increased"] .th-effects-stage { opacity:.3; }
+@media(forced-colors:active) { .th-effects-stage { display:none; } }
+@media(prefers-reduced-motion:reduce) { .th-effects-stage * { animation:none!important; transition:none!important; } }
+.th-effect-bloom.th-effect-idle .th-stem { stroke-dasharray:1; animation:th-vine-grow 1100ms steps(30,end) both; }
+@keyframes th-vine-grow { from { stroke-dashoffset:1; } to { stroke-dashoffset:0; } }

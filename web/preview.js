@@ -4,8 +4,8 @@
   if(!themes)return;
   let selected=themes.state.id;
   const phone=byId('previewPhone'),desktop=byId('previewDesktop');
-  const inputs=['Appearance','Motion','Contrast','Tab','State','Viewport','DesktopTab'].map(name=>byId(`preview${name}`));
-  const preferences=()=>({appearance:byId('previewAppearance').value,motion:byId('previewMotion').value,contrast:byId('previewContrast').value});
+  const inputs=['Appearance','Motion','Effects','Contrast','Tab','State','Viewport','DesktopTab'].map(name=>byId(`preview${name}`));
+  const preferences=()=>({appearance:byId('previewAppearance').value,motion:byId('previewMotion').value,effects:byId('previewEffects').value,contrast:byId('previewContrast').value});
   const label=value=>value.charAt(0).toUpperCase()+value.slice(1);
   const themeButtons=[];
   for(const theme of Object.values(themes.registry)){
@@ -49,7 +49,7 @@
     byId('previewStatus').textContent=phoneReady&&desktopReady?'Both local fixture interfaces are ready.':'Waiting for the local demo interfaces. Preview commands remain simulated.';
   }
   inputs.forEach(input=>input.addEventListener('change',update));
-  byId('previewState').addEventListener('change',()=>{const tabs={typing:'Trackpad',held:'Keyboard',menu:'Apps',notes:'Presenter',playing:'Media',paused:'Media','missing-artwork':'Media'};const target=tabs[byId('previewState').value];if(target){byId('previewTab').value=target;update();}});
+  byId('previewState').addEventListener('change',()=>{const tabs={typing:'Trackpad',touch:'Trackpad',held:'Keyboard',menu:'Apps',closing:'Apps',notes:'Presenter',playing:'Media',seeking:'Media',paused:'Media','missing-artwork':'Media'};const target=tabs[byId('previewState').value];if(target)byId('previewTab').value=target;if(byId('previewState').value.startsWith('tailscale_'))byId('previewDesktopTab').value='pairing';update();});
   phone.addEventListener('load',update);desktop.addEventListener('load',update);update();
   window.addEventListener('resize',update);
 })();

@@ -35,6 +35,8 @@ public static class TouchHelmNative {
     delegate bool EnumWindow(IntPtr hwnd, IntPtr data);
     [DllImport("user32.dll")] static extern bool EnumWindows(EnumWindow callback, IntPtr data);
     [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr hwnd);
+    [DllImport("user32.dll")] static extern bool IsWindow(IntPtr hwnd);
+    [DllImport("user32.dll", SetLastError=true)] static extern bool PostMessage(IntPtr hwnd, uint message, IntPtr wParam, IntPtr lParam);
     [DllImport("user32.dll")] static extern IntPtr GetWindow(IntPtr hwnd, uint command);
     [DllImport("user32.dll", CharSet=CharSet.Unicode)] static extern int GetWindowText(IntPtr hwnd, StringBuilder text, int count);
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd, out uint pid);
@@ -94,6 +96,16 @@ public static class TouchHelmNative {
         IntPtr hwnd=new IntPtr(handle);
         if (IsIconic(hwnd)) ShowWindow(hwnd,9);
         return SetForegroundWindow(hwnd);
+    }
+    public static bool PostClose(long handle, uint expectedPid) {
+        IntPtr hwnd = new IntPtr(handle);
+        uint actualPid;
+        if (handle == 0 || expectedPid == 0 || !IsWindow(hwnd) ||
+            GetWindowThreadProcessId(hwnd, out actualPid) == 0 || actualPid != expectedPid)
+            return false;
+        // WM_CLOSE lets the application show its normal save/discard dialog.
+        // Posting confirms delivery only; the caller checks disappearance later.
+        return PostMessage(hwnd, 0x0010, IntPtr.Zero, IntPtr.Zero);
     }
     public static string ShellIcon(string appId) {
         ImageFactory factory=null; IntPtr bitmap=IntPtr.Zero;

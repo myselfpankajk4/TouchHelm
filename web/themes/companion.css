@@ -30,3 +30,12 @@
 :root[data-theme="companion"] .desktop-panel { box-shadow:var(--th-shadow); }
 @keyframes th-companion-nod { 0%,84%,100%{transform:rotate(-7deg)} 90%{transform:rotate(1deg)} 95%{transform:rotate(-3deg)} }
 @media(max-height:560px) { :root[data-theme="companion"] .touch-surface::before { width:76px; height:76px; right:12px; bottom:10px; opacity:.65; } :root[data-theme="companion"] .trackpad-hints { justify-content:center; padding:6px 85px 6px 12px; } }
+
+/* The painted companion remains. The separate vector companion owns eye motion. */
+:root[data-theme="companion"] { --th-visor:#382f51; --th-eye:#e9e0ff; }
+:root[data-theme="companion"][data-connected="true"] .touch-surface::before { animation:none; }
+:root[data-theme="companion"] :is(.native-key,.desktop-button) { background:linear-gradient(165deg,color-mix(in srgb,var(--th-panel) 83%,white),var(--th-panel) 70%); border:1px solid var(--th-border); box-shadow:inset 0 2px 0 #ffffff3b,0 3px 6px #28144423; border-radius:13px; }
+:root[data-theme="companion"] :is(.native-key,.desktop-button):active { box-shadow:inset 0 2px 5px #29134230; }
+:root[data-theme="companion"] .native-key.held { background:var(--th-accent); }
+:root[data-theme="companion"][data-connected="false"] .th-online { fill:var(--th-muted); }
+:root[data-theme="companion"][data-connected="true"] .th-offline { fill:var(--th-success); }

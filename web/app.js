@@ -88,6 +88,8 @@ class TouchHelmClient {
     this.lastBrightSendTime = 0;
 
     this.initElements();
+    this.liveTypingExplicit=localStorage.getItem('touchhelm_live_typing')!==null;
+    if(this.chkRealtimeTyping)this.chkRealtimeTyping.checked=localStorage.getItem('touchhelm_live_typing')!=='false';
     this.buildId = document.querySelector('meta[name="touchhelm-build"]')?.content || "";
     this.restoreSession();
     this.applyTheme(this.currentTheme, false);
@@ -444,6 +446,7 @@ class TouchHelmClient {
           this.setStatus("connected", "Connected");
           this.clearFeedback("connection");
           this.clearFeedback("typing");
+          if(this.liveTypingPaused)this.showFeedback('Draft edited offline. Use Send to sync it explicitly.','info','typing');
           this.startPing();
           if (msg.config) this.applyServerConfig(msg.config);
           if ('volume' in msg) {
@@ -719,10 +722,11 @@ class TouchHelmClient {
 
   updateTypingUi() {
     const live = !!this.chkRealtimeTyping?.checked;
-    this.setButtonLabel(this.btnSendText, live ? "PC Enter" : "Send", live ? "enter" : "send");
+    this.setButtonLabel(this.btnSendText, live && !this.liveTypingPaused ? "PC Enter" : "Send", live && !this.liveTypingPaused ? "enter" : "send");
     if (this.typeInput) this.typeInput.setAttribute?.("enterkeyhint", "enter");
     if (this.typingHint) this.typingHint.textContent = !this.isConnected
       ? "Offline. Your draft stays here until you reconnect."
+      : live && this.liveTypingPaused ? "Live sync paused for an offline draft. Send restores it explicitly."
       : live ? "Live sync is on. Return adds a line; PC Enter presses Enter on your PC."
       : "Return adds a new line. Send or Ctrl+Enter sends your draft.";
   }
@@ -989,6 +993,8 @@ class TouchHelmClient {
   }
 
   switchView(viewId) {
+    window.TouchHelmEffects?.reset?.();
+    if(this.experience?.seeking){this.experience.seeking=false;this.experience.text('seekPreview','');this.experience.tickMedia();}
     this.releaseDragLock();
     this.controls?.onViewChange(viewId);
     if (viewId !== "viewTrackpad") this.disableGyro();
@@ -1010,6 +1016,7 @@ class TouchHelmClient {
     // Cleanup active laser if switching away from Presenter
     if (viewId !== "viewPresenter" && this.isLaserActive) {
       this.isLaserActive = false;
+      this.updateLaserStatus(false);
       if (this.laserReticle) this.laserReticle.classList.remove("active");
       this.send({ type: "laser", active: false });
       this.send({ type: "laser_hide" });
@@ -1541,6 +1548,7 @@ class TouchHelmClient {
         this.isLaserActive = false;
         window.TouchHelmThemes?.setInteractionActive(false);
         if (this.laserReticle) this.laserReticle.classList.remove("active");
+        this.updateLaserStatus(false);
         this.send({ type: "laser", active: false });
         this.send({ type: "laser_hide" });
       };
@@ -1587,7 +1595,15 @@ class TouchHelmClient {
     if (persist) this.syncConfig({ laser_color: color });
   }
 
+  updateLaserStatus(active) {
+    const status=document.getElementById('laserStatus'),activity=document.getElementById('laserActivity');
+    if(status)status.dataset.active=String(!!active);
+    if(activity)activity.textContent=active?'Pointing':'Ready';
+    if(this.laserSurface)this.laserSurface.dataset.pointing=String(!!active);
+  }
+
   stopLaser() {
+    this.updateLaserStatus(false);
     window.TouchHelmThemes?.setInteractionActive(false);
     if (!this.isLaserActive) return;
     this.isLaserActive = false;
@@ -1597,6 +1613,7 @@ class TouchHelmClient {
 
   updateLaserPosition(touch) {
     if (!this.laserSurface || !touch) return;
+    this.updateLaserStatus(true);
     const rect = this.laserSurface.getBoundingClientRect();
     const relX = Math.max(0, Math.min(1, (touch.clientX - rect.left) / rect.width));
     const relY = Math.max(0, Math.min(1, (touch.clientY - rect.top) / rect.height));
@@ -1859,7 +1876,7 @@ class TouchHelmClient {
         if ((text || this.chkRealtimeTyping?.checked) && !this.isComposing) {
           this.vibrate(15);
           let sent;
-          if (this.chkRealtimeTyping && this.chkRealtimeTyping.checked) {
+          if (this.chkRealtimeTyping && this.chkRealtimeTyping.checked && !this.liveTypingPaused) {
             sent = this.syncLiveText() && this.send({ type: "key", key: "enter" });
           } else {
             sent = this.liveTextValue ? this.syncLiveText(true) : this.send({ type: "text", text: text });
@@ -1867,6 +1884,8 @@ class TouchHelmClient {
           if (sent) {
             if (this.typeInput) this.typeInput.value = "";
             this.liveTextValue = "";
+            this.liveTypingPaused = false;
+            this.updateTypingUi();
             this.clearFeedback("typing");
             this.typeInput?.focus?.();
           } else {
@@ -1883,6 +1902,8 @@ class TouchHelmClient {
       this.onTap(this.btnClearText, () => {
         if (this.typeInput) this.typeInput.value = "";
         this.liveTextValue = "";
+        this.liveTypingPaused = false;
+        this.updateTypingUi();
         this.clearFeedback("typing");
         this.typeInput?.focus?.();
         this.vibrate(10);
@@ -1910,6 +1931,8 @@ class TouchHelmClient {
     }
 
     if (this.chkRealtimeTyping) this.chkRealtimeTyping.addEventListener("change", () => {
+      this.liveTypingExplicit=true;
+      try {localStorage.setItem('touchhelm_live_typing',String(this.chkRealtimeTyping.checked));} catch {}
       if (this.chkRealtimeTyping.checked) this.syncLiveText();
       this.updateTypingUi();
     });
@@ -1940,7 +1963,9 @@ class TouchHelmClient {
   }
 
   syncLiveText(force = false) {
-    if ((!force && !this.chkRealtimeTyping?.checked) || this.isComposing || !this.typeInput || !this.isConnected) return false;
+    if ((!force && !this.chkRealtimeTyping?.checked) || this.isComposing || !this.typeInput) return false;
+    if(!this.isConnected){if(this.typeInput.value!==this.liveTextValue)this.liveTypingPaused=true;this.updateTypingUi();return false;}
+    if(this.liveTypingPaused&&!force){this.updateTypingUi();this.showFeedback('Draft edited offline. Use Send to sync it explicitly.','info','typing');return false;}
     const value = this.typeInput.value;
     // Compare complete values: paste often supplies null data and IMEs replace
     // existing text. Graphemes keep an emoji or composed character intact.
@@ -1996,7 +2021,8 @@ class TouchHelmClient {
       }
       if (this.typeInput && typeof state.draft === "string") this.typeInput.value = state.draft;
       if (typeof state.baseline === "string") this.liveTextValue = state.baseline;
-      if (this.chkRealtimeTyping && typeof state.live === "boolean") this.chkRealtimeTyping.checked = state.live;
+      this.liveTypingPaused = this.typeInput.value !== this.liveTextValue;
+      if (this.chkRealtimeTyping && state.liveExplicit && typeof state.live === "boolean") this.chkRealtimeTyping.checked = state.live;
       if (Number.isFinite(state.timerInitial) && Number.isFinite(state.timerSeconds)
           && state.timerInitial > 0 && state.timerInitial <= 86400) {
         this.timerInitial = state.timerInitial;
@@ -2038,7 +2064,7 @@ class TouchHelmClient {
         }
       }
       sessionStorage.setItem(key, JSON.stringify({ build: info.build, savedAt: Date.now(), host: this.host,
-        draft: this.typeInput?.value || "", baseline: this.liveTextValue || "", live: !!this.chkRealtimeTyping?.checked,
+        draft: this.typeInput?.value || "", baseline: this.liveTextValue || "", live: !!this.chkRealtimeTyping?.checked, liveExplicit:!!this.liveTypingExplicit,
         timerInitial: this.timerInitial, timerSeconds: this.timerSeconds,
         timerRunning: this.timerRunning, timerDeadline: this.timerDeadline }));
       sessionStorage.setItem(retryKey, JSON.stringify({ build: info.build, savedAt: Date.now() }));

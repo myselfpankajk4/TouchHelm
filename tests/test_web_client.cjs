@@ -86,7 +86,7 @@ function installSocketDouble({config,state,catalog,apps}) {
           ? {type: 'auth_res', success: true, config, ...config}
           : {type: 'auth_res', success: false, message: 'Invalid PIN'})});
       });
-      const responses = {get_desktop_state:{type:'desktop_state',...state},get_apps:{type:'apps_sync',apps},get_media_library:{type:'media_library',...catalog}};
+      const responses = {get_desktop_state:{type:'desktop_state',...(window.__stateOverride||state)},get_apps:{type:'apps_sync',apps:window.__appsOverride||apps},get_media_library:{type:'media_library',...catalog}};
       if (responses[packet.type]) queueMicrotask(() => this.onmessage?.({data:JSON.stringify(responses[packet.type])}));
       if (['launch_app','play_media','presentation','media'].includes(packet.type)) queueMicrotask(() => this.onmessage?.({data:JSON.stringify({type:'command_result',command:packet.type,success:true,message:'Done'})}));
     }
@@ -210,12 +210,110 @@ test('v2 certificate download uses authenticated headers and handoff preserves t
   await page.route('**/api/pairing/handoff',route=>route.fulfill({status:503,contentType:'application/json',body:'{}'}));
   await page.evaluate(()=>{window.touchhelm.authPin='5678';window.touchhelm.typeInput.value='keep\nthis';});
   await page.locator('#btnSettings').click();await page.locator('#btnSecurePairing').click();
-  const request=page.waitForRequest('**/api/pairing/certificate');await page.getByRole('button',{name:'Download public certificate',exact:true}).click();
+  const request=page.waitForRequest('**/api/pairing/certificate');await page.getByRole('button',{name:'Download local public certificate',exact:true}).click();
   assert.equal((await request).headers()['x-touchhelm-pin'],'5678');
-  const handoff=page.waitForRequest('**/api/pairing/handoff');await page.getByRole('button',{name:'Continue over HTTPS',exact:true}).click();const data=(await handoff).postDataJSON();
+  const handoff=page.waitForRequest('**/api/pairing/handoff');await page.getByRole('button',{name:'Continue with local HTTPS',exact:true}).click();const data=(await handoff).postDataJSON();
   assert.equal(data.draft,'keep\nthis');assert.equal(data.preferences.theme,'glass');assert.ok(data.preferences.appearance&&data.preferences.motion&&data.preferences.contrast);assert.equal(data.preferences.pin_code,undefined);
   assert.equal(await page.locator('#typeInput').inputValue(),'keep\nthis');
 });
+test('living Presenter navigation never overlaps monitor controls at narrow sizes',async page=>{
+  for(const width of [320,360,390]) {
+    await page.setViewportSize({width,height:568});await page.locator('#tabPresenter').click();
+    const layout=await page.evaluate(()=>{const button=document.getElementById('btnSlideNext').getBoundingClientRect(),nav=document.querySelector('.slide-nav-grid').getBoundingClientRect(),monitor=document.querySelector('.display-choice').getBoundingClientRect();return {buttonBottom:button.bottom,navBottom:nav.bottom,monitorTop:monitor.top};});
+    assert.ok(layout.buttonBottom<=layout.navBottom+1,'navigation contains its buttons');
+    assert.ok(layout.buttonBottom<=layout.monitorTop,'monitor dropdown does not overlap navigation');
+  }
+});
+test('living Media seek advances without a supplied rate and unchanged snapshots do not rewind it',async page=>{
+  await page.locator('#tabMedia').click();
+  const media={available:true,session_id:'clock-test',title:'Clock test',status:'Playing',position:240,duration:900,min_seek:0,max_seek:900,updated_at:100,capabilities:{seek:true}};
+  await page.evaluate(media=>{const e=window.touchhelm.experience;window.__mediaTime=0;e.playbackClock.now=()=>window.__mediaTime;e.playbackClock.anchor=null;e.renderMedia(media);window.__mediaTime=1500;e.tickMedia();},media);
+  assert.ok(Number(await page.locator('#mediaSeek').inputValue())>=241,'seek advances at effective1x');
+  await page.evaluate(media=>{window.touchhelm.experience.renderMedia({...media});window.touchhelm.experience.tickMedia();},media);
+  assert.ok(Number(await page.locator('#mediaSeek').inputValue())>=241,'snapshot does not rewind');
+});
+test('living Live typing defaults on, remembers explicit opt-out, and does not replay a restored draft',async(page,context)=>{
+  assert.equal(await page.locator('#chkRealtimeTyping').isChecked(),true);
+  await page.locator('#typeInput').focus();await page.locator('#chkRealtimeTyping').uncheck();await page.reload();
+  assert.equal(await page.locator('#chkRealtimeTyping').isChecked(),false);
+  await page.evaluate(()=>{localStorage.removeItem('touchhelm_live_typing');sessionStorage.setItem(`touchhelm_resume:${location.host}`,JSON.stringify({savedAt:Date.now(),draft:'saved draft',baseline:'saved draft',live:true}));});
+  await page.reload();await page.waitForFunction(()=>window.touchhelm?.isConnected);
+  assert.equal(await page.locator('#typeInput').inputValue(),'saved draft');
+  assert.equal(await page.evaluate(()=>window.__packets.some(p=>p.type==='text')),false);
+});
+test('living Close window is limited to verified choices and reports a request rather than success',async page=>{
+  await page.locator('#tabApps').click();
+  await page.evaluate(()=>window.touchhelm.experience.drawApps([{id:'multi',name:'Editor',running:true,windows:[{id:'first',title:'One'},{id:'second',title:'Unsaved document'}]}],''));
+  await page.locator('.app-more').click();await page.locator('#btnCloseAppWindow').click();
+  assert.equal(await page.evaluate(()=>window.__packets.some(p=>p.type==='app_action'&&p.action==='close')),false);
+  await page.locator('#appWindowChoices button').last().click();
+  assert.ok(await page.evaluate(()=>window.__packets.some(p=>p.type==='app_action'&&p.action==='close'&&p.window_id==='second')));
+  assert.match(await page.locator('#appActionDetails').textContent(),/requested|waiting/i);
+});
+
+test('living offline live edits wait for explicit Send after reconnection',async page=>{
+  await typingView(page);await page.locator('#typeInput').fill('hi');
+  await page.evaluate(()=>{const c=touchhelm;c.ws.onclose();clearTimeout(c.reconnectTimer);});
+  await page.locator('#typeInput').fill('hi there');
+  await page.evaluate(()=>{touchhelm.connect();});await page.waitForFunction(()=>touchhelm.isConnected);
+  await page.evaluate(()=>window.__packets.length=0);
+  await page.locator('#typeInput').press('End');await page.locator('#typeInput').press('!');
+  assert.deepEqual(await packets(page),[],'offline draft must not replay on the next edit');
+  await page.locator('#btnSendText').click();
+  assert.ok((await packets(page)).some(p=>p.type==='text'&&p.text===' there!'));
+});
+
+test('living scrub cancellation sends nothing and rejected seeking restores actual time',async page=>{
+  await page.locator('#tabMedia').click();
+  await page.evaluate(()=>{const e=touchhelm.experience,media={available:true,session_id:'scrub',title:'Scrub',status:'Paused',position:30,duration:300,min_seek:0,max_seek:300,capabilities:{seek:true}};window.__stateOverride={presentation:{available:false},media};e.renderMedia(media);const s=document.getElementById('mediaSeek');s.value=200;s.dispatchEvent(new Event('input'));e.tickMedia();});
+  assert.equal(Number(await page.locator('#mediaSeek').inputValue()),200);
+  await page.locator('#mediaSeek').dispatchEvent('pointercancel');
+  assert.equal(Number(await page.locator('#mediaSeek').inputValue()),30);assert.deepEqual(await packets(page),[]);
+  await page.evaluate(()=>{const s=document.getElementById('mediaSeek');s.value=200;s.dispatchEvent(new Event('input'));s.dispatchEvent(new Event('change'));});
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.type==='media'&&p.action==='seek').length),1);
+  assert.equal(await page.evaluate(()=>touchhelm.experience.pending),true);
+  await page.evaluate(()=>touchhelm.experience.commandResult({command:'media',success:false,message:'Seek rejected'}));
+  assert.equal(await page.evaluate(()=>touchhelm.experience.pending),false);
+});
+
+test('living real pad permits peripheral reactions while keeping labels and input intact',async page=>{
+  await page.evaluate(async()=>{TouchHelmThemes.apply('companion',{effects:'rich',motion:'system'},false);await TouchHelmThemes.ready;});
+  const result=await page.evaluate(()=>{const c=touchhelm,source=document.getElementById('touchSurface');TouchHelmEffects.synchronize();const accepted=TouchHelmEffects.react(source,{kind:'press',x:40,y:550});return {accepted,scenes:document.querySelectorAll('.th-effect-scene:not([hidden])').length,events:getComputedStyle(document.querySelector('.th-effects-stage')).pointerEvents};});
+  assert.equal(result.accepted,true);assert.ok(result.scenes>0);assert.equal(result.events,'none');assert.deepEqual(await packets(page),[]);
+});
+test('living artwork decodes authenticated bytes, reuses valid art, and clears changed media',async page=>{
+  const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jmk0AAAAASUVORK5CYII=','base64');let reads=0;
+  await page.route('**/api/assets/good',route=>{reads++;assert.equal(route.request().headers()['x-touchhelm-pin'],'5678');return route.fulfill({status:200,contentType:'image/png',body:png});});
+  await page.route('**/api/assets/broken',route=>route.fulfill({status:200,contentType:'image/png',body:'not a PNG'}));
+  await page.locator('#tabMedia').click();
+  const media={available:true,session_id:'art-test',title:'Supplied cover',status:'Paused',position:0,duration:60,artwork_id:'good',artwork_status:'available',capabilities:{}};
+  await page.evaluate(media=>{window.touchhelm.authPin='5678';window.touchhelm.experience.renderMedia(media);},media);
+  await page.waitForFunction(()=>document.getElementById('mediaArtwork').naturalWidth>0&&!document.getElementById('mediaArtwork').hidden);
+  const src=await page.locator('#mediaArtwork').getAttribute('src');await page.evaluate(media=>window.touchhelm.experience.renderMedia({...media}),media);
+  assert.equal(reads,1);assert.equal(await page.locator('#mediaArtwork').getAttribute('src'),src);
+  await page.evaluate(media=>window.touchhelm.experience.renderMedia({...media,title:'Broken cover',artwork_id:'broken'}),media);
+  await page.waitForFunction(()=>document.getElementById('mediaArtworkStatus').textContent==='Artwork could not be displayed');
+  assert.equal(await page.locator('#mediaArtwork').isVisible(),false);
+  await page.evaluate(media=>window.touchhelm.experience.renderMedia({...media,title:'No artwork',artwork_id:null,artwork_status:'not_provided'}),media);
+  assert.match(await page.locator('#mediaArtworkStatus').textContent(),/has not supplied/);
+  assert.equal(await page.locator('#mediaArtwork').getAttribute('src'),null);
+});
+test('living an absent catalog cannot falsely confirm a close',async page=>{
+  await page.locator('#tabApps').click();
+  await page.evaluate(()=>{
+    const e=window.touchhelm.experience;
+    e.pendingClose={appId:'unknown',windowId:'selected',finalCheck:true};
+    e.drawApps([]);
+  });
+  assert.match(await page.locator('#appActionDetails').textContent(),/could not verify/i);
+  await page.evaluate(()=>{
+    const e=window.touchhelm.experience;
+    e.pendingClose={appId:'known',windowId:'selected'};
+    e.drawApps([{id:'known',name:'Scratch',windows:[]}]);
+  });
+  assert.match(await page.locator('#appActionDetails').textContent(),/Window closed/);
+});
+
 test('v2 preview board presents typing, held keys, missing artwork and action sheets without native transport',async page=>{
   const sockets=[];page.on('websocket',socket=>sockets.push(socket.url()));
   await page.goto(origin+'/preview.html',{waitUntil:'networkidle'});
@@ -774,9 +872,10 @@ for (const [width, height] of [[360, 640], [390, 844], [844, 390], [320, 568], [
 const views = ['Trackpad', 'Presenter', 'Media', 'Keyboard', 'Apps'];
 async function settleVisual(page) {
   await page.evaluate(async () => {
+    await Promise.race([new Promise(resolve=>requestAnimationFrame(()=>requestAnimationFrame(resolve))),new Promise(resolve=>setTimeout(resolve,100))]);
     const finite = document.getAnimations().filter(animation =>
       animation.effect?.getComputedTiming().iterations !== Infinity);
-    await Promise.all(finite.map(animation => animation.finished.catch(() => {})));
+    await Promise.race([Promise.all(finite.map(animation => animation.finished.catch(() => {}))),new Promise(resolve=>setTimeout(resolve,350))]);
   });
 }
 async function inspectUsability(page, label) {
@@ -895,6 +994,57 @@ test('all seven themes keep control text readable on every remote view and setti
   }
   assert.deepEqual(issues, [], 'seven-theme accessibility audit');
 }, true);
+
+test('living visual matrix covers every theme, appearance, phone size and desktop panel',async(page,context)=>{
+  const issues=[],themes=['bloom','companion','resonance','clay','glass','soft','ink'];
+  await page.goto(origin+'/index.html?preview=1');
+  await page.waitForFunction(()=>window.touchhelm?.isConnected&&window.TouchHelmEffects);
+  const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmDesktopPreview);
+  for(const theme of themes)for(const appearance of ['light','dark']){
+    await page.bringToFront();
+    await page.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off',motion:'reduced'},false);await TouchHelmThemes.ready;},{theme,appearance});
+    for(const [width,height]of [[320,568],[360,640],[390,844],[844,390],[390,420],[1440,900]]){
+      await page.setViewportSize({width,height});
+      for(const view of views){
+        await page.locator(`#tab${view}`).click();issues.push(...await inspectUsability(page,`${theme}/${appearance}/${width}x${height}/${view}`));
+        if(view==='Presenter'){
+          const overlap=await page.evaluate(()=>{const n=document.querySelector('#btnSlideNext').getBoundingClientRect(),s=document.querySelector('#presentationDisplay').getBoundingClientRect();return n.bottom>s.top;});
+          if(overlap)issues.push(`${theme}/${width}: Presenter monitor overlap`);
+        }
+        if(width===390&&height===844)await screenshot(page,`living-${theme}-${appearance}-${view.toLowerCase()}`);
+      }
+    }
+    await desktop.bringToFront();
+    await desktop.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off',motion:'reduced'},false);await TouchHelmThemes.ready;},{theme,appearance});
+    for(const width of [820,1280]){
+      await desktop.setViewportSize({width,height:820});
+      for(const panel of ['pairing','devices','settings','diagnostics']){
+        await desktop.locator(`[data-panel="${panel}"]`).click();
+        const errors=await desktop.evaluate(()=>{const scope=document.querySelector('[data-page]:not([hidden])'),issues=[];if(document.documentElement.scrollWidth>innerWidth+1)issues.push('horizontal overflow');for(const b of scope.querySelectorAll('button,select,input:not([type=checkbox]):not([type=range])')){if(!b.getClientRects().length)continue;const r=b.getBoundingClientRect();if(r.width<43.5||r.height<43.5)issues.push(`small target ${b.id}: ${r.width}x${r.height}`);if(r.left<0||r.right>innerWidth+1)issues.push(`clipped ${b.id}`);}return issues;});
+        issues.push(...errors.map(error=>`${theme}/${appearance}/desktop${width}/${panel}: ${error}`));
+        if(width===1280&&panel==='pairing')await screenshot(desktop,`living-${theme}-${appearance}-desktop`);
+      }
+    }
+    if(['bloom','companion','resonance','clay'].includes(theme)&&appearance==='dark'){
+      await page.bringToFront();
+      await page.setViewportSize({width:390,height:844});await page.locator('#tabTrackpad').click();
+      await page.evaluate(()=>{TouchHelmThemes.apply(TouchHelmThemes.state.id,{effects:'rich',motion:'system'},false);TouchHelmEffects.reset();});
+      await page.waitForFunction(()=>TouchHelmEffects.diagnostics.idle>0,{timeout:4000});
+      await page.waitForTimeout(900);
+      if(captureScreenshots){fs.mkdirSync(artifactDir,{recursive:true});await page.screenshot({path:path.join(artifactDir,`living-${theme}-idle.png`)});}
+      await page.evaluate(()=>TouchHelmEffects.react(document.querySelector('#btnLeftClick'),{kind:'press'}));
+      await page.waitForTimeout(170);
+      if(captureScreenshots)await page.screenshot({path:path.join(artifactDir,`living-${theme}-touch.png`)});
+    }
+  }
+  for(const state of ['seeking','closing','tailscale_ready','tailscale_permission','tailscale_reconnect']){
+    await page.bringToFront();
+    await page.evaluate(state=>TouchHelmDemo.setState(state),state);await desktop.evaluate(state=>TouchHelmDesktopPreview.setState(state),state);
+    if(state.startsWith('tailscale_')){await desktop.bringToFront();await desktop.locator('[data-panel=pairing]').click();await screenshot(desktop,`living-${state}`);}
+  }
+  await desktop.close();assert.deepEqual(issues,[],'full living theme/layout matrix');
+},true);
 
 (async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));

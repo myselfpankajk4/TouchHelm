@@ -136,8 +136,10 @@ def _presentation(message='No supported presentation context is available.'):
 def _media(message='No active Windows media session is available.'):
     return dict(available=False, session_id='', app='', title='', artist='', album='',
                 genre=[], track=None, album_tracks=None, artwork_id=None,
+                artwork_status='not_provided',
                 status='unavailable', position=None, duration=None, min_seek=None, max_seek=None,
-                playback_rate=None, shuffle=None, repeat=None, updated_at=time.time(),
+                playback_rate=None, shuffle=None, repeat=None, updated_at=None,
+                sampled_at=time.time(),
                 capabilities={key: False for key in
                               ('play', 'pause', 'play_pause', 'next', 'prev', 'stop', 'seek', 'shuffle', 'repeat', 'rate')},
                 message=message, sessions=[])
@@ -183,6 +185,7 @@ class DesktopServices:
         if not isinstance(value, dict):
             return value
         result = {}
+        artwork_input = 'artwork_data' in value
         for key, item in value.items():
             if key in ('artwork_data', 'icon_data', 'preview_data'):
                 target = 'icon_id' if key == 'icon_data' else 'artwork_id'
@@ -196,7 +199,37 @@ class DesktopServices:
                 if key in ('artwork_id', 'icon_id') and key in result:
                     continue
                 result[key] = self._normalize_assets(item)
+        if artwork_input:
+            if result.get('artwork_id'):
+                result['artwork_status'] = 'available'
+            elif value.get('artwork_status') == 'read_error' or value.get('artwork_data'):
+                result['artwork_status'] = 'read_error'
+            else:
+                result['artwork_status'] = 'not_provided'
         return result
+
+    @staticmethod
+    def _sample_media(media, sampled_at):
+        """Convert Windows' position-at-LastUpdatedTime to position-at-sample."""
+        media['sampled_at'] = sampled_at
+        position = media.get('position')
+        if type(position) not in (int, float) or not math.isfinite(position):
+            media['position'] = None
+            return media
+        updated_at = media.get('updated_at')
+        rate = media.get('playback_rate')
+        if str(media.get('status', '')).lower() == 'playing' and type(updated_at) in (int, float) and math.isfinite(updated_at):
+            effective_rate = rate if type(rate) in (int, float) and math.isfinite(rate) and rate > 0 else 1.
+            position += max(0., sampled_at - updated_at) * effective_rate
+        low = media.get('min_seek')
+        high = media.get('max_seek')
+        duration = media.get('duration')
+        lower = max(0., low) if type(low) in (int, float) and math.isfinite(low) else 0.
+        upper = min((bound for bound in (high, duration)
+                     if type(bound) in (int, float) and math.isfinite(bound) and bound >= lower),
+                    default=None)
+        media['position'] = max(lower, min(position, upper)) if upper is not None else max(lower, position)
+        return media
 
     async def snapshot(self):
         try:
@@ -204,6 +237,11 @@ class DesktopServices:
             presentation, media = _presentation(), _media()
             presentation.update({k: v for k, v in state.get('presentation', {}).items() if k in presentation})
             media.update({k: v for k, v in state.get('media', {}).items() if k in media})
+            sampled_at = time.time()
+            self._sample_media(media, sampled_at)
+            for session in media.get('sessions', []):
+                if isinstance(session, dict):
+                    self._sample_media(session, sampled_at)
             return {'presentation': presentation, 'media': media}
         except Exception as error:
             message = str(error) or 'Windows provider timed out'
@@ -306,6 +344,10 @@ class DesktopServices:
             native.update(await self._call('media_library'))
         except Exception as error:
             native['playlist_message'] = str(error)
+        sampled_at = time.time()
+        for session in native.get('sessions', []):
+            if isinstance(session, dict):
+                self._sample_media(session, sampled_at)
         self._current_session = native.get('current', {}).get('session_id', '')
         self._sessions = {session.get('id', session.get('session_id')): session
                           for session in native.get('sessions', []) if isinstance(session, dict)
@@ -418,7 +460,7 @@ class DesktopServices:
                 raise
 
     async def app_action(self, app_id, action, window_id=''):
-        if not isinstance(app_id, str) or not isinstance(window_id, str) or action not in ('focus', 'pin', 'unpin', 'details'):
+        if not isinstance(app_id, str) or not isinstance(window_id, str) or action not in ('focus', 'close', 'pin', 'unpin', 'details'):
             return dict(success=False, message='Choose a valid app action.')
         if not self._apps or time.monotonic() - self._apps_at > 30:
             await self.list_apps()
@@ -433,11 +475,11 @@ class DesktopServices:
                 return dict(success=True, message='', details=dict(app, pinned=app_id in self._pinned,
                                                                    launches=(self._usage or {}).get(app_id, 0)))
             windows = app.get('windows', [])
-            if not window_id and len(windows) == 1:
+            if action == 'focus' and not window_id and len(windows) == 1:
                 window_id = windows[0]['id']
             if not any(window['id'] == window_id for window in windows):
                 return dict(success=False, message='Refresh Apps and choose an available window.')
-            return await self._call('app_action', {'app_id': app_id, 'action': 'focus', 'window_id': window_id})
+            return await self._call('app_action', {'app_id': app_id, 'action': action, 'window_id': window_id})
         except Exception as error:
             return dict(success=False, message=str(error))
 

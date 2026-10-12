@@ -19,6 +19,7 @@ import qrcode
 
 from server.build_version import get_build_id
 from server.secure_pairing import private_storage_root, protect_user_path
+from server.tailscale_pairing import HELP_URLS
 
 ROOT = Path(__file__).resolve().parents[1]
 GUI_WEB = ROOT / 'gui' / 'web'
@@ -29,6 +30,7 @@ def preview_state():
     """Explicitly synthetic desktop fixture; no native queries, keys or listeners."""
     url = 'http://192.168.1.25:8765/'
     output = io.BytesIO(); qrcode.make(url).save(output, format='PNG')
+    trusted_output = io.BytesIO(); qrcode.make('https://sample-pc.example.ts.net:8443/').save(trusted_output, format='PNG')
     return {'preview': True, 'config': {'mouse_sensitivity': 1.3, 'mouse_acceleration': 1.25,
         'scroll_speed': 1.0, 'invert_scroll': False, 'require_pin': True, 'laser_color': 'blue'},
         'pin_code': '5678', 'devices': [{'device': 'Android phone', 'ip': '192.168.1.40', 'authenticated': True, 'ping': 12},
@@ -36,8 +38,10 @@ def preview_state():
         'activity': ['[10:40:12] Android phone: Connected', '[10:40:15] Android phone: Pointer moved'],
         'pairing': {'http_url': url, 'https_url': None, 'secure_ready': False,
                     'qr': 'data:image/png;base64,' + base64.b64encode(output.getvalue()).decode(),
-                    'certificate': {}, 'setup_url': url},
-        'preferences': {'theme': 'glass', 'appearance': 'dark', 'motion': 'system', 'contrast': 'system'},
+                    'certificate': {}, 'setup_url': url,
+                    'preview_trusted_qr':'data:image/png;base64,'+base64.b64encode(trusted_output.getvalue()).decode(),
+                    'tailscale':{'state':'not_installed','ready':False,'url':None,'message':'Preview: install Tailscale on Windows and Android, then sign in to the same tailnet.'}},
+        'preferences': {'theme': 'glass', 'appearance': 'dark', 'motion': 'system', 'contrast': 'system','effects':'rich','connection_mode':'http'},
         'diagnostics': {'engine': 'EdgeChromium / WebView2', 'python': 'Preview', 'build': 'Sample build',
                         'source': 'Sample workspace', 'host': '192.168.1.25', 'http_port': 8765,
                         'https_port': 8766, 'certificate_trust': 'Manual installation only'}}
@@ -67,7 +71,7 @@ class DesktopAssetServer:
             return None
         if relative in ('index.html', 'desktop.css', 'desktop.js'):
             return GUI_WEB / relative
-        if relative in ('themes.js', 'themes.css'):
+        if relative in ('themes.js', 'themes.css', 'theme-effects.js', 'theme-effects.css'):
             return ROOT / 'web' / relative
         if relative.startswith(('themes/', 'assets/', 'icons/')) and Path(relative).suffix.lower() in ('.css', '.svg', '.png', '.webp', '.jpg', '.woff2'):
             candidate = (ROOT / 'web' / relative).resolve()
@@ -154,11 +158,13 @@ class DesktopAPI:
 
     def save_preferences(self, token, preferences):
         self._authorize(token)
-        if (not isinstance(preferences, dict) or set(preferences) - {'theme', 'appearance', 'motion', 'contrast'}
+        if (not isinstance(preferences, dict) or set(preferences) - {'theme', 'appearance', 'motion', 'contrast','effects','connection_mode'}
                 or preferences.get('theme') not in THEMES
                 or preferences.get('appearance') not in ('light', 'dark', 'system')
                 or preferences.get('motion') not in ('full', 'reduced', 'system')
-                or preferences.get('contrast') not in ('standard', 'increased', 'system')):
+                or preferences.get('contrast') not in ('standard', 'increased', 'system')
+                or preferences.get('effects','rich') not in ('rich','calm','off')
+                or preferences.get('connection_mode','http') not in ('http','local_ca','tailscale')):
             return {'success': False, 'error': 'Choose valid appearance preferences.'}
         try:
             with self._app._settings_lock:
@@ -190,6 +196,40 @@ class DesktopAPI:
         webbrowser.open(url)
         return {'success': True}
 
+    def open_pairing(self, token, mode):
+        self._authorize(token)
+        pairing=self._app._pairing()
+        key={'http':'http_url','local_ca':'https_url','tailscale':'tailscale_url'}.get(mode)
+        if not key or not pairing.get(key):return {'success':False,'error':'This connection is not ready. Complete setup or refresh its status.'}
+        webbrowser.open(pairing[key]);return {'success':True}
+
+    def refresh_tailscale(self, token):
+        self._authorize(token)
+        try:
+            status=self._app._submit(self._app.server.refresh_tailscale(True))
+            return {'success':True,'tailscale':status,'pairing':self._app._pairing()}
+        except Exception as error:return {'success':False,'error':str(error)}
+
+    def request_tailscale(self, token, enabled=True):
+        self._authorize(token)
+        if type(enabled) is not bool:return {'success':False,'error':'Choose enable or disable.'}
+        app=self._app
+        with app._settings_lock:
+            try:
+                if enabled and not app.config.get('require_pin'):
+                    app.config.update({'require_pin':True,'pin_code':f'{secrets.randbelow(10000):04d}'})
+                    app._submit(app.server.invalidate_auth_sessions())
+                app._submit(app.server.enable_tailscale() if enabled else app.server.disable_tailscale())
+                pairing=app._pairing()
+                if enabled and not pairing['tailscale']['ready']:raise RuntimeError(pairing['tailscale']['message'])
+                return {'success':True,'pairing':pairing}
+            except Exception as error:return {'success':False,'error':str(error)}
+
+    def open_tailscale_help(self, token, page):
+        self._authorize(token)
+        if page not in HELP_URLS:return {'success':False,'error':'Unknown setup step.'}
+        webbrowser.open(HELP_URLS[page]);return {'success':True}
+
     def minimize(self, token):
         self._authorize(token)
         self._app.minimize()
@@ -220,7 +260,7 @@ class WebViewDesktopApp:
             raise RuntimeError('The host is stopping. Restart TouchHelm before changing secure pairing.')
         future = asyncio.run_coroutine_threadsafe(coroutine, self.server_loop)
         try:
-            return future.result(timeout=12)
+            return future.result(timeout=25)
         except TimeoutError:
             future.cancel()
             raise RuntimeError('The host did not respond in time. Check Diagnostics and retry.')
@@ -273,10 +313,14 @@ class WebViewDesktopApp:
             except (OSError, RuntimeError): pass
         http_url = self.phone_url(False)
         secure_url = self.phone_url(True) if ready else None
+        tailscale=getattr(self.server,'tailscale_status',None)
+        if not isinstance(tailscale,dict):tailscale={'state':'unchecked','ready':False,'url':None,'message':'Check Tailscale to begin private HTTPS setup.'}
+        tailscale_url=tailscale.get('url') if tailscale.get('ready') else None
         return {'http_url': http_url, 'https_url': secure_url, 'secure_ready': ready,
                 'qr': self._qr(secure_url or http_url), 'qr_http': self._qr(http_url),
                 'qr_https': self._qr(secure_url) if secure_url else None, 'certificate': info,
-                'setup_url': http_url}
+                'setup_url': http_url, 'tailscale':tailscale,'tailscale_url':tailscale_url,
+                'qr_tailscale':self._qr(tailscale_url) if tailscale_url else None}
 
     def snapshot(self):
         with self._state_lock:

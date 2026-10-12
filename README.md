@@ -20,11 +20,19 @@ Turn your phone into a Windows trackpad, keyboard, presentation remote, media co
 | **Presenter** | Previous/next above a large laser surface, monitor selection, independent countdown, and an optional PowerPoint slide/preview/notes drawer. |
 | **Media** | Now Playing with artwork, metadata, stateful Play/Pause, timeline, seeking and supported repeat/shuffle/speed controls. A queue appears only when a provider supplies one. |
 | **Keyboard** | Native press/release, F1–F24, letters, symbols, navigation, left/right modifiers, editing shortcuts, and integrated Numpad. Hold or latch modifiers for chords such as **Ctrl+Shift+A**. |
-| **Apps** | Real Windows icons and verified windows. Pinned apps first, then running/frequently opened apps. Hold or choose Actions for Open, Focus, Pin and Details. |
+| **Apps** | Real Windows icons and verified windows. Pinned apps first, then running/frequently opened apps. Hold or choose Actions for Open, Focus, Pin, Details and normal Close window. Save prompts stay on the PC. |
 
 Seven complete themes—**Forest & Bloom, Resonance, Companion, Clay, Glass, Soft UI and Ink**—cover phone and desktop. Each supports light/dark appearance, reduced motion and increased contrast. Preferences belong to each device. Optional PIN pairing and trusted HTTPS, desktop device status, and system-tray support are included.
 
+**Living controls (v2.1):** Bloom grows vines and flowers around controls, Companion blinks and follows touches, Resonance plucks decorative strings, and Clay reacts with tactile impressions. Choose **Rich / Calm / Off** in Themes; system reduced motion takes priority. Decorations pause around active pointer control and never intercept input.
+
+Live typing starts enabled on new devices and remembers explicit opt-out. Return still adds a newline. Drafts edited offline pause live synchronization until **Send**, so reconnecting cannot replay them. Media uses a shared playback clock for elapsed time, seek thumb and progress; unavailable artwork has an explicit placeholder.
+
+Optional **private Tailscale HTTPS** pairs Windows and Android without installing TouchHelm's CA. Both devices must have Tailscale installed and connected to the same tailnet. Setup lives in the desktop Pairing panel; HTTP and local-certificate HTTPS remain available. See the [living controls and verification record](docs/LIVING_CONTROLS.md).
+
 <img src="docs/images/themes.png" alt="Seven TouchHelm phone and desktop theme previews" width="1100">
+
+<img src="docs/images/living-themes.png" alt="Four living themes with peripheral scenes in simulated phone interfaces" width="1080">
 
 Open **`/preview.html`** on the running host for an interactive preview board with all tabs, desktop panels, themes and simulated states. Preview transport cannot send PC input. [Implementation and acceptance record](docs/TOUCHHELM_V2.md) · [Desktop and HTTPS guide](docs/desktop-v2.md).
 
@@ -32,7 +40,7 @@ Open **`/preview.html`** on the running host for an interactive preview board wi
 
 - **Host:** Windows 10/11, Python, Windows PowerShell, WebView2 Runtime and .NET Framework 4.6.2 or later. Python 3.13 is used in this workspace. Tkinter remains available for the classic rollback UI.
 - **Phone:** a modern browser on the same reachable local network as the PC. The UI supports phone, landscape, and desktop browser sizes.
-- **Network:** HTTP/WebSocket **8765**, optional HTTPS/WSS **8766**, discovery UDP **53317**. Allow the host through Windows Firewall on your private network if prompted.
+- **Network:** HTTP/WebSocket **8765**, optional local HTTPS/WSS **8766**, discovery UDP **53317**. Private Tailscale Serve uses **HTTPS 8443** and a loopback-only backend on **8767**. Allow the LAN host through Windows Firewall on your private network if prompted.
 
 Node.js is needed only for development tests, not normal app use.
 
@@ -108,6 +116,9 @@ Local settings are saved automatically in `config.json`, which is excluded from 
 | Laser color | Red | Red, green, blue, amber |
 | Theme | Glass | Bloom, Resonance, Companion, Clay, Glass, Soft UI, Ink; device-local |
 | HTTPS | Off, port `8766` | Enable on desktop; manually trust this PC’s public CA on Android |
+| Private Tailscale HTTPS | Off | Desktop setup; same tailnet, host PIN, HTTPS 8443 |
+| Live typing | On for a new device | Device-local opt-out; offline drafts require explicit Send |
+| Living effects | Rich | Rich / Calm / Off; system reduced motion wins |
 
 The default transport is HTTP/WebSocket for a trusted local network. Optional HTTPS uses a local CA and address-specific server certificate; private keys remain in a restricted user folder outside served assets. Trust installation is manual. An authenticated, short-lived, single-use handoff transfers drafts/preferences between HTTP and HTTPS; authentication is rechecked. See the [Android setup instructions](docs/desktop-v2.md#optional-android-https-setup).
 
@@ -115,7 +126,7 @@ An enabled PIN gates input, context/catalog queries, settings and private artwor
 
 ## Development and verification
 
-The host uses Python/aiohttp/Tkinter and Win32 input. The phone uses plain HTML/CSS/JavaScript. A lazy hidden PowerShell bridge provides COM/WinRT context; slow provider work runs outside the input event loop and returns bounded failure states.
+The host uses Python/aiohttp, an owned WebView2 desktop shell (with Tk rollback), and Win32 input. The phone uses plain HTML/CSS/JavaScript. A lazy hidden PowerShell bridge provides COM/WinRT context; slow provider work runs outside the input event loop and returns bounded failure states.
 
 ### Safe Python regressions
 

@@ -11,6 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class WebViewShellTests(unittest.TestCase):
+    def test_tailscale_commands_restricted_to_owned_desktop_window(self):
+        self.assertTrue(hasattr(self.api,'request_tailscale'), 'Private Serve belongs to the native bridge')
+        self.app.window.get_current_url.return_value='https://attacker.invalid/'
+        for method,args in ((self.api.request_tailscale,(True,)),(self.api.refresh_tailscale,()),(self.api.open_tailscale_help,('windows',))):
+            with self.assertRaises(PermissionError): method(self.app.token,*args)
+
     def setUp(self):
         self.module = importlib.import_module('gui.webview_window')
         self.folder = tempfile.TemporaryDirectory(dir=ROOT / 'tests')

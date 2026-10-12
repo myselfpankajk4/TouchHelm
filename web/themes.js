@@ -35,17 +35,19 @@
   let interactionActive=false;
   let state={...migrate(read('touchhelm_theme')||read('phonepad_theme')||'glass'),
     appearance:read('touchhelm_appearance')||migrate(read('touchhelm_theme')||'glass').appearance,
-    motion:read('touchhelm_motion')||'system',contrast:read('touchhelm_contrast')||'system'};
+    effects:read('touchhelm_effects')||'rich',motion:read('touchhelm_motion')||'system',contrast:read('touchhelm_contrast')||'system'};
   let ready=Promise.resolve();
   const option=(value,values,fallback)=>values.includes(value)?value:fallback;
   function synchronize(){
     root.dataset.appearance=state.appearance==='system'?(queries.dark.matches?'dark':'light'):state.appearance;
     root.dataset.motion=queries.reduced.matches||state.motion==='reduced'?'reduced':'full';
+    root.dataset.effects=state.effects==='off'?'off':root.dataset.motion==='reduced'?'calm':state.effects;
     root.dataset.contrast=state.contrast==='increased'||state.contrast==='system'&&queries.contrast.matches?'increased':'standard';
     root.dataset.themePaused=String(interactionActive||document.hidden||root.classList.contains('interaction-active'));
     const meta=document.querySelector('meta[name="theme-color"]');
     if(meta)meta.setAttribute('content',registry[state.id].backgrounds[root.dataset.appearance]);
     for(const refresh of pickers)refresh();
+    window.TouchHelmEffects?.synchronize();
   }
   function loadStyles(id){
     let base=document.getElementById('th-themes-base');
@@ -69,6 +71,7 @@
     if(Object.hasOwn(legacy,id)&&!Object.hasOwn(preferences,'appearance'))incoming.appearance=migrated.appearance;
     state={id:migrated.id,
       appearance:option(incoming.appearance,['light','dark','system'],migrated.appearance),
+      effects:option(incoming.effects,['rich','calm','off'],'rich'),
       motion:option(incoming.motion,['full','reduced','system'],'system'),
       contrast:option(incoming.contrast,['standard','increased','system'],'system')};
     root.dataset.theme=state.id;loadStyles(state.id);synchronize();
@@ -80,7 +83,7 @@
     if(!container)return ()=>{};
     const choices=node('div',null,'th-theme-choices'),buttons=[];
     const heading=node('h3','Choose your material','th-picker-heading');
-    const choose=(id,prefs)=>{const selected=apply(id,prefs);onSelect?.(selected.id,{appearance:selected.appearance,motion:selected.motion,contrast:selected.contrast});};
+    const choose=(id,prefs)=>{const selected=apply(id,prefs);onSelect?.(selected.id,{appearance:selected.appearance,motion:selected.motion,contrast:selected.contrast,effects:selected.effects});};
     for(const theme of Object.values(registry)){
       const button=node('button',null,'th-theme-choice');button.type='button';button.dataset.themeId=theme.id;
       button.setAttribute('aria-pressed','false');
@@ -93,13 +96,13 @@
     const settings=node('div',null,'th-theme-preferences'),selects={};
     for(const [key,label,values] of [
       ['appearance','Appearance',[['system','Follow device'],['light','Light'],['dark','Dark']]],
-      ['motion','Motion',[['system','Follow device'],['full','Full'],['reduced','Reduced']]],
+      ['effects','Living effects',[['rich','Rich'],['calm','Calm'],['off','Off']]],
       ['contrast','Contrast',[['system','Follow device'],['standard','Standard'],['increased','Increased']]],
     ]){
       const field=node('label',null,'th-theme-preference');const select=node('select');select.id=`th-picker-${key}`;
       field.setAttribute('for',select.id);field.appendChild(node('span',label));
       for(const [value,text]of values){const item=node('option',text);item.value=value;select.appendChild(item);}
-      select.addEventListener('change',()=>choose(state.id,{[key]:select.value}));field.appendChild(select);settings.appendChild(field);selects[key]=select;
+      select.addEventListener('change',()=>choose(state.id,{[key]:select.value,...(key==='effects'?{motion:'system'}:{})}));field.appendChild(select);settings.appendChild(field);selects[key]=select;
     }
     container.replaceChildren(heading,choices,settings);
     const refresh=()=>{for(const button of buttons)button.setAttribute('aria-pressed',String(button.dataset.themeId===state.id));for(const[key,select]of Object.entries(selects))select.value=state[key];};
