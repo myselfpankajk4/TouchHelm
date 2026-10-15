@@ -66,6 +66,9 @@
         if(typeof p.live_typing==='boolean'){
           this.client.chkRealtimeTyping.checked=p.live_typing;this.client.liveTypingExplicit=true;save('touchhelm_live_typing',p.live_typing);
         }
+        if(typeof p.pc_text_sync==='boolean'){
+          id('pcTextSync').checked=p.pc_text_sync;save('touchhelm_pc_text_sync',p.pc_text_sync);this.client.textSync?.reset();
+        }
         if(p.theme&&window.TouchHelmThemes){const chosen=window.TouchHelmThemes.apply(p.theme,p);this.client.currentTheme=chosen.id;this.cacheTheme();}
         if(['enter','shift_enter'].includes(p.newline_mode)){this.client.newlineMode=p.newline_mode;id('newlineMode').value=p.newline_mode;save('touchhelm_newline_mode',p.newline_mode);}
         if(typeof p.haptics==='boolean'){this.client.hapticsEnabled=p.haptics;localStorage.setItem('touchhelm_haptics',String(p.haptics));this.client.chkHaptics.checked=p.haptics;}
@@ -230,6 +233,21 @@
         else{const link=document.createElement('a');link.href='https://tailscale.com/download/android';link.textContent='Get Tailscale for Android';link.target='_blank';link.rel='noopener';guide.append(link);}
         const p=document.createElement('p');p.textContent=info.enabled?'Local certificate option: install the public CA in Android settings, then use the local HTTPS QR. Fingerprint: '+info.fingerprint_sha256:'Local HTTP and local certificate HTTPS remain available from the desktop pairing panel.';guide.append(p);
         if(info.enabled){
+          const addGuide=(title,steps,open=false)=>{
+            if(!Array.isArray(steps)||!steps.length)return;
+            const details=document.createElement('details'),summary=document.createElement('summary'),list=document.createElement('ol');
+            summary.textContent=title;details.open=open;details.className='pairing-guide-steps';
+            for(const step of steps){const item=document.createElement('li');item.textContent=step;list.append(item);}
+            details.append(summary,list);guide.append(details);
+          };
+          addGuide('Android · install this PC’s CA',info.trust_guide,true);
+          addGuide('iPhone / iPad · profile and full trust',info.trust_ios);
+          addGuide('Troubleshooting and removal',info.trust_troubleshooting);
+          const references=document.createElement('p');
+          for(const [label,url]of [['Android settings help','https://support.google.com/pixelphone/answer/2844832'],['iPhone trust help','https://support.apple.com/102390']]){
+            const link=document.createElement('a');link.textContent=label+' ↗';link.href=url;link.target='_blank';link.rel='noopener';references.append(link,document.createTextNode(' '));
+          }
+          guide.append(references);
           const download=document.createElement('button');download.textContent='Download local public certificate';
           download.addEventListener('click',async()=>{download.disabled=true;try{
             const certificate=await fetch(this.api('/api/pairing/certificate'),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});
@@ -246,7 +264,7 @@
         if(typeof destination!=='string'){target.protocol='https:';target.port=String(destination);}
         if(target.protocol!=='https:'||target.username||target.password)throw Error('Choose a trusted HTTPS pairing address from your PC.');
         target.pathname='/';target.search='';target.hash='';
-        const response=await fetch(this.api('/api/pairing/handoff'),{method:'POST',headers:{'Content-Type':'application/json','X-TouchHelm-Pin':this.client.authPin||''},body:JSON.stringify({target_origin:target.origin,draft:this.client.typeInput.value,live_baseline:this.client.liveTextValue||'',preferences:{theme:this.client.currentTheme,...window.TouchHelmThemes?.state,newline_mode:this.client.newlineMode,haptics:this.client.hapticsEnabled,live_typing:!!this.client.chkRealtimeTyping?.checked}})});
+        const response=await fetch(this.api('/api/pairing/handoff'),{method:'POST',headers:{'Content-Type':'application/json','X-TouchHelm-Pin':this.client.authPin||''},body:JSON.stringify({target_origin:target.origin,draft:this.client.typeInput.value,live_baseline:this.client.liveTextValue||'',preferences:{theme:this.client.currentTheme,...window.TouchHelmThemes?.state,newline_mode:this.client.newlineMode,haptics:this.client.hapticsEnabled,live_typing:!!this.client.chkRealtimeTyping?.checked,pc_text_sync:!!id('pcTextSync').checked}})});
         if(!response.ok)throw Error('Could not transfer your draft. Keep this page open and check the desktop pairing status and PIN.');
         const data=await response.json();if(typeof data.token!=='string'||data.target_origin&&data.target_origin!==target.origin)throw Error('The pairing destination changed. Keep this page open and retry.');
         target.hash='handoff='+encodeURIComponent(data.token);location.assign(target.href);

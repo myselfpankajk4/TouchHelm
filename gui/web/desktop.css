@@ -6,3 +6,8 @@
 .remote-session-banner{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:10px 24px;background:var(--th-panel);border-bottom:1px solid var(--th-border);flex-shrink:0}.remote-session-banner span{overflow-wrap:anywhere}.remote-session-banner button{min-height:44px;background:var(--th-surface);color:var(--th-text);border:1px solid var(--th-border);border-radius:8px;padding:8px 12px}
 #wirelessDisplayProgress{width:100%;height:12px;accent-color:var(--th-accent);margin:8px 0 16px}#wirelessDisplayStatus{max-width:65ch}#pinCode{overflow-wrap:anywhere}
 #trustedSetupProgress{width:100%;height:12px;accent-color:var(--th-accent)}.trusted-quick-setup h2{font-size:18px;line-height:1.35}.trusted-quick-setup p{font-size:13px}
+.connection-setup-guide{min-width:0}.connection-setup-guide .surface{margin-top:0}
+.connection-setup-guide .setup-steps{line-height:1.55}.connection-setup-guide .setup-steps li{margin:14px 0}
+#trustGuide{padding-left:22px;font-size:13px;line-height:1.55}#trustGuide li{margin:14px 0}
+#certificateFingerprint{display:block;overflow-wrap:anywhere;line-height:1.6;font-size:12px;padding:12px;background:var(--th-surface);border-radius:8px}
+.pairing-security{grid-column:1/-1;border-top:1px solid var(--th-border);margin-top:18px;padding-top:18px;min-width:0}.pairing-security h2{font-size:15px}.pairing-security p{font-size:12px;line-height:1.5}.pairing-security .pin-code{font-size:32px;margin:8px 0;line-height:1.2}#selectedTrustedProgress{width:100%;height:12px;accent-color:var(--th-accent);margin-bottom:12px}

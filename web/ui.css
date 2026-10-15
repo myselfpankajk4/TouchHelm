@@ -314,3 +314,13 @@ details.keyboard-group > summary::-webkit-details-marker,.shortcut-details > sum
 @media (prefers-reduced-motion:reduce) { *,*::before,*::after { animation:none !important; transition:none !important; scroll-behavior:auto !important; } }
 [data-theme] .preview-notice { position:fixed;top:0;left:0;right:0;z-index:8;margin:0;padding:4px 6px;height:24px;font-size:10px;line-height:16px;text-align:center;white-space:nowrap;pointer-events:none;background:var(--bg-secondary);color:var(--text-secondary); }
 body:has(.preview-notice) #app { margin-top:24px;height:calc(var(--viewport-height,100dvh) - 24px); }
+.pc-text-link{display:none;align-items:center;gap:6px 12px;flex-wrap:wrap;min-width:0}
+.typing-dock.expanded .pc-text-link{display:flex}
+.pc-text-link .input-hint{flex:1 1 160px;overflow-wrap:anywhere;margin:0}
+.pc-text-link .toggle-label{min-height:44px;flex-shrink:0}
+.pc-text-link button{min-height:44px}
+.pairing-guide-steps{border-top:1px solid var(--th-border);padding:8px 0;margin-top:12px;line-height:1.5}
+.pairing-guide-steps summary{min-height:44px;display:list-item;cursor:pointer;padding:10px 0;font-weight:600}
+.pairing-guide-steps ol{padding-inline-start:24px}.pairing-guide-steps li{margin-bottom:14px;overflow-wrap:anywhere}
+#securePairingGuide{overflow-wrap:anywhere}#securePairingGuide a{display:inline-flex;align-items:center;min-height:44px;padding:4px 8px;color:var(--th-accent)}
+.typing-dock.expanded .pc-text-link .input-hint{display:block}

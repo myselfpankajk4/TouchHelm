@@ -54,6 +54,12 @@ class SecurePairingTests(unittest.TestCase):
         self.assertEqual(info['fingerprint_sha256'].replace(':', ''),
                          hashlib.sha256(self.manager.public_certificate_der()).hexdigest().upper())
         self.assertTrue(info['trust_guide'])
+        guide=' '.join(info['trust_guide'])
+        self.assertIn('CA certificate',guide)
+        self.assertIn('PHONE screen-lock PIN',guide)
+        self.assertIn('Chrome',guide)
+        self.assertTrue(info['trust_ios'])
+        self.assertTrue(info['trust_troubleshooting'])
         public = str(info)
         self.assertNotIn(self.folder.name, public)
         self.assertNotIn('PRIVATE KEY', public)

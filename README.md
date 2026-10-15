@@ -13,6 +13,12 @@ Turn your phone into a Windows trackpad, keyboard, presentation remote, media co
 
 ## Features
 
+**Focused PC text and pairing guides:** Trackpad now reads and edits supported
+focused Windows fields in both directions. Conflicts keep the phone draft for
+review; password and read-only fields are excluded. A host PIN is required. See
+the [mobile certificate and Tailscale guide](docs/PAIRING.md) for setup and limits.
+Selecting an HTTPS mode on the PC reveals its instructions beside the QR.
+
 **Remote (v2.2):** Control PC or View PC with live monitor video, trackpad/direct touch, pinch zoom, keyboard/numpad, quality presets and optional PC audio. Streaming starts disabled and requires a host PIN plus trusted HTTPS. The Cast phone to PC option guides compatible system casting; mobile browsers cannot capture the phone screen. [Setup, limitations and verification](docs/REMOTE.md).
 
 Remote now defaults to Clear 1080p, with a 1440p Detail option. Tab switches keep
@@ -33,7 +39,7 @@ CSS/JavaScript/SVG effects rather than the former botanical/robot background ima
 | --- | --- |
 | **Trackpad** | Large movement surface, left/middle/right clicks, tap, hold-to-drag, two-finger scrolling, edge scrolling, and optional air mouse. |
 | **Remote** | Live PC viewing/control, monitor selection, zoom, native keys, optional system audio, and a Miracast setup guide. |
-| **Typing dock** | Buffered by default. Return inserts a newline; Send or Ctrl+Enter sends. Optional live sync, PC Enter, and Enter/Shift+Enter line breaks. Touching the pad dismisses typing and preserves the draft without PC input. |
+| **Typing dock** | Live typing by default, with optional buffering and two-way sync for supported focused PC fields. Return inserts a newline; PC Enter submits explicitly. Touching the pad dismisses typing and preserves the draft without PC input. |
 | **Presenter** | Previous/next above a large laser surface, monitor selection, independent countdown, and an optional PowerPoint slide/preview/notes drawer. |
 | **Media** | Now Playing with artwork, metadata, stateful Play/Pause, timeline, seeking and supported repeat/shuffle/speed controls. A queue appears only when a provider supplies one. |
 | **Keyboard** | Native press/release, F1–F24, letters, symbols, navigation, left/right modifiers, editing shortcuts, and integrated Numpad. Hold or latch modifiers for chords such as **Ctrl+Shift+A**. |

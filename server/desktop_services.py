@@ -26,8 +26,10 @@ class ProviderRequestCancelled(RuntimeError):
 
 class PersistentPowerShellBridge:
     """One hidden, lazy JSON-lines helper. Timeouts discard the affected process."""
-    def __init__(self, timeout=4.0):
+    def __init__(self, timeout=4.0, *, script_path=None):
         self.timeout = timeout
+        self.script_path = Path(script_path) if script_path else Path(__file__).with_name('desktop_bridge.ps1')
+        self.apartment = '-Mta' if script_path else '-Sta'
         self.startup_timeout = 20.0
         self._lock = threading.Lock()
         self._proc = None
@@ -42,7 +44,7 @@ class PersistentPowerShellBridge:
             raise RuntimeError('Windows desktop providers are unavailable on this platform')
         self._proc = subprocess.Popen(
             ['powershell.exe', '-NoLogo', '-NoProfile', '-NonInteractive',
-             '-ExecutionPolicy', 'Bypass', '-File', str(Path(__file__).with_name('desktop_bridge.ps1')), '-BridgeHost'],
+             '-ExecutionPolicy', 'Bypass', self.apartment, '-File', str(self.script_path), '-BridgeHost'],
             stdin=subprocess.PIPE, stdout=subprocess.PIPE, stderr=subprocess.DEVNULL,
             text=True, encoding='utf-8', bufsize=1,
             creationflags=subprocess.CREATE_NO_WINDOW, cwd=str(ROOT))
@@ -86,6 +88,7 @@ class PersistentPowerShellBridge:
     def request(self, command, payload=None, *, cancelled=None):
         if not self._lock.acquire(timeout=self.timeout+self.startup_timeout):
             raise TimeoutError('Windows provider is busy; try again')
+        dispatched = False
         try:
             if cancelled is not None and cancelled.is_set():
                 raise ProviderRequestCancelled('Desktop command was cancelled')
@@ -102,14 +105,17 @@ class PersistentPowerShellBridge:
             self._proc.stdin.write(json.dumps({'id': request_id, 'command': command,
                                                'payload': payload or {}}, ensure_ascii=True) + '\n')
             self._proc.stdin.flush()
+            dispatched = True
             while True:
+                if cancelled is not None and cancelled.is_set():
+                    raise ProviderRequestCancelled('Desktop command was cancelled')
                 remaining = self.timeout - (time.monotonic() - started)
                 if remaining <= 0:
                     raise TimeoutError('Windows provider timed out')
                 try:
-                    response = self._responses.get(timeout=remaining)
-                except queue.Empty as error:
-                    raise TimeoutError('Windows provider timed out') from error
+                    response = self._responses.get(timeout=min(remaining,.1))
+                except queue.Empty:
+                    continue
                 if response is None:
                     raise RuntimeError('Windows provider exited unexpectedly')
                 if not isinstance(response, dict) or response.get('id') != request_id:
@@ -120,6 +126,7 @@ class PersistentPowerShellBridge:
         except ProviderRequestCancelled:
             # A queued cancellation owns no active helper request; keep the
             # healthy process used by other clients alive.
+            if dispatched:self._terminate()
             raise
         except Exception:
             self._terminate()

@@ -25,3 +25,10 @@ setup installs missing providers/Tailscale, asks for required Windows/account st
 creates private HTTPS, and enables screen/audio access after setup succeeds.
 Phone-side Tailscale installation/sign-in remains necessary; browser-only private
 LAN trust cannot be installed silently. Manual local CA remains an explicit option.
+
+Trackpad's device-local Two-way PC text setting follows supported focused editable
+Windows controls through an isolated, bounded UI Automation helper. It requires a
+host PIN and active Trackpad/Live typing. Password and read-only fields are
+excluded. Edits revalidate field identity and revision, retain conflicting drafts,
+and never broadcast field contents. Selecting an HTTPS mode on the desktop reveals
+its setup guide beside the QR. See docs/PAIRING.md for installation and limits.

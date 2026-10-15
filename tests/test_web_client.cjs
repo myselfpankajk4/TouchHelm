@@ -1209,6 +1209,106 @@ test('Wireless Display setup shows real progress, approval and completion states
   await desktop.close();
 });
 
+test('Focused PC text updates the phone without echo and protects concurrent drafts',async page=>{
+  await page.evaluate(()=>{
+    touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'Typed on PC',editable:true});
+  });
+  assert.equal(await page.locator('#typeInput').inputValue(),'Typed on PC');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.type==='text'||p.type==='key'||p.action==='write').length),0);
+  await page.locator('#typeInput').fill('Phone edit');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.type==='text_sync'&&p.action==='write').at(-1).revision),'r1');
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:false,message:'PC text changed. Review the PC text.'}));
+  assert.equal(await page.locator('#typeInput').inputValue(),'Phone edit');
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r2',text:'Concurrent PC edit',editable:true}));
+  assert.equal(await page.locator('#typeInput').inputValue(),'Phone edit');
+  await page.locator('#usePCText').click();
+  assert.equal(await page.locator('#typeInput').inputValue(),'Concurrent PC edit');
+});
+
+test('Two-way typing coalesces edits, waits for acknowledgement and preserves IME',async page=>{
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'',editable:true}));
+  await page.locator('#typeInput').fill('a');await page.locator('#typeInput').fill('abc');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').length),1);
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r2',text:'a',editable:true}));
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').at(-1).text),'abc');
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r3',text:'abc',editable:true}));
+  await page.locator('#typeInput').evaluate(el=>{el.dispatchEvent(new CompositionEvent('compositionstart'));el.value='abc\n\n🙂';el.dispatchEvent(new InputEvent('input',{isComposing:true}));});
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').length),2);
+  await page.locator('#typeInput').evaluate(el=>el.dispatchEvent(new CompositionEvent('compositionend')));
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').at(-1).text),'abc\n\n🙂');
+});
+
+test('Desktop connection selection reveals an actionable setup guide beside the QR',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmDesktopPreview);
+  await desktop.locator('#connectionMode').selectOption('tailscale');
+  assert.equal(await desktop.locator('#connectionSetupGuide').getAttribute('data-mode'),'tailscale');
+  assert.match(await desktop.locator('#connectionSetupGuide').innerText(),/same account/i);
+  assert.match(await desktop.locator('#connectionSetupGuide').innerText(),/8443|private HTTPS/i);
+  await desktop.locator('#connectionMode').selectOption('local_ca');
+  assert.match(await desktop.locator('#connectionSetupGuide').innerText(),/CA certificate/);
+  await desktop.close();
+});
+
+test('PC text snapshots cannot erase typing that happened during a read',async page=>{
+  await page.evaluate(()=>{touchhelm.textSync.reset();touchhelm.textSync.poll();});
+  await page.locator('#typeInput').fill('New phone edit');
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',request_id:touchhelm.textSync.pending.request_id,available:true,field_id:'field',revision:'before',text:'',editable:true}));
+  assert.equal(await page.locator('#typeInput').inputValue(),'New phone edit');
+  assert.equal(await page.evaluate(()=>touchhelm.textSync.field),null);
+});
+
+test('Buffered edits to a linked PC field send only after explicit Send',async page=>{
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'PC draft',editable:true}));
+  await page.locator('#typeInput').focus();
+  await page.locator('#chkRealtimeTyping').uncheck();await page.locator('#typeInput').fill('Buffered phone edit');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write'||p.type==='text'||p.type==='key').length),0);
+  await page.locator('#btnSendText').click();
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').at(-1).text),'Buffered phone edit');
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r2',text:'Buffered phone edit',editable:true}));
+  assert.equal(await page.locator('#typeInput').inputValue(),'');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.type==='key').length),0);
+});
+
+test('Losing a linked PC field preserves the draft and never backspaces another app',async page=>{
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'PC draft',editable:true}));
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:false,message:'Focus changed'}));
+  await page.locator('#typeInput').fill('New draft');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.type==='key'||p.type==='text'||p.action==='write').length),0);
+  assert.equal(await page.locator('#typeInput').inputValue(),'New draft');
+});
+
+test('Text sync and pairing guides visual inspection',async(page,context)=>{
+  const issues=[],desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmDesktopPreview);
+  for(const theme of ['bloom','companion','resonance','clay','glass','soft','ink'])for(const appearance of ['light','dark']){
+    await page.bringToFront();
+    await page.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off'},false);await TouchHelmThemes.ready;},{theme,appearance});
+    for(const [width,height]of [[320,568],[360,640],[390,844],[844,390],[390,420]]){
+      await page.setViewportSize({width,height});await page.locator('#typeInput').focus();
+      await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'sample',revision:'r1',text:'Sample PC text\nContinued on the phone',editable:true}));
+      issues.push(...await inspectUsability(page,`${theme}/${appearance}/${width}x${height}/sync`));
+      if(theme==='glass'&&appearance==='dark'&&width===390&&height===844)await screenshot(page,'text-sync-phone');
+    }
+    await desktop.bringToFront();
+    await desktop.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off'},false);await TouchHelmThemes.ready;},{theme,appearance});
+    for(const width of [820,1280])for(const mode of ['local_ca','tailscale']){
+      await desktop.setViewportSize({width,height:900});await desktop.locator('#connectionMode').selectOption(mode);
+      const errors=await desktop.evaluate(()=>{
+        const errors=[];if(document.documentElement.scrollWidth>innerWidth+1)errors.push('horizontal overflow');
+        for(const node of connectionSetupGuide.querySelectorAll('button,select,input')){
+          if(!node.getClientRects().length)continue;const r=node.getBoundingClientRect();
+          if(r.width<43.5||r.height<43.5)errors.push(`small target ${node.id}`);
+          if(r.right>innerWidth+1)errors.push(`clipped ${node.id}`);
+        }
+        return errors;
+      });issues.push(...errors.map(x=>`${theme}/${appearance}/desktop${width}/${mode}: ${x}`));
+      if(theme==='glass'&&appearance==='dark'&&width===1280)await screenshot(desktop,`pairing-guide-${mode}`);
+    }
+  }
+  await desktop.close();assert.deepEqual(issues,[]);
+},true);
+
 (async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   origin = `http://127.0.0.1:${server.address().port}`;

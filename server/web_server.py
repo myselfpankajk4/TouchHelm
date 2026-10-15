@@ -36,6 +36,8 @@ class ConnectedClient:
         self.packet_count = 0
         self.held_buttons = set()
         self.held_keys = set()
+        self.text_field_id = ''
+        self.text_revision = ''
 
 
 class TouchHelmServer:
@@ -72,6 +74,41 @@ class TouchHelmServer:
             self._release_client_input, self.input_ctrl, capabilities=capabilities,
             notify=self._remote_state_changed, before_control=self._remote_acquire_input)
         self._remote_tasks = {}
+        from server.text_sync import FocusedTextService
+        self.text_service = FocusedTextService()
+        self._text_tasks = {}
+
+    async def _text_request(self, client, data):
+        def allowed():
+            return (client.authenticated and not client.ws.closed and
+                    self.clients.get(client.ws) is client and self.config.get('require_pin')
+                    and not self.remote.blocks_input(client))
+        state = {'available':False,'message':'Enable a host PIN to sync focused PC text.'}
+        if allowed():
+            if data['action']=='write':
+                if (not client.text_field_id or data.get('field_id')!=client.text_field_id
+                        or data.get('revision')!=client.text_revision):
+                    state={'available':False,'message':'PC field changed. Review the PC text before sending.'}
+                else:
+                    async with self._native_action_lock:
+                        if allowed():state=await self.text_service.request(data)
+            else:
+                state=await self.text_service.request(data)
+        if not client.authenticated or client.ws.closed or self.clients.get(client.ws) is not client:return
+        # A revoked PIN must not expose a result that arrived after revocation.
+        if not self.config.get('require_pin'):
+            state={'available':False,'message':'Enable a host PIN in desktop Settings to sync focused PC text.'}
+        elif self.remote.blocks_input(client):
+            state={'available':False,'message':'Another phone owns Remote control. PC text sync is paused.'}
+        client.text_field_id=state.get('field_id','') if state.get('available') else ''
+        client.text_revision=state.get('revision','') if state.get('available') else ''
+        with suppress(ConnectionError,RuntimeError):
+            await client.ws.send_json({'type':'text_state','request_id':data.get('request_id',0),**state})
+
+    def _cancel_text_request(self, client):
+        task=self._text_tasks.pop(client.ws,None)
+        if task and not task.done():task.cancel()
+        client.text_field_id=client.text_revision=''
 
     def _remote_state_changed(self, state):
         owner = self.remote.owner
@@ -86,7 +123,9 @@ class TouchHelmServer:
         asyncio.create_task(send())
 
     def _remote_acquire_input(self):
-        for client in list(self.clients.values()):self._release_client_input(client)
+        for client in list(self.clients.values()):
+            self._cancel_text_request(client)
+            self._release_client_input(client)
         self.laser_client.hide()
 
     async def _remote_request(self, client, data, secure):
@@ -284,6 +323,7 @@ class TouchHelmServer:
             client.authenticated = authorized
         await self.remote.stop('Pairing changed. Authenticate again to start Remote.')
         for _, client in clients:
+            self._cancel_text_request(client)
             self._cancel_desktop_requests(client)
             self._release_client_input(client)
         self.laser_client.hide()
@@ -376,6 +416,13 @@ class TouchHelmServer:
         if kind == "text" and len(data.get("text", "")) > 10000:
             return False
         if kind=='text' and data.get('newline_mode','enter') not in ('enter','shift_enter'):return False
+        if kind=='text_sync':
+            if data.get('action') not in ('read','write'):return False
+            if type(data.get('request_id',0)) is not int or not 0<=data.get('request_id',0)<=2**53:return False
+            if data.get('newline_mode','shift_enter') not in ('enter','shift_enter'):return False
+            if data['action']=='write' and (not isinstance(data.get('text'),str) or len(data['text'])>10000):return False
+            for key in ('field_id','revision'):
+                if key in data and (not isinstance(data[key],str) or len(data[key])>128):return False
         if kind=='zoom' and ('delta' not in data or abs(data['delta'])>10):return False
         if kind=='keydown' and 'repeat' in data and type(data['repeat']) is not bool:return False
         if kind=='media' and data.get('action') in ('seek','rate','shuffle','repeat'):
@@ -501,6 +548,7 @@ class TouchHelmServer:
                         client.device_name = str(data.get("device_name", "TouchHelm Client"))[:40]
                         authorized = not self.config.get("require_pin", False) or self._pin_matches(data.get("pin"))
                         if not authorized:
+                            self._cancel_text_request(client)
                             if self.remote.owner is client: await self.remote.stop('Authentication revoked.')
                             self._cancel_desktop_requests(client)
                             self._release_client_input(client)
@@ -552,6 +600,14 @@ class TouchHelmServer:
 
                     desktop_query = msg_type in ('get_desktop_state', 'get_apps', 'launch_app',
                                                   'get_media_library', 'play_media', 'presentation','get_presentation_details','get_displays','app_action')
+                    if msg_type=='text_sync':
+                        previous=self._text_tasks.get(ws)
+                        if not previous or previous.done():
+                            self._text_tasks[ws]=asyncio.create_task(self._text_request(client,data))
+                        else:
+                            await ws.send_json({'type':'text_state','request_id':data.get('request_id',0),
+                                'available':False,'message':'PC text provider is busy. Your draft is kept.'})
+                        continue
                     media_query = msg_type == 'media' and data.get('action') in (
                         'play_pause', 'playpause', 'play', 'pause', 'next', 'prev', 'previous', 'stop', 'nexttrack', 'prevtrack',
                         'seek','shuffle','repeat','rate')
@@ -743,6 +799,7 @@ class TouchHelmServer:
                     pass
 
         finally:
+            self._cancel_text_request(client)
             task=self._remote_tasks.pop(ws,None)
             if task and not task.done():task.cancel()
             if self.remote.owner is client:await self.remote.stop('Phone disconnected.')
@@ -836,7 +893,7 @@ class TouchHelmServer:
             if target==self.tailscale_origin and not self._pin_matches(request.headers.get('X-TouchHelm-Pin')):return web.Response(status=401)
             baseline=data.get('live_baseline','')
             if not isinstance(baseline,str) or len(baseline)>10000:raise ValueError('Invalid baseline')
-            allowed={'theme','appearance','motion','contrast','newline_mode','haptics','effects','live_typing'}
+            allowed={'theme','appearance','motion','contrast','newline_mode','haptics','effects','live_typing','pc_text_sync'}
             preferences=data.get('preferences',{})
             if not isinstance(preferences,dict):raise ValueError('Invalid preferences')
             preferences={key:value for key,value in preferences.items() if key in allowed and type(value) in (str,bool) and len(str(value))<=32}
@@ -969,6 +1026,11 @@ class TouchHelmServer:
         print(f"TouchHelm Server listening on port {port}")
 
     async def stop(self):
+        text_tasks=list(self._text_tasks.values())
+        for task in text_tasks:task.cancel()
+        if text_tasks:await asyncio.gather(*text_tasks,return_exceptions=True)
+        self._text_tasks.clear()
+        await self.text_service.close()
         for task in self._remote_tasks.values():task.cancel()
         await asyncio.gather(*self._remote_tasks.values(),return_exceptions=True)
         self._remote_tasks.clear()

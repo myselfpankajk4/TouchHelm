@@ -18,6 +18,28 @@ from cryptography.hazmat.primitives import hashes, serialization
 from cryptography.hazmat.primitives.asymmetric import ec
 from cryptography.x509.oid import ExtendedKeyUsageOID, NameOID
 
+ANDROID_TRUST_GUIDE = [
+    'On the PC choose Local Wi-Fi · manual certificate HTTPS, then Enable HTTPS. Keep both devices on the same Wi-Fi and note the HTTPS address and SHA-256 fingerprint.',
+    'On Android open the HTTP phone address first, enter the PC pairing PIN, then Settings → Secure pairing → Download local public certificate. The file is touchhelm-ca.crt in Downloads.',
+    'Compare the phone guide’s SHA-256 fingerprint with the one on the PC. Only install this CA if you own and trust this PC; a CA grants certificate trust on your phone.',
+    'Open Android Settings and search for “Install a certificate”. On Pixel: Security & privacy → More security settings → Encryption & credentials. On some Galaxy phones: More security settings → Install from device storage. Names vary by Android version.',
+    'Select CA certificate, not Wi-Fi or VPN & app certificate. Read the system warning, confirm installation, unlock with your PHONE screen-lock PIN and select Downloads → touchhelm-ca.crt. This is different from the TouchHelm pairing PIN.',
+    'Return to this guide and tap Continue with local HTTPS, or scan the PC’s local HTTPS QR again. Use the exact displayed address, then enter the TouchHelm PIN. Chrome must report a secure connection without bypassing a warning.',
+    'When finished using this PC, remove only the TouchHelm CA under Android credential settings → Trusted credentials → User (or User credentials). Do not clear all credentials.'
+]
+IOS_TRUST_GUIDE = [
+    'Download the public certificate in Safari from the paired phone page, allow the configuration profile download, then open Settings → General → VPN & Device Management (or Profile Downloaded) and install the TouchHelm profile using your device passcode.',
+    'Open Settings → General → About → Certificate Trust Settings and enable full trust for the matching TouchHelm root. Compare the fingerprint with your PC first. Profile installation alone does not enable SSL trust.',
+    'Open the exact local HTTPS address shown by TouchHelm. Remove the TouchHelm profile in VPN & Device Management when you no longer use this PC.'
+]
+TRUST_TROUBLESHOOTING = [
+    'No file in the picker? Choose Downloads and allow the certificate file type; the file ends in .crt. Do not select a private key or rename an unrelated certificate.',
+    'A work-managed phone may prohibit user CAs. Use your organisation’s approved connection method or ask its administrator; TouchHelm cannot override the policy.',
+    'Still seeing a warning? Confirm the CA was installed as a CA, the phone date/time is correct, and the address exactly matches the current HTTPS QR. Restart Chrome after installation. Never treat “Proceed anyway” as trusted setup.',
+    'After a PC address change, disable and re-enable local HTTPS to renew its server certificate, then use the new QR. If the CA fingerprint changed, remove the old TouchHelm CA and install the new one.',
+    'Prefer no certificate installation? Select Private Tailscale on the PC and complete its setup guide on both devices.'
+]
+
 
 class SecurePairingError(RuntimeError):
     pass
@@ -189,10 +211,6 @@ class SecurePairingManager:
         return {'https_port': 8766, 'certificate_name': 'TouchHelm-CA.crt',
             'fingerprint_sha256': ':'.join(fingerprint[index:index + 2] for index in range(0, len(fingerprint), 2)),
             'expires_at': cert.not_valid_after_utc.isoformat(),
-            'trust_guide': [
-                'Open this PC’s phone interface, choose Settings → Secure pairing, and download TouchHelm-CA.crt.',
-                'Compare its SHA-256 fingerprint with the fingerprint shown here.',
-                'In Android Settings, search “Install a certificate”, choose CA certificate, and select TouchHelm-CA.crt. Menu names vary by device.',
-                'Only trust this certificate if you control this PC. TouchHelm does not install trust automatically.',
-                'Open the HTTPS address after installation, enter your PIN if required, and confirm Chrome reports a secure connection.',
-                'Remove the TouchHelm CA from Android’s user credentials when you no longer use this PC.']}
+            'trust_guide': ANDROID_TRUST_GUIDE,
+            'trust_ios': IOS_TRUST_GUIDE,
+            'trust_troubleshooting': TRUST_TROUBLESHOOTING}

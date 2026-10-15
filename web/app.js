@@ -99,6 +99,7 @@ class TouchHelmClient {
     if (window.TouchHelmControls) this.controls = new window.TouchHelmControls(this);
     if (window.TouchHelmExperience) this.experience = new window.TouchHelmExperience(this);
     if (window.TouchHelmRemote) this.remote = new window.TouchHelmRemote(this);
+    if (window.TouchHelmTextSync) this.textSync = new window.TouchHelmTextSync(this);
     this.connect();
     this.initPwa();
     this.fetchServerConfig();
@@ -434,6 +435,7 @@ class TouchHelmClient {
       if (this.ws !== socket) return;
       try {
         const msg = JSON.parse(event.data);
+        if(this.textSync?.receive(msg))return;
         if (msg.type === "pong") {
           const rtt = Math.max(1, Math.round(Date.now() - msg.t));
           if (this.elStatusPing) this.elStatusPing.textContent = `${rtt}ms`;
@@ -448,6 +450,7 @@ class TouchHelmClient {
             return;
           }
           this.isConnected = true;
+          this.textSync?.connected(true);
           try { if(this.authPin)sessionStorage.setItem(`touchhelm_pairing_${this.host}`,this.authPin); } catch {}
           this.remote?.connected(true);
           this.closeModal(this.pinModal);
@@ -499,6 +502,7 @@ class TouchHelmClient {
       if (this.ws !== socket) return;
       this.isConnected = false;
       this.stopPing();
+      this.textSync?.connected(false);
       this.setStatus("disconnected", "Offline");
       this.remote?.connected(false);
       if (this.pinModal?.classList.contains("open") && this.pinError) {
@@ -1007,6 +1011,7 @@ class TouchHelmClient {
   }
 
   switchView(viewId) {
+    this.textSync?.onView(viewId);
     this.remote?.onView(viewId);
     window.TouchHelmEffects?.reset?.();
     if(this.experience?.seeking){this.experience.seeking=false;this.experience.text('seekPreview','');this.experience.tickMedia();}
@@ -1887,6 +1892,7 @@ class TouchHelmClient {
   bindKeyboardControls() {
     if (this.btnSendText) {
       this.onTap(this.btnSendText, () => {
+        if(!this.isComposing&&this.textSync?.submitEnter())return;
         const text = this.typeInput ? this.typeInput.value : "";
         if ((text || this.chkRealtimeTyping?.checked) && !this.isComposing) {
           this.vibrate(15);
@@ -1915,6 +1921,7 @@ class TouchHelmClient {
 
     if (this.btnClearText) {
       this.onTap(this.btnClearText, () => {
+        this.textSync?.clear();
         if (this.typeInput) this.typeInput.value = "";
         this.liveTextValue = "";
         this.liveTypingPaused = false;
@@ -1981,6 +1988,8 @@ class TouchHelmClient {
     if ((!force && !this.chkRealtimeTyping?.checked) || this.isComposing || !this.typeInput) return false;
     if(!this.isConnected){if(this.typeInput.value!==this.liveTextValue)this.liveTypingPaused=true;this.updateTypingUi();return false;}
     if(this.liveTypingPaused&&!force){this.updateTypingUi();this.showFeedback('Draft edited offline. Use Send to sync it explicitly.','info','typing');return false;}
+    const linked=this.textSync?.edit(force);
+    if(linked!==null&&linked!==undefined)return linked;
     const value = this.typeInput.value;
     // Compare complete values: paste often supplies null data and IMEs replace
     // existing text. Graphemes keep an emoji or composed character intact.

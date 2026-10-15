@@ -223,6 +223,20 @@ class DesktopServiceTests(unittest.IsolatedAsyncioTestCase):
         process.kill.assert_not_called()
         await service.close()
 
+    async def test_cancelled_inflight_provider_is_terminated_before_it_can_apply_late_work(self):
+        from server.desktop_services import ProviderRequestCancelled
+        bridge=PersistentPowerShellBridge(timeout=2)
+        process=Mock();process.poll.return_value=None
+        bridge._proc=process;bridge._responses=queue.Queue()
+        sent=threading.Event();cancelled=threading.Event()
+        process.stdin.flush.side_effect=sent.set
+        task=asyncio.create_task(asyncio.to_thread(bridge.request,'write',cancelled=cancelled))
+        self.assertTrue(await asyncio.to_thread(sent.wait,.5))
+        cancelled.set()
+        with self.assertRaises(ProviderRequestCancelled):await asyncio.wait_for(task,.5)
+        process.kill.assert_called_once()
+        self.assertIsNone(bridge._proc)
+
 
 @unittest.skipUnless(os.name == 'nt', 'Windows PowerShell provider projection')
 class PowerShellIdentityTests(unittest.TestCase):

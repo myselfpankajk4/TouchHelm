@@ -12,6 +12,47 @@ from server.config import ConfigManager
 from server.web_server import TouchHelmServer, ConnectedClient
 
 class V2ProtocolTests(unittest.IsolatedAsyncioTestCase):
+    async def test_text_sync_requires_pin_and_a_field_seen_by_this_client(self):
+        socket=Mock(closed=False);socket.send_json=AsyncMock()
+        client=ConnectedClient(socket,'127.0.0.1');client.authenticated=True
+        self.server.clients[socket]=client
+        self.server.text_service=Mock(request=AsyncMock(return_value={'available':True,
+            'field_id':'opaque','revision':'r1','text':'PC text','editable':True}))
+        await self.server._text_request(client,{'type':'text_sync','action':'write','field_id':'other','revision':'r1','text':'phone','request_id':1})
+        self.server.text_service.request.assert_not_awaited()
+        await self.server._text_request(client,{'type':'text_sync','action':'read','request_id':2})
+        self.assertEqual(client.text_field_id,'opaque')
+        await self.server._text_request(client,{'type':'text_sync','action':'write','field_id':'opaque','revision':'r1','text':'phone','request_id':3})
+        self.assertEqual(self.server.text_service.request.await_count,2)
+        self.config.set('require_pin',False)
+        await self.server._text_request(client,{'type':'text_sync','action':'read','request_id':4})
+        self.assertEqual(self.server.text_service.request.await_count,2)
+        self.assertFalse(socket.send_json.call_args.args[0]['available'])
+
+    def test_text_sync_packet_validation(self):
+        for packet in ({'action':'execute'}, {'action':'write','text':None},
+                {'action':'write','text':'x'*10001}, {'action':'read','request_id':True}):
+            self.assertFalse(self.server._valid_packet({'type':'text_sync',**packet}))
+
+    async def test_text_state_is_private_to_the_requesting_authenticated_socket(self):
+        self.server.text_service=Mock(request=AsyncMock(return_value={'available':True,
+            'field_id':'opaque','revision':'r1','text':'scratch text','editable':True}))
+        first=await self.client.ws_connect('/ws');await first.receive_json()
+        await first.send_json({'type':'text_sync','action':'read','request_id':1})
+        await first.send_json({'type':'ping','t':1});self.assertEqual((await first.receive_json())['type'],'pong')
+        self.server.text_service.request.assert_not_awaited()
+        second=await self.client.ws_connect('/ws');await second.receive_json()
+        for ws in (first,second):
+            await ws.send_json({'type':'auth','pin':'5678'});await ws.receive_json()
+        await first.send_json({'type':'text_sync','action':'read','request_id':2})
+        self.assertEqual((await first.receive_json())['text'],'scratch text')
+        await second.send_json({'type':'ping','t':2})
+        self.assertEqual((await second.receive_json())['type'],'pong')
+        await second.send_json({'type':'text_sync','action':'write','field_id':'opaque','revision':'r1','text':'unbound','request_id':3})
+        self.assertFalse((await second.receive_json())['available'])
+        self.assertEqual(self.server.text_service.request.await_count,1)
+        await first.close();await second.close()
+
     def test_empty_discovery_credentials_do_not_lock_out_refreshes(self):
         for _ in range(30):
             self.assertFalse(self.server._pin_matches(''))
