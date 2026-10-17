@@ -7,6 +7,17 @@ from server.aircontrol.service import AirControlService
 from server.aircontrol.profiles import default_profile
 
 class AirServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_camera_failure_preserves_reason_and_releases_control(self):
+        self.service.worker=self.worker;self.service.owns_input=True
+        self.service.state='active';self.service.native_down=True
+        self.worker.latest.return_value={'type':'error','message':'The camera stopped delivering frames.'}
+        await self.service._loop()
+        self.assertEqual(self.service.state,'unavailable')
+        self.assertIn('stopped delivering frames',self.service.message)
+        self.assertFalse(self.service.owns_input);self.assertIsNone(self.service.worker)
+        self.input.mouse_up.assert_called_once_with('left')
+        self.release.assert_awaited_once()
+
     async def test_recenter_in_practice_does_not_enter_unresumable_pause(self):
         self.service.worker=self.worker;self.service.calibrated=True;self.service.state='practicing'
         await self.service.command('recenter')

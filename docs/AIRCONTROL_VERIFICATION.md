@@ -191,6 +191,50 @@ combined accuracy, low-light robustness and the 30-minute camera session still
 require a participating user; model/reference and scratch checks do not verify
 those conditions.
 
+## Unavailable camera repair — 17 October 2026
+
+The next user attempt reported **Unavailable**, rather than an active pointer
+that failed to move. Native panel inspection showed “Camera worker stopped.”
+A short metadata-only camera diagnostic reproduced a Combined worker exiting
+after exactly 15 observations, with no explicit JSON error.
+
+The adaptive branch changed DirectShow's FPS from the inference thread while
+the capture thread was inside `read()`. It also repeated that change on later
+slow samples. The repair reduces inference frequency without changing the live
+camera's properties. A failed camera read now raises a clear error instead of
+ending the worker successfully. The stdout reader drains through EOF, including
+errors written just before process exit; bounded stderr and exit-code details
+are retained for native failures.
+
+Evidence from this repair:
+
+- The full isolated pipeline check deliberately slows real inference past the
+  adaptive threshold and simulates a driver that rejects property changes while
+  reading. It failed before the repair and passed afterward, delivering 12 native
+  pointer proposals in its active interval. Windows input is mocked in this test;
+  camera input is Google's cached public reference image.
+- Two new pipe regressions first failed because explicit errors and crash details
+  were lost, then passed. A failed-read test checks model/capture cleanup; a
+  service regression checks error preservation, button release and ownership
+  return after a camera failure.
+- Actual local camera checks, with no image recording or PC input: Hand stayed
+  running for the 22-second check (246 observations, 14.8 updates/s, maximum frame
+  age 147.5 ms); Combined also stayed running (192 observations, 14.7 updates/s,
+  maximum frame age 159.1 ms). Combined supplied 191 face observations; these
+  checks did not ask the user to perform particular gestures.
+- These are short capture/transport checks, not a verified 30-minute session or
+  proof of physical click/drag accuracy. The measured rates do not establish the
+  planned 20 updates/s Hand performance target. The repaired build was launched
+  for a participating-user pointer check.
+
+```powershell
+.\.venv\Scripts\python.exe tests/native_aircontrol_pipeline_check.py
+```
+
+The pipeline check opens no webcam and injects no Windows input. Its temporary
+profile does not replace the user's profile. Native camera diagnostics collected
+counts, timings and errors only; images were not saved.
+
 Final browser checks: **69/69 passed**. The first batched run hit one 3-second
 navigation timeout in the existing PIN-dialog check under concurrent test load;
 the final full browser run passed without relaxing timeouts. JavaScript units:

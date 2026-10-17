@@ -1,6 +1,8 @@
 """Synthetic Tasks results exercise landmark conversion without SDK/camera imports."""
 from types import SimpleNamespace as Item
+import sys
 import unittest
+from unittest.mock import Mock,patch
 from server.aircontrol.worker import hand_state,face_state
 
 def hand(x=.3):
@@ -9,6 +11,20 @@ def hand(x=.3):
     return points
 
 class LandmarkTests(unittest.TestCase):
+    def test_capture_read_failure_reports_an_error_instead_of_clean_exit(self):
+        from server.aircontrol import worker
+        camera=Mock();camera.isOpened.return_value=True;camera.read.return_value=(False,None)
+        cv=Mock();cv.VideoCapture.return_value=camera
+        hand_model=Mock();face_model=Mock()
+        with patch.dict(sys.modules,{'cv2':cv,'mediapipe':Mock()}), \
+                patch.object(sys,'argv',['worker.py','--models','models']), \
+                patch.object(worker,'models',return_value=(hand_model,face_model)), \
+                patch.object(worker,'emit'):
+            with self.assertRaisesRegex(RuntimeError,'stopped delivering frames'):
+                worker.main()
+        camera.release.assert_called_once()
+        hand_model.close.assert_called_once();face_model.close.assert_called_once()
+
     def test_handedness_uncertainty_does_not_mean_tracking_loss(self):
         from server.aircontrol.engine import GestureEngine
         from server.aircontrol.profiles import default_profile

@@ -153,7 +153,10 @@ def main():
                 detected=face.detect_for_video(image,timestamp);state,landmarks=face_state(detected,mirrored=config.get('mirror',True))
                 result.update(face=state,face_points=landmarks)
             elapsed=time.monotonic()-started;costs.append(elapsed);costs=costs[-30:]
-            if len(costs)>=15 and sum(costs)/len(costs)>.05:fps=15;cap.set(cv2.CAP_PROP_FPS,15)
+            # Never mutate a DirectShow capture while its reader is running.
+            # Some drivers stop delivering frames after an in-flight FPS change.
+            # Rate-limit inference, retaining only the newest camera frame.
+            if len(costs)>=15 and sum(costs)/len(costs)>.05:fps=15
             result.update(inference_ms=round(elapsed*1000,1),age_ms=round((time.monotonic()-stamp)*1000,1),capture_fps=fps)
             if time.monotonic()-last_preview>=.1:
                 ok,jpeg=cv2.imencode('.jpg',frame,[cv2.IMWRITE_JPEG_QUALITY,65])
@@ -161,6 +164,7 @@ def main():
                 last_preview=time.monotonic()
             emit(result)
             stopped.wait(max(0.,1/fps-(time.monotonic()-started)))
+        raise RuntimeError('The camera stopped delivering frames. Restart it; check its USB connection and whether another app is using it.')
     finally:
         stopped.set();cap.release()
         if hand:hand.close()
