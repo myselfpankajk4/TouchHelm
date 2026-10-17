@@ -144,6 +144,12 @@ provenance are recorded in `requirements-aircontrol.txt` and
 | Setup failure | Check Python 3.13 x64, internet, disk space and security permissions; retry isolated setup |
 | Dictation unavailable | Select a supported editable field; check Windows microphone/language setup and Voice Access state |
 
+Microsoft Store Python is supported through resolved physical runtime paths,
+including its redirected LocalAppData directory. Setup failures identify the
+failing stage and underlying error rather than only suggesting network/disk
+problems. The SDK metrics notice is informational and does not indicate a failed
+installation.
+
 This controls the ordinary signed-in Windows session. Elevated apps, UAC and
 sign-in screens can reject input; identity authentication is outside this feature.
 Hardware gesture accuracy and performance are not established by synthetic tests.

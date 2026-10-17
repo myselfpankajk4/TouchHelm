@@ -3,6 +3,7 @@ import hashlib
 import json
 import os
 import platform
+import re
 from pathlib import Path
 import shutil
 import subprocess
@@ -20,12 +21,19 @@ def checked_model(path,digest):
 
 class AirControlSetup:
     def __init__(self,folder):
-        self.folder=Path(folder);self.python=self.folder/'runtime'/'Scripts'/'python.exe'
-        self.models=self.folder/'models';self.lock=threading.RLock();self.thread=None;self.process=None
+        self.folder=Path(folder);self._resolve_paths()
+        self.lock=threading.RLock();self.thread=None;self.process=None
         self.cancelled=threading.Event()
         ready=self._ready()
         self.state={'state':'ready' if ready else 'setup_required','ready':ready,'progress':100 if ready else None,
             'message':'AirControl is ready. Select a camera and start practice.' if ready else 'Set up the isolated camera runtime. First-time setup may take a few minutes; phone controls keep working.'}
+
+    def _resolve_paths(self):
+        # Store Python redirects LocalAppData. Its venv launcher is a native
+        # executable, so it must receive the real directory, not the virtual alias.
+        self.folder=self.folder.resolve()
+        self.python=self.folder/'runtime'/'Scripts'/'python.exe'
+        self.models=self.folder/'models'
 
     def _signature(self):
         try:return hashlib.sha256(REQUIREMENTS.read_bytes()+(MODELS/'manifest.json').read_bytes()).hexdigest()
@@ -58,7 +66,7 @@ class AirControlSetup:
             except OSError:pass
         self._set('cancelled','Setup cancelled. Choose Set up AirControl to retry.')
 
-    def _run(self,args,timeout):
+    def _run(self,args,timeout,*,stage='AirControl setup'):
         if self.cancelled.is_set():raise InterruptedError()
         self.process=subprocess.Popen(args,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,
             creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0),cwd=str(ROOT),
@@ -72,24 +80,41 @@ class AirControlSetup:
                 output.extend(chunk)
                 if len(output)>8192:del output[:-8192]
         reader=threading.Thread(target=drain,daemon=True);reader.start()
-        while self.process.poll() is None:
-            if self.cancelled.wait(.1) or time.monotonic()-started>timeout:
-                self.process.terminate();self.process.wait(timeout=5)
-                raise InterruptedError() if self.cancelled.is_set() else TimeoutError('Installation timed out. Check internet access and retry.')
-        reader.join(timeout=1)
-        if self.cancelled.is_set():raise InterruptedError()
-        if self.process.returncode:raise RuntimeError('The isolated runtime could not be installed. Check internet access, disk space and Windows security permissions, then retry.')
+        try:
+            while process.poll() is None:
+                if self.cancelled.wait(.1) or time.monotonic()-started>timeout:
+                    process.terminate()
+                    try:process.wait(timeout=5)
+                    except subprocess.TimeoutExpired:process.kill();process.wait(timeout=5)
+                    raise InterruptedError() if self.cancelled.is_set() else TimeoutError(stage+' timed out. Check internet access and retry.')
+            reader.join(timeout=1)
+            if self.cancelled.is_set():raise InterruptedError()
+            if process.returncode:
+                diagnostic=output.decode('utf-8',errors='replace')
+                diagnostic=re.sub(r'\x1b\[[0-9;]*[A-Za-z]','',diagnostic)
+                diagnostic=re.sub(r'https?://\S+','[package source]',diagnostic)
+                lines=[line.strip() for line in diagnostic.splitlines() if line.strip()]
+                errors=[line for line in lines if any(word in line.lower() for word in ('error','failed','exception','no module','permission','space','pyvenv.cfg'))]
+                reason=(errors or lines or ['No installer details were returned. Check internet access and retry.'])[-1]
+                raise RuntimeError(f'{stage} failed (exit {process.returncode}). {reason[:240]}')
+        finally:
+            reader.join(timeout=1)
+            if not reader.is_alive():process.stdout.close()
+            if self.process is process:self.process=None
 
     def _install(self):
         try:
             if os.name!='nt' or sys.version_info[:2]!=(3,13) or platform.machine().lower() not in ('amd64','x86_64'):
                 raise RuntimeError('AirControl currently requires Windows x64 and Python 3.13. Phone controls remain available in the existing environment.')
             from server.secure_pairing import protect_user_path
-            self.folder.mkdir(parents=True,exist_ok=True);protect_user_path(self.folder)
+            self.folder.mkdir(parents=True,exist_ok=True)
+            # Resolve again after creation: a fresh Store-Python directory may
+            # only acquire its physical LocalCache location once it exists.
+            self._resolve_paths();protect_user_path(self.folder)
             (self.folder/'ready').unlink(missing_ok=True)
-            self._run([sys.executable,'-m','venv',str(self.folder/'runtime')],180)
+            self._run([sys.executable,'-m','venv',str(self.folder/'runtime')],180,stage='Creating the camera runtime')
             self._set('installing','Installing checksum-locked camera packages. Download progress is indeterminate…')
-            self._run([str(self.python),'-m','pip','install','--only-binary=:all:','--require-hashes','-r',str(REQUIREMENTS)],900)
+            self._run([str(self.python),'-m','pip','install','--only-binary=:all:','--require-hashes','-r',str(REQUIREMENTS)],900,stage='Installing camera packages')
             self._set('installing','Verifying bundled hand and face models…')
             self.models.mkdir(exist_ok=True)
             manifest=json.loads((MODELS/'manifest.json').read_text(encoding='utf-8'))
@@ -99,7 +124,7 @@ class AirControlSetup:
                 shutil.copyfile(MODELS/name,self.models/name)
                 if not checked_model(self.models/name,item['sha256']):raise RuntimeError('Model verification failed')
             self._set('installing','Checking the installed camera runtime without opening a camera…')
-            self._run([str(self.python),str(Path(__file__).with_name('worker.py')),'--check','--models',str(self.models)],60)
+            self._run([str(self.python),str(Path(__file__).with_name('worker.py')),'--check','--models',str(self.models)],60,stage='Checking camera models')
             if self.cancelled.is_set():raise InterruptedError()
             (self.folder/'ready').write_text(self._signature())
             self._set('ready','AirControl is ready. Choose Start camera for calibration and practice.',100)

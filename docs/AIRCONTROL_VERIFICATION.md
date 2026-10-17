@@ -98,3 +98,27 @@ explicitly starting/enabling control. Camera and microphone were left off.
 
 The latest-source shortcut and private GitHub delivery are checked separately at
 release time; the commit history identifies the delivered source.
+
+## User-folder installer repair — 17 October 2026
+
+The first workspace-directory installer check missed Microsoft Store Python's
+LocalAppData redirection. Installation in the actual user directory reproduced
+exit **106**, `failed to locate pyvenv.cfg`: Python saw a virtual path while the
+native venv launcher looked outside its physical package LocalCache directory.
+
+Setup now resolves its physical directory before passing paths to subprocesses,
+and resolves again after creating a fresh directory. Runtime creation, package
+installation and model-check failures report their stage, exit code and bounded
+diagnostic text; package-source URLs are redacted. Owned failed/cancelled installer
+processes and output streams are cleaned up.
+
+The actual user's runtime was repaired through the same installer entry point.
+Package installation, both model loads and Ready-marker reconstruction passed;
+**no camera was opened**. Regression checks cover existing/fresh redirected paths,
+the original pyvenv error and credential redaction. This resolves setup availability
+but adds no physical gesture or speech accuracy evidence.
+
+Final repair verification: **292 Python tests passed**. An existing 150 ms provider
+deadline check timed out in an initial run, then passed both in isolation and in
+the final full run; its timeout was not relaxed. The Latest shortcut relaunched
+source `6edb02619f5a6b620cf168f9131babaa`, with Remote providers still available.
