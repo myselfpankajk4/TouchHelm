@@ -1395,7 +1395,7 @@ test('AirControl calibration shows a live finger and keeps its next action besid
   await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
   await desktop.locator('[data-panel="aircontrol"]').click();
   await desktop.evaluate(()=>{
-    TouchHelmAir.setPreview('calibrating');
+    TouchHelmAir.profile.mode='hand';TouchHelmAir.setPreview('calibrating');
     const hand=Array.from({length:21},()=>[.5,.5]);hand[8]=[.63,.28];
     const state={...TouchHelmAir.state,tracking:true,hand_points:hand,
       tracking_sources:{hand:true,face:false,hand_enabled:true,face_enabled:false}};
@@ -1456,6 +1456,27 @@ test('AirControl personal face calibration exposes activation and applies a test
   assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.camera_active),true);
   assert.match(await desktop.locator('#airExpressionResult').innerText(),/threshold|practice/i);
   await screenshot(desktop,'aircontrol-personal-face-calibration');
+  await desktop.close();
+});
+
+test('AirControl Head is default and its action dock explains drag and releases it in practice',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:1120,height:800});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.profile.mode),'head');
+  await desktop.evaluate(()=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('practicing');});
+  assert.equal(await desktop.locator('#airHeadActions').isVisible(),true);
+  assert.equal(await desktop.locator('#airGuideArt').getAttribute('data-gesture'),'head');
+  await desktop.locator('[data-air-dwell=right]').click();
+  assert.equal(await desktop.locator('[data-air-dwell=right]').getAttribute('aria-pressed'),'true');
+  await desktop.locator('[data-air-dwell=drag]').click();
+  assert.match(await desktop.locator('#airDwellStatus').innerText(),/settle.*hold.*drop/i);
+  await desktop.evaluate(()=>TouchHelmAir.render({...TouchHelmAir.state,dragging:true}));
+  assert.match(await desktop.locator('#airDwellStatus').innerText(),/held/i);
+  await desktop.locator('#airReleaseDrag').click();
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.dragging),false);
+  await screenshot(desktop,'aircontrol-head-actions');
+  await desktop.locator('[data-air-mode=hand]').click();
+  assert.equal(await desktop.locator('#airHeadActions').isVisible(),false);
   await desktop.close();
 });
 

@@ -12,6 +12,7 @@ from .profiles import ProfileStore,default_profile,validate_profile,ACTION_LABEL
 from .process import CameraWorker
 from .setup import AirControlSetup
 from .expressions import levels,measure,learn
+from .hud import HEAD_ACTIONS,regions
 
 class AirControlService:
     def __init__(self,input_controller,displays,*,folder,setup=None,worker_factory=CameraWorker,
@@ -64,6 +65,7 @@ class AirControlService:
             'tracking_details':{'hand':self.frame.get('hand_status',''),'face':self.frame.get('face_status',''),
                 'processing_delayed':self.observation_age is not None and self.observation_age>.25,'last_error':self.last_error},
             'point':self.engine.point,'tracking':not self.engine.lost and fresh,'display':self.display,
+            'dwell_action':self.engine.dwell_action,'dragging':self.engine.held,
             'actions':list(self.actions),'action_catalog':ACTION_LABELS,'gesture_catalog':GESTURE_LABELS,
             'metrics':{'fps':round((len(self.times)-1)/(self.times[-1]-self.times[0]),1) if fresh and len(self.times)>1 and self.times[-1]>self.times[0] else None,
                 'median_latency_ms':round(statistics.median(self.latencies),1) if self.latencies else None,
@@ -89,6 +91,7 @@ class AirControlService:
         if self._voice_task and not self._voice_task.done():self._voice_task.cancel()
         self.stable_since=None;self.stable_frames=0;self.samples.clear();self.face_samples.clear()
         self._release_buttons();self.state=state;self.message=message
+        self.engine.hud_blocked=True
 
     def _stable(self):
         return self.stable_since is not None and self.stable_frames>=5 and time.monotonic()-self.stable_since>=.2
@@ -179,6 +182,15 @@ class AirControlService:
                 self.profiles[self.profile['name']]=copy.deepcopy(self.profile)
             elif action=='pause':
                 if self.worker:self.pause()
+            elif action in HEAD_ACTIONS:
+                if not self.worker or not self.calibrated or self.profile['mode']!='head' or self.state not in ('active','practicing'):
+                    raise ValueError('Calibrate Head & Face, then use its practice or active action dock.')
+                dropping=self.engine.held and action=='dwell_drag'
+                if self.engine.held:self._release_buttons()
+                selected='left_click' if dropping else HEAD_ACTIONS[action]
+                self.engine.select_dwell(selected)
+                self.message='Drag released. Dwell returns to Left click.' if dropping else 'Dwell action: '+('Drag — settle to hold, move, then settle to drop.' if action=='dwell_drag' else ACTION_LABELS[selected])
+            elif action=='release_drag':self._release_buttons();self.message='Drag released. Dwell returns to Left click.'
             elif action=='resume':self.resume()
             elif action=='recenter':
                 if not self.worker:raise ValueError('Start the camera first')
@@ -203,7 +215,7 @@ class AirControlService:
                 candidate=copy.deepcopy(self.profile)
                 if action=='expression_bind':
                     target=data.get('action','left_click')
-                    if gesture not in candidate['calibrated_expressions'] or target not in ('none','left_click','right_click','double_click','dictate'):
+                    if gesture not in candidate['calibrated_expressions'] or target not in ('none','left_click','right_click','double_click','left_drag','dictate'):
                         raise ValueError('Capture the expression first, then choose a supported action.')
                     for key,value in candidate['bindings'].items():
                         if value==target and target!='none':candidate['bindings'][key]='none'
@@ -248,7 +260,7 @@ class AirControlService:
         if not self.display:raise ValueError('Monitor changed. Stop the camera and recalibrate for the available monitor.')
         if self.engine.lost or time.monotonic()-self.last_frame>.25:raise ValueError('Wait for stable tracking before resuming')
         if not self._stable():raise ValueError('Hold a steady tracked pose for a moment before resuming')
-        self._release_buttons();self.state='active';self.message='AirControl resumed.'
+        self._release_buttons();self.engine.hud_blocked=True;self.state='active';self.message='AirControl resumed.'
 
     def calibrate(self,target,*,quick=False):
         if type(quick) is not bool or quick and (self.profile['mode']!='hand' or target!='center'):raise ValueError('Quick setup captures the hand center only')
@@ -310,6 +322,7 @@ class AirControlService:
         self.samples.append(self.frame)
         if face and tracked(face) and face.get('count')==1:self.face_samples.append(self.frame)
         else:self.face_samples.clear()
+        self.engine.hud_regions=regions(self.display,active=self.state=='active') if self.owns_input and self.profile['mode']=='head' else []
         events=self.engine.step(frame,paused=self.state in ('paused','tracking_lost'))
         if self.engine.lost:
             self.stable_since=None;self.stable_frames=0;self.samples.clear();self.times.clear()
@@ -338,6 +351,7 @@ class AirControlService:
                     try:self.resume()
                     except ValueError:pass
                 elif event['kind']=='hud_dwell' and self.overlay:self.overlay.dwell(event.get('x',0),event.get('y',0),self.display)
+                elif event['kind']=='hud_action' and self.overlay:self.overlay.callback(event['action'])
             return
         try:
             if not self._desktop_ready():
@@ -368,6 +382,7 @@ class AirControlService:
                                 and math.dist(self.press_point,self.last_point)<12 and not self.engine.gesture):self._auto_dictate()
                 elif kind=='scroll':self.input.scroll(0,max(-2,min(2,event['dy'])),scroll_speed=1,invert=False)
                 elif kind=='action':self._action(event['action'])
+                elif kind=='hud_action' and self.overlay:self.overlay.callback(event['action'])
         except Exception as error:
             self.last_error=type(error).__name__+': '+str(error)[:180]
             self.pause('Windows input is unavailable on this desktop. Resume in a normal signed-in session.','tracking_lost')

@@ -54,7 +54,7 @@ class LandmarkTests(unittest.TestCase):
         result=Item(hand_landmarks=[hand()],handedness=[[Item(category_name='Right',score=.53)]],
             gestures=[[Item(category_name='None',score=.57)]])
         state,_,_=hand_state(result,'auto',None)
-        engine=GestureEngine(default_profile())
+        engine=GestureEngine(default_profile(mode='hand'))
         events=engine.step({'timestamp':1,'hand':state})
         self.assertFalse(engine.lost)
         self.assertTrue(any(e['kind']=='pointer' for e in events))

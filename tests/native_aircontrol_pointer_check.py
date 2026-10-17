@@ -54,7 +54,7 @@ async def run():
             assert native.monitor_matches(display),'Physical monitor metadata does not match'
             setup=Mock();setup.snapshot.return_value={'ready':True,'state':'ready'}
             service=AirControlService(native,providers.displays,folder=directory/'air',setup=setup)
-            profile=default_profile();profile.update(smoothing=0,auto_dictation=False)
+            profile=default_profile(mode='hand');profile.update(smoothing=0,auto_dictation=False)
             service.profile=profile;service.engine=GestureEngine(profile)
             service.display=display;service.state='active';service.owns_input=True
             r=display['rect'];points=[(rect.left+100,rect.top+110),(rect.left+230,rect.top+170)]

@@ -17,18 +17,18 @@ GESTURE_LABELS={'pinch_index':'Thumb + index pinch','pinch_middle':'Thumb + midd
     'wink_left':'Left wink','wink_right':'Right wink','brows_up':'Raised eyebrows'}
 LIMITS={'sensitivity':(.3,3),'smoothing':(0, .9),'pinch_close':(.08,.5),
     'pinch_open':(.2,.9),'dwell_ms':(400,2500),'hold_ms':(200,1800),
-    'cooldown_ms':(250,2500),'head_range':(8,35)}
+    'cooldown_ms':(250,2500),'head_range':(8,35),'head_stability':(0,12),'dwell_radius':(12,40)}
 
-def default_profile(name='everyday',mode='hand'):
+def default_profile(name='everyday',mode='head'):
     bindings={'pinch_index':'left_drag','pinch_middle':'right_click','two_fingers':'scroll',
         'closed_fist':'pause','open_palm':'resume','thumb_up':'none','thumb_down':'none',
         'smile':'none','wink_left':'none','wink_right':'none','brows_up':'none'}
     if name=='presenter':bindings.update(thumb_up='next_slide',thumb_down='previous_slide')
     if name=='media':bindings.update(thumb_up='play_pause',thumb_down='next_track')
     return dict(version=1,name=name,mode=mode,hand='auto',camera_id='0',monitor_id='',mirror=True,
-        landmarks=True,auto_dictation=True,sensitivity=1.,smoothing=.45,pinch_close=.25,
+        landmarks=True,auto_dictation=True,sensitivity=1.,smoothing=.6 if mode=='head' else .45,pinch_close=.25,
         pinch_open=.4,dwell_ms=900,hold_ms=400,cooldown_ms=700,head_range=18,
-        dwell=True,expressions_calibrated=False,calibrated_expressions=[],expression_thresholds={},bindings=bindings,
+        dwell=True,head_stability=4.,dwell_radius=22.,expressions_calibrated=False,calibrated_expressions=[],expression_thresholds={},bindings=bindings,
         calibration={'hand_bounds':[.15,.15,.85,.85],'head_neutral':[0.,0.]})
 
 def validate_profile(profile):
@@ -50,7 +50,7 @@ def validate_profile(profile):
     # These controls are reserved so every profile has a predictable escape path.
     if bindings['closed_fist']!='pause' or bindings['open_palm']!='resume':raise ValueError('Keep Closed fist = Pause and Open palm = Resume')
     for gesture,action in bindings.items():
-        if action=='left_drag' and gesture not in ('pinch_index','pinch_middle'):raise ValueError('Only pinches can hold a drag')
+        if action=='left_drag' and gesture not in ('pinch_index','pinch_middle','smile','wink_left','wink_right','brows_up'):raise ValueError('Only pinches or calibrated expressions can hold a drag')
         if action=='scroll' and gesture!='two_fingers':raise ValueError('Two fingers provide scrolling')
         if gesture not in ('closed_fist','open_palm') and action in ('pause','resume'):raise ValueError('Pause and Resume have reserved gestures')
     assigned=[v for k,v in bindings.items() if v not in ('none','pause','resume')]

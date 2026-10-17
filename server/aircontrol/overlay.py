@@ -7,6 +7,7 @@ import subprocess
 import sys
 import threading
 import time
+from .hud import HEAD_ACTIONS,layout,regions
 
 class AirOverlay:
     def __init__(self,callback):
@@ -21,7 +22,7 @@ class AirOverlay:
             for line in process.stdout:
                 try:value=json.loads(line)
                 except ValueError:continue
-                if value.get('action') in ('pause','resume','stop','recenter'):self.callback(value['action'])
+                if value.get('action') in ('pause','resume','stop','recenter',*HEAD_ACTIONS):self.callback(value['action'])
         def write():
             while self.process is process and process.poll() is None:
                 try:value=self.pending.get(timeout=.2)
@@ -57,6 +58,8 @@ class AirOverlay:
             try:self._start()
             except OSError:self.hotkey_status='HUD unavailable. Use the desktop or tray to stop.';return
         value={k:state.get(k) for k in ('state','message','gesture_label','progress','point','display')}
+        value.update(mode=state.get('profile',{}).get('mode'),dwell_action=state.get('dwell_action'),dragging=state.get('dragging',False))
+        if state.get('display'):value['layout']=layout(state['display'],active=state.get('state')=='active',head=value['mode']=='head',dragging=value['dragging'])
         try:self.pending.put_nowait(value)
         except queue.Full:
             try:self.pending.get_nowait()
@@ -65,11 +68,9 @@ class AirOverlay:
             except queue.Full:pass
     def dwell(self,x,y,display):
         if not display:return
-        r=display['rect'];px=r['x']+x*(r['width']-1);py=r['y']+y*(r['height']-1)
-        left=r['x']+r['width']-320;top=r['y']+r['height']-150
-        if top+76<=py<=top+118:
-            if left+12<=px<=left+100:self.callback('resume')
-            elif left+106<=px<=left+194:self.callback('recenter')
+        for target in regions(display):
+            left,top,right,bottom=target['rect']
+            if left<=x<=right and top<=y<=bottom:self.callback(target['action']);return
     def hide(self):self.close()
     def close(self):
         if self.hotkey:self.hotkey.set();self.hotkey=None

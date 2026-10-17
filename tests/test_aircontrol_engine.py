@@ -10,7 +10,7 @@ def observation(t, *, pose='Pointing_Up', pinch=1, middle=1, x=.5, y=.5, face=Fa
     return value
 
 class GestureEngineTests(unittest.TestCase):
-    def setUp(self):self.engine=GestureEngine(default_profile())
+    def setUp(self):self.engine=GestureEngine(default_profile(mode='hand'))
 
     def test_index_drag_does_not_raise_the_other_pinch_threshold(self):
         self.engine.step(observation(0,pinch=.15,middle=.33))
@@ -20,7 +20,7 @@ class GestureEngineTests(unittest.TestCase):
         self.assertFalse(any(e.get('action')=='up' for e in events))
 
     def test_finger_curl_does_not_move_the_click_target_but_held_drag_moves(self):
-        profile=default_profile();profile['smoothing']=0
+        profile=default_profile(mode='hand');profile['smoothing']=0
         engine=GestureEngine(profile)
         engine.step(observation(0,x=.5))
         engine.step(observation(.1,x=.43,pinch=.15))
@@ -138,9 +138,9 @@ class GestureEngineTests(unittest.TestCase):
 
     def test_profiles_reject_unsafe_actions_and_missing_pause(self):
         for action in ('shell:format','left_drag'):
-            profile=default_profile();profile['bindings']['closed_fist']=action
+            profile=default_profile(mode='hand');profile['bindings']['closed_fist']=action
             with self.assertRaises(ValueError):validate_profile(profile)
-        profile=default_profile();profile['bindings']['closed_fist']='none'
+        profile=default_profile(mode='hand');profile['bindings']['closed_fist']='none'
         with self.assertRaises(ValueError):validate_profile(profile)
 
     def test_reset_releases_drag_and_clears_dwell(self):

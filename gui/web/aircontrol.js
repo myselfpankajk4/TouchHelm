@@ -18,11 +18,11 @@
     wink_right:['A deliberate right wink','Keep your left eye open and close only your right eye for 400 ms. Practice and calibrate this expression before assigning an action.'],
     brows_up:['Raise. Hold. Relax.','Hold a neutral face first, then raise your eyebrows deliberately for 400 ms. Calibrate the observed expression in practice before assigning an action.']
   };
-  function defaults(name='everyday',mode='hand'){
+  function defaults(name='everyday',mode='head'){
     const bindings={pinch_index:'left_drag',pinch_middle:'right_click',two_fingers:'scroll',closed_fist:'pause',open_palm:'resume',thumb_up:'none',thumb_down:'none',smile:'none',wink_left:'none',wink_right:'none',brows_up:'none'};
     if(name==='presenter')Object.assign(bindings,{thumb_up:'next_slide',thumb_down:'previous_slide'});
     if(name==='media')Object.assign(bindings,{thumb_up:'play_pause',thumb_down:'next_track'});
-    return {version:1,name,mode,hand:'auto',camera_id:'0',monitor_id:'',mirror:true,landmarks:true,auto_dictation:true,sensitivity:1,smoothing:.45,pinch_close:.25,pinch_open:.4,dwell_ms:900,hold_ms:400,cooldown_ms:700,head_range:18,dwell:true,expressions_calibrated:false,calibrated_expressions:[],expression_thresholds:{},bindings,calibration:{hand_bounds:[.15,.15,.85,.85],head_neutral:[0,0]}};
+    return {version:1,name,mode,hand:'auto',camera_id:'0',monitor_id:'',mirror:true,landmarks:true,auto_dictation:true,sensitivity:1,smoothing:mode==='head'?.6:.45,pinch_close:.25,pinch_open:.4,dwell_ms:900,hold_ms:400,cooldown_ms:700,head_range:18,head_stability:4,dwell_radius:22,dwell:true,expressions_calibrated:false,calibrated_expressions:[],expression_thresholds:{},bindings,calibration:{hand_bounds:[.15,.15,.85,.85],head_neutral:[0,0]}};
   }
   class AirPanel {
     constructor(){
@@ -30,7 +30,7 @@
       this.dirty=false;this.busy=false;this.frameBusy=false;this.cameras=[];this.guidePinned=false;this.lastPreview='';this.lastSeq=-1;this.error='';
       $('airStage').before($('airCalibrationControls'));
       $('airEnable').before($('airStart'));
-      this.mappingRows();this.loadProfile(this.profile);this.bind();
+      this.mappingRows();this.loadProfile(this.profile);this.bind();this.guide(this.profile.mode==='hand'?'point':'head');
       if(desktop.state?.aircontrol)this.render(desktop.state.aircontrol);else this.render(this.state);
       window.addEventListener('touchhelm:desktop-state',event=>{if(event.detail.aircontrol)this.render(event.detail.aircontrol);});
       window.addEventListener('touchhelm:desktop-panel',event=>{
@@ -48,7 +48,7 @@
         const select=document.createElement('select');select.id='airMap_'+key;select.dataset.airGesture=key;
         select.disabled=['closed_fist','open_palm'].includes(key);
         for(const [value,text]of Object.entries(labels)){
-          if(value==='left_drag'&&!key.startsWith('pinch_')||value==='scroll'&&key!=='two_fingers'||value==='pause'&&key!=='closed_fist'||value==='resume'&&key!=='open_palm')continue;
+          if(value==='left_drag'&&!['pinch_index','pinch_middle','smile','wink_left','wink_right','brows_up'].includes(key)||value==='scroll'&&key!=='two_fingers'||value==='pause'&&key!=='closed_fist'||value==='resume'&&key!=='open_palm')continue;
           const option=new Option(text,value);select.append(option);
         }
         select.addEventListener('change',()=>{this.dirty=true;});row.append(label,select);return row;
@@ -76,6 +76,8 @@
       $('airFineCalibration').addEventListener('change',()=>this.render(this.state));
       $('airRestartCalibration').addEventListener('click',()=>this.start());
       $('airEnable').addEventListener('click',()=>this.call('enable'));
+      for(const button of document.querySelectorAll('[data-air-dwell]'))button.addEventListener('click',()=>this.call('dwell_'+button.dataset.airDwell));
+      $('airReleaseDrag').addEventListener('click',()=>this.call('release_drag'));
       $('airPractice').addEventListener('click',()=>this.tab('practice'));
       $('airReturnPractice').addEventListener('click',()=>this.call('practice'));
       $('airExpressionNeutral').addEventListener('click',()=>this.call('expression_sample',{phase:'neutral'}));
@@ -118,6 +120,7 @@
       this.profile=structuredClone(profile);this.loadMode(profile.mode);$('airProfile').value=profile.name;
       const fields={hand:'airHand',camera_id:'airCamera',monitor_id:'airMonitor',sensitivity:'airSensitivity',smoothing:'airSmoothing',dwell_ms:'airDwellMs',hold_ms:'airHoldMs',cooldown_ms:'airCooldownMs',pinch_close:'airPinchClose',pinch_open:'airPinchOpen',head_range:'airHeadRange',mirror:'airMirror',landmarks:'airShowLandmarks',dwell:'airDwell',auto_dictation:'airAutoDictation'};
       for(const [key,id]of Object.entries(fields)){if($(id).type==='checkbox')$(id).checked=profile[key];else $(id).value=profile[key];}
+      $('airHeadStability').value=profile.head_stability??4;$('airDwellRadius').value=profile.dwell_radius??22;
       for(const [key,value]of Object.entries(profile.bindings||{})){const node=$('airMap_'+key);if(node)node.value=value;}
       this.rangeLabels();this.dirty=false;
     }
@@ -127,6 +130,7 @@
       for(const [key,id]of Object.entries({sensitivity:'airSensitivity',smoothing:'airSmoothing',dwell_ms:'airDwellMs',hold_ms:'airHoldMs',cooldown_ms:'airCooldownMs',pinch_close:'airPinchClose',pinch_open:'airPinchOpen',head_range:'airHeadRange'}))profile[key]=Number($(id).value);
       for(const [key,id]of Object.entries({mirror:'airMirror',landmarks:'airShowLandmarks',dwell:'airDwell',auto_dictation:'airAutoDictation'}))profile[key]=$(id).checked;
       for(const key of Object.keys(gestures))profile.bindings[key]=$('airMap_'+key).value;
+      profile.head_stability=Number($('airHeadStability').value);profile.dwell_radius=Number($('airDwellRadius').value);
       return profile;
     }
     validate(profile){
@@ -245,6 +249,19 @@
       $('airPracticeResult').textContent=`${s.practice_frames>=15?'Pointer tracking ready':'Keep your hand or face steadily visible'} · ${s.practice_actions?'Practice click recognized':'Test a pinch click, or a head dwell click'}. ${s.practice_ready?'Ready: Enable PC control above.':'Windows input is off.'}`;
       if(s.point){$('airPracticePointer').style.left=s.point[0]*100+'%';$('airPracticePointer').style.top=s.point[1]*100+'%';}
       $('airPracticePointer').hidden=!active||!s.point;
+      $('airPracticePointer').dataset.dragging=String(!!s.dragging);
+      $('airPracticePointer').style.setProperty('--dwell-progress',Math.round((s.progress||0)*360)+'deg');
+      const head=s.profile?.mode==='head',selection=s.dwell_action||'left_click';
+      $('airHeadActions').hidden=!head||!active||!s.calibrated;
+      for(const button of document.querySelectorAll('[data-air-dwell]')){
+        const action={left:'left_click',double:'double_click',right:'right_click',drag:'drag'}[button.dataset.airDwell];
+        button.setAttribute('aria-pressed',String(action===selection));button.disabled=this.busy||!['active','practicing'].includes(s.state);
+      }
+      $('airReleaseDrag').disabled=this.busy||!s.dragging;
+      $('airDwellStatus').textContent=s.dragging?'Drag held. Move to the destination, then settle to drop. Release drag also lets go immediately.':selection==='drag'?'Drag: settle to hold, move to the destination, then settle to drop.':
+        'Settle to '+(labels[selection]||'Left click').toLowerCase()+'. Move away before clicking again. Right and double-click return to Left click.';
+      $('airDwellProgress').value=Math.max(0,Math.min(1,s.progress||0));
+      $('airDwellProgress').setAttribute('aria-valuetext',Math.round((s.progress||0)*100)+'% of dwell hold');
       $('airPracticeAction').textContent=s.actions?.[0]||labels[s.action]||'Waiting for your first move';
       const expression=s.expression_practice||{};
       if(s.profile?.calibrated_expressions){this.profile.calibrated_expressions=[...s.profile.calibrated_expressions];this.profile.expressions_calibrated=!!s.profile.expressions_calibrated;this.profile.expression_thresholds=structuredClone(s.profile.expression_thresholds||{});}
@@ -300,6 +317,8 @@
       }
       else if(action==='expression_bind')this.state.profile.bindings[data.gesture]=data.action;
       else if(action==='practice')this.setPreview('practicing');
+      else if(action.startsWith('dwell_')){this.state.dwell_action=action==='dwell_drag'&&this.state.dragging?'left_click':{left:'left_click',double:'double_click',right:'right_click',drag:'drag'}[action.slice(6)];this.state.dragging=false;}
+      else if(action==='release_drag'){this.state.dragging=false;this.state.dwell_action='left_click';}
       else if(action==='save'){this.profile=data.profile;this.setPreview('ready');}
       else if(action==='dictate'||action==='voice_access')this.state.voice={message:'Interface preview: no Windows speech command was sent.'};
       return {success:true,aircontrol:this.state};
@@ -307,8 +326,10 @@
     setPreview(name){
       if(!desktop.preview)return;
       const active=['calibrating','practicing','active','paused','tracking_lost'].includes(name);
+      const head=this.profile.mode==='head';
+      if(!this.guidePinned)this.guide(head?'head':'point');
       const calibrated=['practicing','active','paused','tracking_lost'].includes(name);
-      this.render({state:name,profile:structuredClone(this.profile),message:'Interface preview · no camera or native input. '+name.replaceAll('_',' '),setup:{state:'ready',ready:name!=='setup_required',message:'Synthetic setup state; no installation is performed.'},camera_active:active,owns_input:['active','paused','tracking_lost'].includes(name),calibrated,calibration_points:calibrated?['center','top_left','top_right','bottom_left','bottom_right']:[],practice_ready:calibrated,practice_frames:calibrated?45:0,practice_actions:calibrated?2:0,point:[.57,.44],gesture:'pinch_index',action:'left_drag',progress:.65,tracking:active&&name!=='tracking_lost',metrics:{fps:27,median_latency_ms:null},voice:{message:'Preview: Windows manages microphone setup and dictation.'},expression_practice:{neutral:false,seen:[]}});
+      this.render({state:name,profile:structuredClone(this.profile),message:'Interface preview · no camera or native input. '+name.replaceAll('_',' '),setup:{state:'ready',ready:name!=='setup_required',message:'Synthetic setup state; no installation is performed.'},camera_active:active,owns_input:['active','paused','tracking_lost'].includes(name),calibrated,calibration_points:calibrated?['center','top_left','top_right','bottom_left','bottom_right']:[],practice_ready:calibrated,practice_frames:calibrated?45:0,practice_actions:calibrated?2:0,point:[.57,.44],gesture:head?'':'pinch_index',action:head?'none':'left_drag',dwell_action:'left_click',dragging:false,progress:.65,tracking:active&&name!=='tracking_lost',metrics:{fps:27,median_latency_ms:null},voice:{message:'Preview: Windows manages microphone setup and dictation.'},expression_practice:{neutral:false,seen:[]}});
       if(!this.cameras.length){this.cameras=[{id:'0',name:'Sample PC webcam · preview'}];$('airCamera').replaceChildren(new Option(this.cameras[0].name,'0'));}
     }
   }

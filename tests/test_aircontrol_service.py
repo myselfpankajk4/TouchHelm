@@ -118,16 +118,17 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
         self.service=AirControlService(self.input,AsyncMock(return_value={'displays':[{'id':'m','rect':{'x':-100,'y':0,'width':1000,'height':800}}]}),
             folder=Path(self.folder.name),setup=self.setup,worker_factory=lambda _:self.worker,
             acquire=self.acquire,release=self.release,desktop_available=lambda:True)
+        self.service.profile=default_profile(mode='hand');self.service.engine=GestureEngine(self.service.profile)
     async def asyncTearDown(self):
         await self.service.close();self.folder.cleanup()
 
     async def test_start_opens_only_practice_and_never_acquires_input(self):
-        await self.service.command('start',{'profile':default_profile()})
+        await self.service.command('start',{'profile':default_profile(mode='hand')})
         self.assertEqual(self.service.snapshot()['state'],'calibrating')
         self.acquire.assert_not_awaited();self.input.mouse_down.assert_not_called()
 
     async def test_enable_requires_calibration_and_practice(self):
-        await self.service.command('start',{'profile':default_profile()})
+        await self.service.command('start',{'profile':default_profile(mode='hand')})
         with self.assertRaises(ValueError):await self.service.command('enable')
         self.acquire.assert_not_awaited()
 
@@ -149,7 +150,7 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_enable_transfers_input_only_after_validated_practice(self):
         import time
-        await self.service.command('start',{'profile':default_profile()})
+        await self.service.command('start',{'profile':default_profile(mode='hand')})
         self.service.calibrated=True;self.service.practice_frames=20;self.service.practice_actions=1
         self.service.engine.lost=False;self.service.last_frame=time.monotonic()
         self.service.stable_since=time.monotonic()-.3;self.service.stable_frames=8
@@ -232,7 +233,7 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
         self.release.assert_awaited_once();self.worker.stop.assert_not_called()
 
     async def test_missing_selected_monitor_does_not_silently_target_another_screen(self):
-        profile=default_profile();profile['monitor_id']='removed'
+        profile=default_profile(mode='hand');profile['monitor_id']='removed'
         with self.assertRaises(ValueError):await self.service.command('start',{'profile':profile})
         self.worker.start.assert_not_called()
 

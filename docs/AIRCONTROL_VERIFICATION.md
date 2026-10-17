@@ -1,11 +1,13 @@
 # AirControl verification — 17 October 2026
 
-**Latest audit: 18 October 2026.** See the
-[reliability review](AIRCONTROL_RELIABILITY_REVIEW.md) for current repairs,
+**Latest update: 18 October 2026.** See the
+[Head control release](AIRCONTROL_HEAD_RELEASE.md) for the default mode, dwell
+action dock, smoothing and native click/drag evidence. The earlier
+[reliability review](AIRCONTROL_RELIABILITY_REVIEW.md) covers prior repairs,
 open-source comparison and measured camera limits. Earlier results below are
 historical observations, not evidence of current physical gesture accuracy.
-Current automated totals: **340 Python**, **73 browser behavior**, **83 JavaScript
-unit passes** (one optional skip), and **8 AirControl browser/visual checks**.
+Current automated totals: **358 Python**, **74 browser behavior**, **83 JavaScript
+unit passes** (one optional skip), and **9 AirControl browser/visual checks**.
 
 Implementation is available in the modern WebView2 desktop. Hardware acceptance
 remains open: synthetic observations and model loading do not establish physical

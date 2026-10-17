@@ -42,3 +42,10 @@ an isolated checksum-locked Windows/Python 3.13 runtime; no phone camera endpoin
 or face identity enrollment is provided. Speech uses guarded Windows Win+H and
 separate Voice Access guidance. Physical tracking/speech acceptance is recorded
 separately from synthetic/mock regressions in docs/AIRCONTROL_VERIFICATION.md.
+
+Head & Face is now the fresh-profile default; explicit saved modes remain.
+Its dwell action dock supports left/right/double clicks and a two-dwell drag/drop
+without facial calibration. The shared native HUD geometry routes head dwell on
+its controls without injecting desktop clicks. Calibrated expressions may hold a
+drag. Physical-pixel steadiness and dwell radius are adjustable; interruption
+releases app-owned input. Camera starts only through the explicit user action.

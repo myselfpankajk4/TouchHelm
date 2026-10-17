@@ -28,7 +28,7 @@ def run():
             return True
         api.EnumWindows(visit,0);return result
     events=[];hud=AirOverlay(events.append);before=api.GetForegroundWindow()
-    state={'owns_input':True,'state':'active','gesture_label':'Smoke check · no camera',
+    state={'owns_input':True,'state':'active','profile':{'mode':'head'},'dwell_action':'left_click','dragging':False,'gesture_label':'Smoke check · no camera',
         'progress':.5,'point':[.5,.5],'display':{'rect':{'x':0,'y':0,'width':api.GetSystemMetrics(0),'height':api.GetSystemMetrics(1)}}}
     try:
         hud.update(state);deadline=time.monotonic()+18
@@ -39,13 +39,20 @@ def run():
         assert windows,'Owned HUD did not become visible'
         time.sleep(.25)
         assert before==api.GetForegroundWindow(),'HUD stole foreground focus'
+        labels=[]
+        @enum_type
+        def collect(handle,param):
+            title=ctypes.create_unicode_buffer(80);api.GetWindowTextW(handle,title,80)
+            labels.append(title.value);return True
+        for window in windows:api.EnumChildWindows(window,collect,0)
+        assert all(label in labels for label in ('Click','Double','Right','Drag')),'Head action buttons missing'
         # Only send a button message to this test's own HUD process.
         @enum_type
         def click_pause(handle,param):
             title=ctypes.create_unicode_buffer(80);api.GetWindowTextW(handle,title,80)
             if title.value=='Pause':api.SendMessageW(handle,0x00F5,0,0)
             return True
-        api.EnumChildWindows(windows[0],click_pause,0)
+        for window in windows:api.EnumChildWindows(window,click_pause,0)
         deadline=time.monotonic()+2
         while 'pause' not in events and time.monotonic()<deadline:time.sleep(.05)
         assert 'pause' in events,'HUD Pause callback did not arrive'

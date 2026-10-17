@@ -42,7 +42,7 @@ def check(download):
             state,_,points=hand_state(result,'auto',None,image_size=(640,480))
             assert state and state['tracked'] and len(points)==21,'Reference hand was not tracked'
             assert state['pose']==expected,f'{name}: expected {expected}, received {state["pose"]!r}'
-            engine=GestureEngine(default_profile('media'))
+            engine=GestureEngine(default_profile('media',mode='hand'))
             engine.step({'timestamp':1,'hand':state});events=engine.step({'timestamp':1.5,'hand':state})
             assert not engine.lost,'Tracked reference was rejected by the engine'
             if expected=='Pointing_Up':assert any(e['kind']=='pointer' for e in events)

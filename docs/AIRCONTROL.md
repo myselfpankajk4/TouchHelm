@@ -1,8 +1,9 @@
 # AirControl
 
-Control the signed-in Windows desktop with your PC webcam. Use **Hand** for an
-index-finger pointer, **Head & Face** for calibrated head movement and dwell
-clicking, or **Combined** for head pointing with hand actions. Face tracking
+Control the signed-in Windows desktop with your PC webcam. **Head & Face** is the
+default for new profiles, with calibrated head movement and dwell actions. Use
+**Hand** for an index-finger pointer, or **Combined** for head pointing with hand
+actions. Saved explicit mode choices remain intact. Face tracking
 measures pose and optional expressions; it does not recognize your identity or
 provide Windows sign-in.
 
@@ -53,7 +54,7 @@ monitor, mode or saved profile requires calibration/practice again.
 | Closed fist for 600 ms | Pause |
 | Open palm for 800 ms while paused | Resume after stable tracking |
 | Head movement | Point relative to the calibrated neutral pose |
-| Head dwell | Left click after 900 ms within an 18-pixel target; leave the target to rearm |
+| Head dwell | Execute the selected action after 900 ms within a 22-pixel target; move away to rearm |
 
 Return to a neutral pointing pose between different gestures. Conflicting poses
 cancel instead of producing another action. Ordinary two-eye blinking does not
@@ -69,8 +70,41 @@ Recenter during practice keeps practice running without enabling Windows input.
 Pinch confirmation stabilizes the click target while the index finger curls;
 keeping the pinch held still allows dragging. Pointer smoothing adapts to motion
 speed instead of applying the same lag to slow pointing and fast movement. Head
-smoothing accounts for monitor resolution while preserving the 18-pixel dwell
-target radius.
+smoothing accounts for monitor resolution. A 4-pixel steadiness zone suppresses
+tiny movement without making the monitor edges unreachable. Settings offer
+**Head steadiness** (0–12 physical pixels) and **Dwell target radius** (12–40
+physical pixels). Higher steadiness reduces jitter; lower values follow small
+movements more closely. Existing smoothing choices are preserved; fresh Head
+profiles use 60% smoothing.
+
+## Head-only clicks and dragging
+
+![Head dwell action dock with sample state](images/aircontrol-head-actions.png)
+
+*Synthetic interface preview. No camera is opened or input injected by the preview.*
+
+1. Start the camera, capture your neutral head pose, and practice a dwell click.
+   Select **Enable PC control** when ready; practice never controls Windows.
+2. Move your head to point. Keep the pointer settled until its ring completes to
+   click. Move away before clicking again; ordinary blinking has no action.
+3. Choose **Click**, **Double-click**, **Right-click** or **Drag** in the panel or
+   floating native dock. In active Head mode you can dwell on dock controls;
+   those dwells select an action without injecting a click into another window.
+   Move off the dock after choosing or resuming; keeping your head still over
+   the same dock control cannot repeatedly activate it.
+4. For **Drag**, settle on the source to hold the left button. Move to the
+   destination, then settle again to drop. The cursor ring and panel show
+   **Drag held**. **Release drag**, Pause, Stop and tracking loss also release it.
+5. Right-click and double-click are one-shot selections; after use they return to
+   ordinary left-click. Drag also returns to left-click after dropping. If dwell
+   was disabled in your saved profile, explicitly choosing a dwell action enables
+   it for the current session; it does not silently rewrite that saved choice.
+
+Facial expressions are optional. In Head/Combined practice, calibrate an
+expression and assign **Hold left / drag** to press while maintaining it; relax
+to release. Head mode stabilizes the pre-expression target while confirming a
+click, so making an expression does not immediately displace the target. Test
+the movement and release in practice before enabling PC control.
 
 The panel separately reports which sources are tracked and which gesture/action
 is accepted. The hold bar shows timing, **not recognition accuracy**. Unknown or

@@ -14,8 +14,10 @@ Turn your phone into a Windows trackpad, keyboard, presentation remote, media co
 ## Features
 
 **AirControl:** choose **Control via phone** or **AirControl** at desktop startup.
-Use a PC webcam for hand pointing/pinches, head movement/dwell, or combined
-control. Calibration, a non-injecting practice cursor, remappable profiles,
+Head & Face is the fresh-profile default: point with your head, then dwell to
+click, right-click, double-click or drag/drop using the floating action dock.
+Hand pointing/pinches and combined control remain available. Calibration, a
+non-injecting practice cursor, remappable profiles,
 animated guides, a native status HUD and Windows dictation are included. The
 camera starts only on **Start camera**; setup uses a separate checksum-locked
 runtime. Phone viewing/audio stay connected when AirControl takes input ownership.
