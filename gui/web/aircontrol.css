@@ -23,6 +23,6 @@
 .air-guide-art[data-gesture=wink_left] .guide-eye-left,.air-guide-art[data-gesture=wink_right] .guide-eye-right{animation:air-wink 2.5s ease-in-out infinite;transform-box:fill-box;transform-origin:center;stroke-width:4}
 .air-guide-art[data-gesture=brows_up] .guide-brows{animation:air-scroll 2.5s ease-in-out infinite}
 @keyframes air-wink{0%,30%,100%{transform:scaleY(1)}45%,65%{transform:scaleY(.15)}}
-.air-heading{position:sticky;top:-24px;z-index:6;background:var(--th-bg);padding:12px 0;margin-top:-12px;border-bottom:1px solid var(--th-border)}
+.air-heading{position:sticky;top:-24px;z-index:6;background:var(--th-bg);padding:12px 0;margin-top:-12px;border-bottom:1px solid var(--th-border);flex-wrap:wrap}
 .control-home .mode-art{flex-shrink:0}.air-panel .lead{line-height:1.55}
 @media(max-width:700px){.air-heading{top:-20px}}

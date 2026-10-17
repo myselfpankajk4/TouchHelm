@@ -122,3 +122,79 @@ Final repair verification: **292 Python tests passed**. An existing 150 ms provi
 deadline check timed out in an initial run, then passed both in isolation and in
 the final full run; its timeout was not relaxed. The Latest shortcut relaunched
 source `6edb02619f5a6b620cf168f9131babaa`, with Remote providers still available.
+
+## Tracking and practice repair — 17 October 2026
+
+The user's stationary Windows pointer occurred in **Practicing**. That mode
+deliberately does not inject PC input, but Enable was below the main workspace and
+the simulated cursor was hidden in another tab. Enable now stays in the sticky
+session header, practice opens after calibration, and state/camera feedback say
+explicitly whether the Windows cursor is being controlled. Hand mode explicitly
+labels face tracking off.
+
+Additional reproduced defects and fixes:
+
+- Handedness score was used as hand-presence confidence. SDK-accepted landmarks
+  now carry a tracked flag; left/right uncertainty cannot freeze the pointer.
+- Pinches required a straight index and could be overridden by an Open Palm pose.
+  Thumb/index landmark contact now drives pinch after its existing stability gate;
+  closed-fist and conflicting-pinch guards remain.
+- Canned weak/unknown classifications and hold timing looked like recognition
+  certainty. Unsupported/weak poses are rejected (0.70 acceptance threshold), and
+  the prominent percentage is removed. Supported poses still require their holds.
+- Recenter in practice entered a paused state that could not Resume. It now stays
+  in the non-injecting practice/calibration stage.
+- Any simulated action, including Pause, could satisfy the practice click gate.
+  Only a simulated mouse press/click now satisfies it.
+- Open Palm froze ordinary steering even though Resume applies only while paused.
+  It now steers in active/practice mode and retains held Resume while paused.
+- Pinch distances now account for image aspect ratio. Mirrored face expressions
+  retain the subject's left/right wink assignment. Stale observations no longer
+  remain labeled tracked or retain a stale tracking-rate value.
+
+**Native evidence:** `tests/native_aircontrol_pointer_check.py` moved the real
+Windows cursor to two targets inside an owned blank scratch window through
+AirControlService/GestureEngine/WindowsInputController, verified readback, checked
+tracking-loss pause and restored the starting cursor. No clicks, keyboard input
+or camera capture were sent. This tests actual pointer execution independently of
+physical gesture accuracy.
+
+**Actual model evidence:** `tests/native_aircontrol_model_check.py` runs the locked
+isolated SDK in Video mode, using the production frame preprocessing, converter
+and engine. Google's four public examples—Thumb_Down, Victory, Thumb_Up and
+Pointing_Up—were accepted; a public portrait produced one head pose and recentered
+correctly. Median inference across the hand reference frames was **22.9 ms** in
+the recorded run; this is a static-reference benchmark, not webcam latency/FPS.
+No camera or native input is used in this check.
+
+```powershell
+.\.venv\Scripts\python.exe tests/native_aircontrol_pointer_check.py
+.\.venv\Scripts\python.exe tests/native_aircontrol_model_check.py --download-reference
+```
+
+The model check downloads only the fixed public Google sample images once, under
+ignored `.tmp/aircontrol-reference/`; repeat runs use that cache. References:
+[official gesture example](https://colab.research.google.com/github/googlesamples/mediapipe/blob/main/examples/gesture_recognizer/python/gesture_recognizer.ipynb),
+[gesture outputs and score semantics](https://developers.google.com/edge/mediapipe/solutions/vision/gesture_recognizer/python),
+[Face Landmarker and mirrored blendshapes](https://developers.google.com/edge/mediapipe/solutions/vision/face_landmarker/python).
+
+Library research included [MediaPipe releases](https://github.com/google-ai-edge/mediapipe/releases)
+and [OpenSeeFace](https://github.com/emilianavt/OpenSeeFace). MediaPipe remains the
+selected provider: it supplies both supported hands and face outputs in the
+already-locked Windows/Python runtime. OpenSeeFace is a face-focused alternative,
+not a repair for this practice/input integration. This is an implementation-fit
+decision, not a claim that any library recognizes every gesture perfectly.
+
+Fresh Python regressions: **303 passed**. The seven-theme desktop bounds matrix
+passed and a representative practice image was inspected. Physical hand/head/
+combined accuracy, low-light robustness and the 30-minute camera session still
+require a participating user; model/reference and scratch checks do not verify
+those conditions.
+
+Final browser checks: **69/69 passed**. The first batched run hit one 3-second
+navigation timeout in the existing PIN-dialog check under concurrent test load;
+the final full browser run passed without relaxing timeouts. JavaScript units:
+**83 passed, one optional skipped**. Latest-source launch matched
+`eaef234e5c2c294e64a7e9bee3b7955d` and existing Remote video/audio providers remained
+available. A live Hand-mode recheck was requested after deployment; no physical
+gesture success is assumed from the automated evidence.

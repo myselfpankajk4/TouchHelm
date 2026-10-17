@@ -9,6 +9,12 @@ def physical_point(rect,x,y):
     return (rect['x']+round(clamp(number(x))*(rect['width']-1)),
             rect['y']+round(clamp(number(y))*(rect['height']-1)))
 
+def tracked(source):
+    """Tasks returns accepted landmarks, not a per-hand presence percentage."""
+    if 'tracked' in source:return source['tracked'] is True
+    # Older synthetic/provider observations remain compatible during migration.
+    return number(source.get('confidence'))>=.65
+
 class GestureEngine:
     def __init__(self,profile):
         self.profile=validate_profile(profile);self.held=False;self.lost=True
@@ -26,13 +32,13 @@ class GestureEngine:
     def _gesture(self,hand,face):
         pose=hand.get('pose','')
         if pose=='Closed_Fist':return 'closed_fist'
-        if pose=='Open_Palm':return 'open_palm'
-        if pose=='Victory':return 'two_fingers'
         pi=number(hand.get('pinch_index'),1);pm=number(hand.get('pinch_middle'),1)
         threshold=self.profile['pinch_open'] if self.lock.startswith('pinch_') else self.profile['pinch_close']
         if pi<threshold and pm<threshold:return 'conflict'
-        if pi<threshold and hand.get('index_extended',False):return 'pinch_index'
+        if pi<threshold:return 'pinch_index'
         if pm<threshold and pose not in ('Thumb_Up','Thumb_Down'):return 'pinch_middle'
+        if pose=='Open_Palm':return 'open_palm'
+        if pose=='Victory':return 'two_fingers'
         if pose in ('Thumb_Up','Thumb_Down'):return 'thumb_up' if pose=='Thumb_Up' else 'thumb_down'
         if self.profile['expressions_calibrated']:
             e=face.get('expressions',{});left=number(e.get('eyeBlinkLeft'));right=number(e.get('eyeBlinkRight'))
@@ -48,12 +54,12 @@ class GestureEngine:
         if t<=self.sequence_time:return events
         self.sequence_time=t
         hand=frame.get('hand') or {};face=frame.get('face') or {};mode=self.profile['mode']
-        hc=number(hand.get('confidence'));fc=number(face.get('confidence'))
-        valid=(mode=='hand' and hc>=.65 or mode=='head' and fc>=.65 or mode=='combined' and min(hc,fc)>=.65)
+        hand_ok=tracked(hand);face_ok=tracked(face)
+        valid=(mode=='hand' and hand_ok or mode=='head' and face_ok or mode=='combined' and hand_ok and face_ok)
         if mode!='hand' and face.get('count',0)!=1:valid=False
         if not valid:
             events=self.reset();self.lost=True;self.confidence=0.;return events
-        self.lost=False;self.confidence=hc if mode=='hand' else fc if mode=='head' else min(hc,fc)
+        self.lost=False;self.confidence=None
         if mode=='hand':
             x0,y0,x1,y1=self.profile['calibration']['hand_bounds']
             raw=(clamp((number(hand.get('x'),.5)-x0)/(x1-x0)),clamp((number(hand.get('y'),.5)-y0)/(y1-y0)))
@@ -64,6 +70,9 @@ class GestureEngine:
         alpha=1-self.profile['smoothing']
         self.point=raw if self.point is None else tuple(a+alpha*(b-a) for a,b in zip(self.point,raw))
         gesture=self._gesture(hand if mode!='head' else {},face)
+        # Resume is meaningful only while paused; an open hand must not freeze
+        # ordinary pointing in active control or the practice simulator.
+        if gesture=='open_palm' and not paused:gesture=''
         if self.lock=='conflict' and gesture:
             self.progress=0.;return events
         if self.lock and self.lock!=gesture and gesture:

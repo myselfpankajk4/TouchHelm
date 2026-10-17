@@ -1356,6 +1356,24 @@ test('AirControl practice, mapping validation and animated guide reflect explici
   await desktop.close();
 });
 
+test('AirControl practice makes PC input status clear and keeps Enable reachable',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:820,height:620});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.locator('[data-panel="aircontrol"]').click();
+  await desktop.evaluate(()=>{
+    TouchHelmAir.setPreview('practicing');
+    TouchHelmAir.render({...TouchHelmAir.state,pose_score:.57,pose_name:null,gesture:'',action:'none',
+      tracking_sources:{hand:true,face:false,hand_enabled:true,face_enabled:false}});
+  });
+  assert.match(await desktop.locator('#airCameraBadge').innerText(),/practice.*only/i);
+  assert.match(await desktop.locator('#airTrackingState').innerText(),/face.*off/i);
+  assert.doesNotMatch(await desktop.locator('#airDetected').innerText(),/57%|pose score/i);
+  await desktop.locator('[data-air-tab="practice"]').click();
+  const box=await desktop.locator('#airEnable').boundingBox();
+  assert.ok(box&&box.y>=0&&box.y+box.height<=620,'Enable stays reachable in the sticky session heading');
+  await desktop.close();
+});
+
 test('AirControl theme and desktop scaling visual matrix',async(page,context)=>{
   const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
   await desktop.waitForFunction(()=>window.TouchHelmAir);

@@ -29,8 +29,10 @@ in this picture.*
    capture only the neutral head pose. Use a broad comfortable range rather than
    stretching to the edge of the camera image.
 6. Practice with the simulated cursor. Test a pinch click in Hand/Combined or a
-   dwell click in Head mode. Practice sends no Windows mouse/keyboard input.
-7. Select **Enable PC control** while tracking is steady. This explicitly transfers
+   dwell click in Head mode. The Practice tab opens after calibration. Practice
+   sends no Windows mouse/keyboard input: **the Windows cursor stays still**.
+7. Select **Enable PC control in the session header** while tracking is steady.
+   The state changes from **Practice · PC input off** to **PC control on**. This explicitly transfers
    TouchHelm input ownership to AirControl. An existing Remote stream changes to
    View; its picture and PC audio remain connected.
 
@@ -54,6 +56,17 @@ Return to a neutral pointing pose between different gestures. Conflicting poses
 cancel instead of producing another action. Ordinary two-eye blinking does not
 click. Recenter lets you bind your hand again or set a new neutral head pose,
 then leaves control paused until Resume.
+
+In Hand mode, face tracking is off. Choose Head & Face or Combined to track a
+face. An open palm can still steer the active/practice pointer; its Resume action
+applies only while paused. A thumb–index pinch does not require a straight index
+finger and is recognized from landmark contact rather than a canned pose name.
+Recenter during practice keeps practice running without enabling Windows input.
+
+The panel separately reports which sources are tracked and which gesture/action
+is accepted. The hold bar shows timing, **not recognition accuracy**. Unknown or
+weak classifier results are not displayed as a convincing "match percentage".
+Left/right-hand classification uncertainty does not discard a tracked hand.
 
 **Pause/Stop:** use the panel, tray, or compact native HUD. **Ctrl+Alt+Space** is
 registered while control is enabled; the panel reports if another app reserves

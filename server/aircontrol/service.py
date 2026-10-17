@@ -7,7 +7,7 @@ from pathlib import Path
 import statistics
 import time
 
-from .engine import GestureEngine,number,physical_point
+from .engine import GestureEngine,number,physical_point,tracked
 from .profiles import ProfileStore,default_profile,validate_profile,ACTION_LABELS,GESTURE_LABELS
 from .process import CameraWorker
 from .setup import AirControlSetup
@@ -38,6 +38,7 @@ class AirControlService:
         setup=self.setup.snapshot()
         state=self.state
         if not self.worker and setup['ready'] and state=='setup_required':state='ready'
+        fresh=time.monotonic()-self.last_frame<=.25
         result={'state':state,'message':self.message,'setup':setup,'camera_active':self.worker is not None,
             'owns_input':self.owns_input,'profile':copy.deepcopy(self.profile),'calibrated':self.calibrated,
             'profiles':copy.deepcopy(self.profiles),
@@ -48,9 +49,12 @@ class AirControlService:
             'expression_practice':{'neutral':self.expression_neutral,'seen':sorted(self.expression_seen)},
             'action':self.profile['bindings'].get(self.engine.gesture,'none'),'progress':self.engine.progress,
             'pose_score':(self.frame.get('hand') or {}).get('gesture_confidence'),
-            'point':self.engine.point,'tracking':not self.engine.lost,'display':self.display,
+            'pose_name':(self.frame.get('hand') or {}).get('pose') or None,
+            'tracking_sources':{'hand':fresh and tracked(self.frame.get('hand') or {}),'face':fresh and tracked(self.frame.get('face') or {}),
+                'hand_enabled':self.profile['mode']!='head','face_enabled':self.profile['mode']!='hand'},
+            'point':self.engine.point,'tracking':not self.engine.lost and fresh,'display':self.display,
             'actions':list(self.actions),'action_catalog':ACTION_LABELS,'gesture_catalog':GESTURE_LABELS,
-            'metrics':{'fps':round((len(self.times)-1)/(self.times[-1]-self.times[0]),1) if len(self.times)>1 and self.times[-1]>self.times[0] else None,
+            'metrics':{'fps':round((len(self.times)-1)/(self.times[-1]-self.times[0]),1) if fresh and len(self.times)>1 and self.times[-1]>self.times[0] else None,
                 'median_latency_ms':round(statistics.median(self.latencies),1) if self.latencies else None,
                 'inference_ms':self.frame.get('inference_ms'),'capture_fps':self.frame.get('capture_fps')},
             'voice':self.voice.snapshot() if self.voice else {'message':'Dictation is available from the desktop on Windows.'}}
@@ -161,7 +165,9 @@ class AirControlService:
                     if not face or time.monotonic()-self.last_frame>.25:raise ValueError('Face tracking is not ready')
                     self.profile['calibration']['head_neutral']=[number(face.get('yaw')),number(face.get('pitch'))]
                     self.engine.profile['calibration']=copy.deepcopy(self.profile['calibration'])
-                self.pause('Recentered. Hold a neutral pose and Resume.')
+                if self.owns_input:self.pause('Recentered. Hold a neutral pose and Resume.')
+                else:self.pause('Recentered. Continue with the practice cursor; Windows input is off.',
+                    'practicing' if self.calibrated else 'calibrating')
             elif action=='save':
                 profile=validate_profile(data.get('profile'))
                 await self._stop();self.profile=self.store.save(profile);self.engine=GestureEngine(profile)
@@ -228,7 +234,9 @@ class AirControlService:
             self.stable_since=None;self.stable_frames=0;self.samples.clear()
         hand=frame.get('hand');face=frame.get('face')
         def valid_number(value,minimum,maximum):return type(value) in (int,float) and math.isfinite(value) and minimum<=value<=maximum
-        if hand is not None and (not isinstance(hand,dict) or any(not valid_number(hand.get(k),0,1) for k in ('x','y','confidence'))):
+        if hand is not None and (not isinstance(hand,dict) or any(not valid_number(hand.get(k),0,1) for k in ('x','y'))
+                or ('tracked' in hand and type(hand['tracked']) is not bool)
+                or ('confidence' in hand and not valid_number(hand['confidence'],0,1))):
             self.stable_since=None;self.stable_frames=0;self.samples.clear()
             if self.state=='active':self.pause('Invalid hand tracking result. Reacquire your hand before resuming.','tracking_lost')
             return
@@ -239,17 +247,21 @@ class AirControlService:
         self.last_sequence=sequence;self.last_frame=stamp
         self.frame={k:v for k,v in frame.items() if k!='preview'}
         if isinstance(frame.get('preview'),str) and len(frame['preview'])<=300000:self.preview=frame['preview']
-        self.samples.append(self.frame);self.times.append(now)
+        self.samples.append(self.frame)
         events=self.engine.step(frame,paused=self.state in ('paused','tracking_lost'))
         if self.engine.lost:
-            self.stable_since=None;self.stable_frames=0;self.samples.clear()
+            self.stable_since=None;self.stable_frames=0;self.samples.clear();self.times.clear()
             if self.state=='active':self.pause('Tracking lost. Reacquire your pose, then Resume.','tracking_lost')
             return
         if self.stable_since is None:self.stable_since=now
+        self.times.append(now)
         self.stable_frames+=1
         if self.state=='practicing':
             self.practice_frames+=1
-            self.practice_actions+=sum(e['kind'] in ('button','action') for e in events)
+            clicks=[e for e in events if e['kind']=='button' and e['action']=='down' or
+                e['kind']=='action' and e['action'] in ('left_click','right_click','double_click')]
+            self.practice_actions+=len(clicks)
+            for event in clicks:self.actions.appendleft('Practice: '+('Left press / drag' if event['kind']=='button' else ACTION_LABELS[event['action']]))
             e=(frame.get('face') or {}).get('expressions',{})
             left=number(e.get('eyeBlinkLeft'));right=number(e.get('eyeBlinkRight'))
             smile=min(number(e.get('mouthSmileLeft')),number(e.get('mouthSmileRight')))

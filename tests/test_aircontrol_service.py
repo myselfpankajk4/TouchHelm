@@ -7,6 +7,30 @@ from server.aircontrol.service import AirControlService
 from server.aircontrol.profiles import default_profile
 
 class AirServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_recenter_in_practice_does_not_enter_unresumable_pause(self):
+        self.service.worker=self.worker;self.service.calibrated=True;self.service.state='practicing'
+        await self.service.command('recenter')
+        self.assertEqual(self.service.state,'practicing');self.assertFalse(self.service.owns_input)
+
+    async def test_pause_pose_in_practice_does_not_satisfy_click_requirement(self):
+        self.service.state='practicing'
+        for i in range(25):
+            t=1+i*.04
+            self.service.observe({'timestamp':t,'seq':i,'hand':{'confidence':1,'x':.5,'y':.5,'pose':'Closed_Fist'}},now=t)
+        self.assertEqual(self.service.practice_actions,0)
+
+    async def test_sdk_tracked_hand_does_not_require_a_fabricated_confidence(self):
+        self.service.state='practicing'
+        self.service.observe({'timestamp':1,'seq':1,'hand':{'tracked':True,'x':.6,'y':.5,'handedness_score':.52}},now=1)
+        self.assertFalse(self.service.engine.lost)
+        self.assertEqual(self.service.practice_frames,1)
+
+    async def test_snapshot_does_not_label_stale_observations_as_tracked(self):
+        self.service.last_frame=1;self.service.engine.lost=False
+        self.service.frame={'hand':{'tracked':True}}
+        snapshot=self.service.snapshot()
+        self.assertFalse(snapshot['tracking']);self.assertFalse(snapshot['tracking_sources']['hand'])
+
     async def asyncSetUp(self):
         self.folder=tempfile.TemporaryDirectory();self.input=Mock()
         self.input.get_physical_cursor_pos.return_value=(500,500)

@@ -20,6 +20,24 @@ class GestureEngineTests(unittest.TestCase):
         events=self.engine.step(observation(.3,pinch=.8))
         self.assertEqual([e['action'] for e in events if e['kind']=='button'],['up'])
 
+    def test_real_pinch_can_click_with_a_curled_index_finger(self):
+        first=observation(0,pinch=.1);first['hand']['index_extended']=False
+        second=observation(.11,pinch=.1);second['hand']['index_extended']=False
+        self.engine.step(first)
+        self.assertTrue(any(e.get('action')=='down' for e in self.engine.step(second)))
+
+    def test_geometric_pinch_is_not_hidden_by_open_palm_classifier_label(self):
+        self.engine.step(observation(0,pose='Open_Palm',pinch=.1))
+        events=self.engine.step(observation(.11,pose='Open_Palm',pinch=.1))
+        self.assertTrue(any(e.get('action')=='down' for e in events))
+
+    def test_open_palm_steers_normally_and_only_resumes_while_paused(self):
+        events=self.engine.step(observation(0,pose='Open_Palm'))
+        self.assertTrue(any(e['kind']=='pointer' for e in events))
+        self.engine.step(observation(.1,pose='Open_Palm'),paused=True)
+        events=self.engine.step(observation(.91,pose='Open_Palm'),paused=True)
+        self.assertTrue(any(e.get('action')=='resume' for e in events))
+
     def test_conflicting_pinches_cannot_click(self):
         self.engine.step(observation(0,pinch=.1,middle=.1))
         events=self.engine.step(observation(.2,pinch=.1,middle=.1))

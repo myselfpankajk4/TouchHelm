@@ -142,7 +142,15 @@
       try{
         const response=desktop.preview?this.previewAction(action,data):await desktop.invoke('aircontrol',action,data||{});
         if(!response?.success)throw Error(response?.error||'AirControl request was not completed.');
-        if(response.aircontrol){if(['save','start','expression_calibrate'].includes(action))this.dirty=false;this.render(response.aircontrol);}
+        if(response.aircontrol){
+          const previous=this.state.state;
+          if(['save','start','expression_calibrate'].includes(action))this.dirty=false;
+          this.render(response.aircontrol);
+          if(response.aircontrol.state==='practicing'&&(previous==='calibrating'||action==='practice')){
+            this.tab('practice');$('airPracticeResult').scrollIntoView({block:'nearest'});
+          }
+          if(action==='enable'){this.tab('controls');document.querySelector('.desktop-content').scrollTop=0;}
+        }
         return true;
       }catch(error){this.error=error.message;$('airMessage').textContent=error.message;return false;}
       finally{this.busy=false;this.render(this.state);}
@@ -173,8 +181,9 @@
     render(state){
       this.state=state||this.state;const s=this.state,setup=s.setup||{},active=!!s.camera_active;
       if(s.profile&&!this.dirty)this.loadProfile(s.profile);
-      $('airState').textContent=String(s.state||'setup_required').replaceAll('_',' ').replace(/^./,c=>c.toUpperCase());$('airState').dataset.state=s.state;
-      $('airMessage').textContent=this.error||s.message||'Choose Start camera for calibration and practice.';
+      $('airState').textContent=s.state==='practicing'?'Practice · PC input off':s.state==='active'?'PC control on':String(s.state||'setup_required').replaceAll('_',' ').replace(/^./,c=>c.toUpperCase());$('airState').dataset.state=s.state;
+      const practiceMessage=s.practice_ready?'Practice click recognized. Choose Enable PC control above to move the Windows cursor.':'Practice only: move the simulated cursor below and test a click. Your Windows cursor stays still until you enable PC control.';
+      $('airMessage').textContent=this.error||(s.state==='practicing'?practiceMessage:s.message)||'Choose Start camera for calibration and practice.';
       $('homeAirStatus').textContent=active?'AirControl camera is running. Selecting Phone stops it; Switch mode alone leaves the session intact.':'The camera stays off until you choose Start camera.';
       $('airSetup').hidden=!!setup.ready;$('airSetupMessage').textContent=setup.message||'Prepare the isolated camera runtime.';
       const installing=setup.state==='installing';$('airSetupProgress').hidden=!installing;
@@ -187,23 +196,30 @@
       $('airCaptureTarget').disabled=this.busy||!active||s.calibrated||!['calibrating','practicing'].includes(s.state)||!s.tracking;
       $('airRestartCalibration').disabled=this.busy||!active;$('airPractice').disabled=!s.calibrated;
       $('airEnable').disabled=this.busy||!s.practice_ready||!s.calibrated||s.owns_input;
+      $('airEnable').hidden=!!s.owns_input;
       $('airReturnPractice').disabled=this.busy||!active||!s.calibrated;
-      $('airCameraBadge').textContent=active?(s.owns_input?'Camera on · PC control':'Camera on · No PC input'):'Camera off';
+      $('airCameraBadge').textContent=!active?'Camera off':s.state==='practicing'?'Practice cursor only':s.state==='active'?'Windows control on':s.owns_input?'PC input paused':'Calibration · PC input off';
       $('airCameraEmpty').hidden=active&&!!this.lastPreview;
       $('airCameraEmpty').querySelector('strong').textContent=active?'Waiting for the first frame…':'Your space, your controls';
       $('airCameraEmpty').querySelector('span').textContent=active?'Models are loading. Calibration and practice send no PC input.':'Choose your camera, then start calibration.';
-      $('airTrackingState').textContent=s.tracking?'Tracking':active?'Finding your pose…':'Camera off';
-      $('airDetected').textContent='Detected action: '+(labels[s.action]||'None')+(Number.isFinite(s.pose_score)?' · pose score '+Math.round(s.pose_score*100)+'%':'');
+      const sources=s.tracking_sources;
+      $('airTrackingState').textContent=!active?'Camera off':sources?
+        [(sources.hand_enabled?(sources.hand?'Hand tracked':'Show your hand'):'Hand tracking off'),
+          sources.face_enabled?(sources.face?'Face tracked':'Show one face'):'Face tracking off in Hand mode'].join(' · '):
+        s.profile?.mode==='hand'?(s.tracking?'Hand tracked':'Show your hand')+' · Face tracking off in Hand mode':s.tracking?'Tracking':'Finding your pose…';
+      $('airDetected').textContent=s.gesture==='conflict'?'Conflicting gestures · release, then point again':
+        gestures[s.gesture]?'Detected: '+gestures[s.gesture]+' · '+(s.action==='none'?'No action assigned':labels[s.action]||'No action'):
+        s.tracking?'Pointer tracked · no click gesture':'No supported gesture detected';
       $('airFps').textContent=Number.isFinite(s.metrics?.fps)?s.metrics.fps+' fps':'— fps';
       $('airHoldFill').style.width=(Math.max(0,Math.min(1,s.progress||0))*100)+'%';
-      if(!this.guidePinned&&s.gesture)this.guide(guides[s.gesture]?s.gesture:'smile');
+      if(!this.guidePinned&&guides[s.gesture])this.guide(s.gesture);
       $('airVoiceMessage').textContent=s.voice?.message||'Windows manages dictation and microphone setup.';
       $('airHotkeyStatus').textContent=s.hotkey||'Pause hotkey is registered after PC control starts.';
       const next=this.nextTarget();$('airCaptureTarget').textContent='Capture '+next.replaceAll('_',' ');
       $('airCalibrationStatus').textContent=s.calibrated?'Calibration complete. Practice a click, then enable PC control.':(s.calibration_points?.length||0)+' targets captured';
       const target=$('airCalibrationTarget');target.hidden=!active||s.state!=='calibrating';
       const position={center:[50,50],top_left:[22,22],top_right:[78,22],bottom_left:[22,78],bottom_right:[78,78]}[next];target.style.left=position[0]+'%';target.style.top=position[1]+'%';
-      $('airPracticeResult').textContent=`${s.practice_frames||0} tracked practice frames · ${s.practice_actions||0} simulated actions. ${s.practice_ready?'Ready to enable control.':'Test a click to continue.'}`;
+      $('airPracticeResult').textContent=`${s.practice_frames>=15?'Pointer tracking ready':'Keep your hand or face steadily visible'} · ${s.practice_actions?'Practice click recognized':'Test a pinch click, or a head dwell click'}. ${s.practice_ready?'Ready: Enable PC control above.':'Windows input is off.'}`;
       if(s.point){$('airPracticePointer').style.left=s.point[0]*100+'%';$('airPracticePointer').style.top=s.point[1]*100+'%';}
       $('airPracticeAction').textContent=s.actions?.[0]||labels[s.action]||'Waiting for your first move';
       const expression=s.expression_practice||{};
