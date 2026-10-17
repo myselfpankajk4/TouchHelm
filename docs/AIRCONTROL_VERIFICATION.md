@@ -235,6 +235,41 @@ The pipeline check opens no webcam and injects no Windows input. Its temporary
 profile does not replace the user's profile. Native camera diagnostics collected
 counts, timings and errors only; images were not saved.
 
+### Participating-user tracking and calibration inspection
+
+The user confirmed the camera now stayed running but still saw no practice
+cursor. Native inspection found **Calibrating, 0 targets captured**, rather than
+Practice. With the user's index finger held in view, the panel displayed live
+hand landmarks and **14.9 updates/s**. No Windows input was enabled during that
+inspection. The fixed calibration target had been mistaken for a frozen cursor;
+the Capture action was below the main preview.
+
+The preview now shows a separate live **Your finger** pointer and labels the
+fixed **Target**. Current step, instructions and Capture appear before the
+preview. The live marker remains visible when landmark lines are disabled and
+hides on tracking loss. The existing calibration, practice click and explicit
+Enable PC control gates are preserved. Browser regressions cover marker position,
+stale-state hiding and the visible Capture action. The existing all-theme desktop
+matrix was inspected after the change.
+
+The participating user completed the flow and confirmed **“Windows cursor moves
+after Enable.”** This verifies Hand-mode pointer activation on this PC. It does
+not establish physical click/drag accuracy, Head/Combined control accuracy,
+low-light robustness or the planned 30-minute acceptance session.
+
+Native inspection of the updated panel confirmed the live finger marker and a
+successful center capture, advancing to target 2 of 5. The remaining captures
+require the user to move their hand. Calibration captures use the physical mouse;
+practice and calibration intentionally do not inject gesture-driven PC clicks.
+
+Full browser verification also reproduced a buffered typing race: an explicit
+Send could wait behind an earlier PC-field read, whose reply was ignored after
+Live typing was disabled. The reply now resumes the queued explicit Send only
+after checking the same field and unchanged PC-text baseline. A changed target
+keeps the phone draft and requests relinking. Browser regressions cover both
+cases. Read-only text queries are permitted by the ownership test, while replayed
+edits, keys and clicks remain forbidden.
+
 Final browser checks: **69/69 passed**. The first batched run hit one 3-second
 navigation timeout in the existing PIN-dialog check under concurrent test load;
 the final full browser run passed without relaxing timeouts. JavaScript units:

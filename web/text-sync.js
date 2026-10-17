@@ -51,10 +51,11 @@
       if(state.type!=='text_state')return false;
       if(state.request_id&&state.request_id!==this.pending?.request_id)return true;
       const pending=this.pending;this.pending=null;
-      if(!this.enabled()&&!(pending?.action==='write'&&this.canWrite()))return true;
+      const queuedSend=pending?.action==='read'&&this.enterPending&&this.canWrite();
+      if(!this.enabled()&&!(pending?.action==='write'&&this.canWrite())&&!queuedSend)return true;
       if(!state.available){
         this.latest=null;
-        if(pending?.action==='write'){this.conflict=true;this.enterPending=false;}
+        if(pending?.action==='write'||queuedSend){this.conflict=true;this.enterPending=false;}
         else if(this.field)this.conflict=true;
         else this.field=null;
         this.describe(state.message||'PC field unavailable · native typing');return true;
@@ -62,6 +63,16 @@
       if(typeof state.text!=='string'||state.text.length>10000)return true;
       this.latest=state;
       if(this.client.isComposing){this.describe('Finishing phone composition…');return true;}
+      if(queuedSend){
+        // Explicit Send may wait behind a read started before Live was disabled.
+        // Revalidate its target/baseline before sending the buffered edit.
+        if(this.field?.field_id!==state.field_id||state.text!==this.client.liveTextValue){
+          this.conflict=true;this.enterPending=false;
+          this.describe('PC text changed · draft kept. Choose Use PC text to relink.');return true;
+        }
+        this.field.revision=state.revision;
+        if(this.edit(true)===true)this.finishEnter();return true;
+      }
       if(pending?.action==='read'&&pending.localVersion!==this.localVersion){
         if(this.field?.field_id===state.field_id&&state.text===this.client.liveTextValue){this.field.revision=state.revision;this.edit();}
         else this.describe('Waiting for PC text after phone input…');

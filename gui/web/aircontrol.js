@@ -28,6 +28,7 @@
     constructor(){
       this.profile=defaults();this.state={state:'setup_required',camera_active:false,owns_input:false,profile:this.profile,setup:{state:'setup_required',ready:false,message:'Prepare the isolated camera runtime. Your phone controls keep working.'},voice:{message:'Select a PC text field, then use Dictate.'}};
       this.dirty=false;this.busy=false;this.frameBusy=false;this.cameras=[];this.guidePinned=false;this.lastPreview='';this.lastSeq=-1;this.error='';
+      $('airStage').before($('airCalibrationControls'));
       this.mappingRows();this.loadProfile(this.profile);this.bind();
       if(desktop.state?.aircontrol)this.render(desktop.state.aircontrol);else this.render(this.state);
       window.addEventListener('touchhelm:desktop-state',event=>{if(event.detail.aircontrol)this.render(event.detail.aircontrol);});
@@ -216,6 +217,13 @@
       $('airVoiceMessage').textContent=s.voice?.message||'Windows manages dictation and microphone setup.';
       $('airHotkeyStatus').textContent=s.hotkey||'Pause hotkey is registered after PC control starts.';
       const next=this.nextTarget();$('airCaptureTarget').textContent='Capture '+next.replaceAll('_',' ');
+      const calibrating=active&&s.state==='calibrating';
+      $('airCalibrationControls').hidden=!calibrating;
+      $('airCalibrationStep').textContent='Calibration · '+((s.calibration_points?.length||0)+1)+' of '+(s.profile?.mode==='hand'?5:1);
+      $('airCalibrationHint').textContent=s.profile?.mode==='hand'?
+        (s.tracking?'Move the finger marker toward the '+next.replaceAll('_',' ')+' target, hold still, then capture.':'Show your whole hand with your index finger extended. A live finger pointer appears when tracked.'):
+        (s.tracking?'Look straight ahead, hold your head still, then capture your neutral position.':'Keep one face clearly visible and look toward the camera.');
+      if(!active||!s.tracking||sources&&!sources.hand)$('airTrackedPointer').hidden=true;
       $('airCalibrationStatus').textContent=s.calibrated?'Calibration complete. Practice a click, then enable PC control.':(s.calibration_points?.length||0)+' targets captured';
       const target=$('airCalibrationTarget');target.hidden=!active||s.state!=='calibrating';
       const position={center:[50,50],top_left:[22,22],top_right:[78,22],bottom_left:[22,78],bottom_right:[78,78]}[next];target.style.left=position[0]+'%';target.style.top=position[1]+'%';
@@ -241,10 +249,13 @@
         this.lastPreview=state.preview;$('airPreview').src='data:image/jpeg;base64,'+state.preview;$('airPreview').hidden=false;$('airCameraEmpty').hidden=true;
       }
       const canvas=$('airLandmarks'),ctx=canvas.getContext('2d');ctx.clearRect(0,0,640,480);
-      if(!$('airShowLandmarks').checked)return;
-      ctx.strokeStyle='#7ff2df';ctx.fillStyle='#fff';ctx.lineWidth=2;
       const hand=state.hand_points||[],face=state.face_points||[];
       const point=p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)&&p.every(v=>v>=-1&&v<=2);
+      const pointer=$('airTrackedPointer'),tip=hand[8];
+      pointer.hidden=!state.camera_active||!state.tracking||!(state.tracking_sources?.hand??true)||!point(tip);
+      if(!pointer.hidden){pointer.style.left=Math.max(0,Math.min(1,tip[0]))*100+'%';pointer.style.top=Math.max(0,Math.min(1,tip[1]))*100+'%';}
+      if(!$('airShowLandmarks').checked)return;
+      ctx.strokeStyle='#7ff2df';ctx.fillStyle='#fff';ctx.lineWidth=2;
       for(const [a,b]of [[0,1],[1,2],[2,3],[3,4],[0,5],[5,6],[6,7],[7,8],[5,9],[9,10],[10,11],[11,12],[9,13],[13,14],[14,15],[15,16],[13,17],[0,17],[17,18],[18,19],[19,20]])if(point(hand[a])&&point(hand[b])){ctx.beginPath();ctx.moveTo(hand[a][0]*640,hand[a][1]*480);ctx.lineTo(hand[b][0]*640,hand[b][1]*480);ctx.stroke();}
       for(const p of [...hand,...face].slice(0,40))if(point(p)){ctx.beginPath();ctx.arc(p[0]*640,p[1]*480,3,0,Math.PI*2);ctx.fill();}
     }

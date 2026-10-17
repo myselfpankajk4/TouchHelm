@@ -1261,9 +1261,11 @@ test('PC text snapshots cannot erase typing that happened during a read',async p
 test('Buffered edits to a linked PC field send only after explicit Send',async page=>{
   await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'PC draft',editable:true}));
   await page.locator('#typeInput').focus();
+  await page.evaluate(()=>{touchhelm.textSync.pending=null;touchhelm.textSync.poll();});
   await page.locator('#chkRealtimeTyping').uncheck();await page.locator('#typeInput').fill('Buffered phone edit');
   assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write'||p.type==='text'||p.type==='key').length),0);
   await page.locator('#btnSendText').click();
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',request_id:touchhelm.textSync.pending.request_id,available:true,field_id:'field',revision:'r1',text:'PC draft',editable:true}));
   assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').at(-1).text),'Buffered phone edit');
   await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r2',text:'Buffered phone edit',editable:true}));
   assert.equal(await page.locator('#typeInput').inputValue(),'');
@@ -1276,6 +1278,20 @@ test('Losing a linked PC field preserves the draft and never backspaces another 
   await page.locator('#typeInput').fill('New draft');
   assert.equal(await page.evaluate(()=>__packets.filter(p=>p.type==='key'||p.type==='text'||p.action==='write').length),0);
   assert.equal(await page.locator('#typeInput').inputValue(),'New draft');
+});
+
+test('Buffered Send waiting on a read preserves its draft if the PC field changed',async page=>{
+  await typingView(page);
+  await page.evaluate(()=>{
+    touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'PC draft',editable:true});
+    touchhelm.textSync.pending=null;touchhelm.textSync.poll();
+  });
+  await page.locator('#chkRealtimeTyping').uncheck();await page.locator('#typeInput').fill('Keep this phone draft');
+  await page.locator('#btnSendText').click();
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',request_id:touchhelm.textSync.pending.request_id,available:true,field_id:'other-field',revision:'r2',text:'Different PC text',editable:true}));
+  assert.equal(await page.locator('#typeInput').inputValue(),'Keep this phone draft');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write'||p.type==='text'||p.type==='key').length),0);
+  assert.equal(await page.evaluate(()=>touchhelm.textSync.conflict),true);
 });
 
 test('Text sync and pairing guides visual inspection',async(page,context)=>{
@@ -1336,7 +1352,7 @@ test('AirControl ownership keeps the phone connected and drafts local until expl
   assert.equal(await page.evaluate(()=>touchhelm.send({type:'remote_query'})),true);
   await page.evaluate(()=>touchhelm.ws.onmessage({data:JSON.stringify({type:'input_owner',owner:'phone'})}));
   await page.locator('#typeInput').press('!');
-  assert.deepEqual(await page.evaluate(()=>__packets.filter(p=>['text','key','click','text_sync'].includes(p.type))),[]);
+  assert.deepEqual(await page.evaluate(()=>__packets.filter(p=>['text','key','click'].includes(p.type)||p.type==='text_sync'&&p.action!=='read')),[]);
   assert.match(await page.locator('#typeInput').inputValue(),/kept during AirControl/);
 });
 
@@ -1371,6 +1387,34 @@ test('AirControl practice makes PC input status clear and keeps Enable reachable
   await desktop.locator('[data-air-tab="practice"]').click();
   const box=await desktop.locator('#airEnable').boundingBox();
   assert.ok(box&&box.y>=0&&box.y+box.height<=620,'Enable stays reachable in the sticky session heading');
+  await desktop.close();
+});
+
+test('AirControl calibration shows a live finger and keeps its next action beside the preview',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:1120,height:800});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.locator('[data-panel="aircontrol"]').click();
+  await desktop.evaluate(()=>{
+    TouchHelmAir.setPreview('calibrating');
+    const hand=Array.from({length:21},()=>[.5,.5]);hand[8]=[.63,.28];
+    const state={...TouchHelmAir.state,tracking:true,hand_points:hand,
+      tracking_sources:{hand:true,face:false,hand_enabled:true,face_enabled:false}};
+    TouchHelmAir.render(state);TouchHelmAir.draw(state);
+  });
+  assert.equal(await desktop.locator('.air-camera-column #airCaptureTarget').count(),1);
+  assert.match(await desktop.locator('#airCalibrationStep').innerText(),/1 of 5/);
+  const capture=await desktop.locator('#airCaptureTarget').boundingBox();
+  assert.ok(capture&&capture.y>=0&&capture.y+capture.height<=800,'Capture is visible before the camera preview');
+  assert.equal(await desktop.locator('#airTrackedPointer').isVisible(),true);
+  assert.equal(await desktop.locator('#airTrackedPointer').evaluate(n=>n.style.left),'63%');
+  assert.ok(Math.abs(await desktop.locator('#airTrackedPointer').evaluate(n=>parseFloat(n.style.top))-28)<.01);
+  await screenshot(desktop,'aircontrol-calibration-live-finger');
+  await desktop.locator('[data-air-tab="settings"]').click();
+  await desktop.locator('#airShowLandmarks').uncheck();
+  await desktop.evaluate(()=>TouchHelmAir.draw({...TouchHelmAir.state,hand_points:Array.from({length:21},()=>[.7,.4])}));
+  assert.equal(await desktop.locator('#airTrackedPointer').isVisible(),true);
+  await desktop.evaluate(()=>TouchHelmAir.render({...TouchHelmAir.state,tracking:false,tracking_sources:{hand:false,face:false,hand_enabled:true,face_enabled:false}}));
+  assert.equal(await desktop.locator('#airTrackedPointer').isVisible(),false);
   await desktop.close();
 });
 
