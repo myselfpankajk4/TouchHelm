@@ -1402,6 +1402,8 @@ test('AirControl calibration shows a live finger and keeps its next action besid
     TouchHelmAir.render(state);TouchHelmAir.draw(state);
   });
   assert.equal(await desktop.locator('.air-camera-column #airCaptureTarget').count(),1);
+  assert.match(await desktop.locator('#airCalibrationStep').innerText(),/1 of 1/);
+  await desktop.locator('#airFineCalibration').check();
   assert.match(await desktop.locator('#airCalibrationStep').innerText(),/1 of 5/);
   const capture=await desktop.locator('#airCaptureTarget').boundingBox();
   assert.ok(capture&&capture.y>=0&&capture.y+capture.height<=800,'Capture is visible before the camera preview');
@@ -1415,6 +1417,45 @@ test('AirControl calibration shows a live finger and keeps its next action besid
   assert.equal(await desktop.locator('#airTrackedPointer').isVisible(),true);
   await desktop.evaluate(()=>TouchHelmAir.render({...TouchHelmAir.state,tracking:false,tracking_sources:{hand:false,face:false,hand_enabled:true,face_enabled:false}}));
   assert.equal(await desktop.locator('#airTrackedPointer').isVisible(),false);
+  await desktop.evaluate(()=>{
+    TouchHelmAir.render({...TouchHelmAir.state,tracking:true,calibration_points:['center','top_left']});
+    const original=TouchHelmAir.previewAction.bind(TouchHelmAir);
+    TouchHelmAir.previewAction=(action,data)=>{window.__lastAirAction={action,data};return original(action,data);};
+  });
+  await desktop.locator('#airFineCalibration').uncheck();await desktop.locator('#airCaptureTarget').click();
+  assert.deepEqual(await desktop.evaluate(()=>__lastAirAction.data),{target:'center',quick:true});
+  await desktop.close();
+});
+
+test('AirControl Start camera is reachable in the header and stopped sessions cannot enable input',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:820,height:620});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('ready');});
+  assert.equal(await desktop.locator('.air-session-actions #airStart').count(),1);
+  const button=await desktop.locator('#airStart').boundingBox();assert.ok(button&&button.y>=0&&button.y+button.height<=620);
+  assert.equal(await desktop.locator('#airEnable').isVisible(),false);
+  await desktop.locator('#airStart').click();
+  assert.equal(await desktop.locator('#airStart').isVisible(),false);assert.equal(await desktop.locator('#airStop').isVisible(),true);
+  await desktop.locator('#airStop').click();assert.equal(await desktop.locator('#airEnable').isVisible(),false);
+  await desktop.close();
+});
+
+test('AirControl personal face calibration exposes activation and applies a tested action without stopping camera',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:1120,height:800});await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.profile.mode='head';TouchHelmAir.setPreview('practicing');TouchHelmAir.tab('practice');});
+  await desktop.evaluate(()=>TouchHelmAir.draw({...TouchHelmAir.state,tracking_sources:{face:true,hand:false,face_enabled:true,hand_enabled:false}}));
+  assert.equal(await desktop.locator('#airTrackedPointer').isVisible(),true);
+  assert.match(await desktop.locator('#airTrackedPointer').innerText(),/Head pointer/);
+  await desktop.locator('#airExpressionNeutral').click();
+  assert.match(await desktop.locator('#airExpressionResult').innerText(),/relaxed.*captured/i);
+  await desktop.locator('#airExpressionSelect').selectOption('smile');
+  await desktop.locator('#airExpressionPractice').click();
+  await desktop.locator('#airExpressionAction').selectOption('left_click');await desktop.locator('#airExpressionAssign').click();
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.profile.bindings.smile),'left_click');
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.camera_active),true);
+  assert.match(await desktop.locator('#airExpressionResult').innerText(),/threshold|practice/i);
+  await screenshot(desktop,'aircontrol-personal-face-calibration');
   await desktop.close();
 });
 

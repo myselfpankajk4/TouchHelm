@@ -59,6 +59,8 @@ class AirControlSetup:
         return self.snapshot()
 
     def cancel(self):
+        with self.lock:
+            if self.state['ready']:return
         self.cancelled.set()
         process=self.process
         if process and process.poll() is None:

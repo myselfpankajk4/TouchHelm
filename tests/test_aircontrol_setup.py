@@ -7,6 +7,11 @@ from server.aircontrol.setup import AirControlSetup, checked_model
 from server.aircontrol.profiles import ProfileStore,default_profile
 
 class AirSetupTests(unittest.TestCase):
+    def test_late_cancel_does_not_disable_an_already_ready_runtime(self):
+        with tempfile.TemporaryDirectory() as folder:
+            setup=AirControlSetup(folder);setup._set('ready','Ready',100)
+            setup.cancel()
+            self.assertTrue(setup.snapshot()['ready'])
     def test_runtime_subprocess_uses_resolved_physical_folder(self):
         with tempfile.TemporaryDirectory() as folder:
             logical=Path(folder)/'logical';physical=Path(folder)/'redirected'

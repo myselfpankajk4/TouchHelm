@@ -725,25 +725,32 @@ class WindowsInputController:
         vk = self._get_vk(key)
         if vk:
             flags = KEYEVENTF_EXTENDEDKEY if self._is_extended_key(vk, key) else 0
-            user32.keybd_event(vk, 0, flags, 0)
-            time.sleep(0.015)
-            user32.keybd_event(vk, 0, flags | KEYEVENTF_KEYUP, 0)
+            try:
+                user32.keybd_event(vk, 0, flags, 0)
+                time.sleep(0.015)
+            finally:user32.keybd_event(vk, 0, flags | KEYEVENTF_KEYUP, 0)
 
     def hotkey(self, *keys):
         """Presses keys in sequence, then releases in reverse."""
         self.ensure_input_desktop()
         vk_list = []
-        for k in keys:
-            vk = self._get_vk(k)
-            if vk:
-                flags = KEYEVENTF_EXTENDEDKEY if self._is_extended_key(vk, k) else 0
-                vk_list.append((vk, flags))
-                user32.keybd_event(vk, 0, flags, 0)
-                time.sleep(0.01)
-        time.sleep(0.02)
-        for vk, flags in reversed(vk_list):
-            user32.keybd_event(vk, 0, flags | KEYEVENTF_KEYUP, 0)
-            time.sleep(0.01)
+        release_error=None
+        try:
+            for k in keys:
+                vk = self._get_vk(k)
+                if vk:
+                    flags = KEYEVENTF_EXTENDEDKEY if self._is_extended_key(vk, k) else 0
+                    vk_list.append((vk, flags))
+                    user32.keybd_event(vk, 0, flags, 0)
+                    time.sleep(0.01)
+            time.sleep(0.02)
+        finally:
+            # Cleanup must not sleep or abandon the remaining modifiers when a
+            # shortcut is interrupted or one native release fails.
+            for vk, flags in reversed(vk_list):
+                try:user32.keybd_event(vk, 0, flags | KEYEVENTF_KEYUP, 0)
+                except Exception as error:release_error=error
+        if release_error:raise release_error
 
     def type_unicode_char(self, char: str):
         """Types a single unicode character via SendInput."""

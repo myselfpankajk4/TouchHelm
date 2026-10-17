@@ -11,6 +11,29 @@ def hand(x=.3):
     return points
 
 class LandmarkTests(unittest.TestCase):
+    def test_inference_recovers_after_a_temporary_cpu_spike_without_reconfiguring_camera(self):
+        from server.aircontrol.worker import inference_rate
+        self.assertEqual(inference_rate([.08]*15,30),15)
+        self.assertEqual(inference_rate([.02]*30,15),30)
+        self.assertEqual(inference_rate([.04]*30,15),15)
+
+    def test_missing_optional_hand_classification_does_not_crash_the_worker(self):
+        result=Item(hand_landmarks=[hand()],handedness=[],gestures=[])
+        self.assertIsNone(hand_state(result,'auto',None)[0])
+    def test_head_tracking_survives_unavailable_expression_output(self):
+        class Matrix:
+            def __getitem__(self,index):return 1 if index==(2,2) else 0
+        result=Item(face_landmarks=[[Item(x=.5,y=.5) for _ in range(478)]],
+            facial_transformation_matrixes=[Matrix()],face_blendshapes=[])
+        state,_=face_state(result)
+        self.assertTrue(state['tracked']);self.assertEqual(state['expressions'],{})
+
+    def test_missing_pose_output_is_tracking_loss_not_a_worker_crash(self):
+        result=Item(face_landmarks=[[Item(x=.5,y=.5) for _ in range(478)]],
+            facial_transformation_matrixes=[],face_blendshapes=[])
+        state,_=face_state(result)
+        self.assertIsNone(state)
+
     def test_capture_read_failure_reports_an_error_instead_of_clean_exit(self):
         from server.aircontrol import worker
         camera=Mock();camera.isOpened.return_value=True;camera.read.return_value=(False,None)

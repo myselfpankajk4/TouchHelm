@@ -158,13 +158,15 @@ class DesktopServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_slow_provider_keeps_event_loop_responsive_and_deadline_is_bounded(self):
         import time
-        self.bridge.request = lambda *args, **kwargs: time.sleep(.2)
+        self.bridge.request = lambda *args, **kwargs: time.sleep(.5)
         self.service = DesktopServices(bridge=self.bridge, usage_file=self.usage,
                                        media_dirs=[], timeout=.04)
         query = asyncio.create_task(self.service.snapshot())
         await asyncio.sleep(.005)
         self.assertFalse(query.done())
-        result = await asyncio.wait_for(query, .15)
+        # The provider budget is .14s including cancellation grace. Leave room
+        # for Windows scheduling while still failing if the .5s call blocks.
+        result = await asyncio.wait_for(query, .35)
         self.assertFalse(result['media']['available'])
         self.assertIn('timed out', result['media']['message'].lower())
 

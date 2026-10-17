@@ -70,7 +70,7 @@ async def check():
         return real_popen(args, **kwargs)
 
     with tempfile.TemporaryDirectory() as folder, patch('server.aircontrol.process.subprocess.Popen', side_effect=launch):
-        service = AirControlService(native, displays, folder=folder, setup=setup)
+        service = AirControlService(native, displays, folder=folder, setup=setup,desktop_available=lambda:True)
         try:
             await service.command('start')
             deadline = time.monotonic() + 25

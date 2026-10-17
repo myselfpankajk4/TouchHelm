@@ -2,11 +2,37 @@
 import unittest
 import io
 import time
+import subprocess
 from pathlib import Path
 from unittest.mock import Mock,patch
 from server.aircontrol.process import CameraWorker
 
 class CameraPipeTests(unittest.TestCase):
+    def test_metrics_describe_the_interpreter_not_the_venv_launcher(self):
+        worker=CameraWorker(Mock());worker.process=Mock();worker.process.poll.return_value=None
+        with patch('server.aircontrol.process.os.cpu_count',return_value=4):
+            worker.read_usage({'at':10.,'cpu_seconds':1.,'memory_mb':256.})
+            self.assertEqual(worker.stats()['memory_mb'],256.)
+            worker.read_usage({'at':11.,'cpu_seconds':3.,'memory_mb':300.})
+            self.assertEqual(worker.stats()['cpu_percent'],50.)
+
+    def test_stop_asks_the_interpreter_to_exit_before_terminating_launcher(self):
+        worker=CameraWorker(Mock());process=Mock();worker.process=process;process.poll.return_value=None
+        worker.stop()
+        process.stdin.write.assert_called_once_with('{"action":"stop"}\n')
+        process.terminate.assert_not_called()
+
+    def test_timeout_fallback_targets_only_the_owned_helper_pid(self):
+        worker=CameraWorker(Mock());process=Mock(pid=12345);worker.process=process;process.poll.return_value=None
+        process.wait.side_effect=[subprocess.TimeoutExpired('owned helper',1),0]
+        with patch('server.aircontrol.process.subprocess.run') as run:worker.stop()
+        self.assertEqual(run.call_args.args[0],['taskkill.exe','/PID','12345','/T','/F'])
+
+    def test_invalid_usage_cannot_replace_a_valid_measurement(self):
+        worker=CameraWorker(Mock());worker.process=Mock();worker.process.poll.return_value=None
+        worker.read_usage({'at':1.,'cpu_seconds':.2,'memory_mb':250.})
+        worker.read_usage({'at':2.,'cpu_seconds':float('nan'),'memory_mb':-1.})
+        self.assertEqual(worker.stats()['memory_mb'],250.)
     def test_fast_exit_does_not_discard_the_workers_explicit_error(self):
         worker=CameraWorker(Mock(python=Path('python.exe'),models=Path('models')))
         process=Mock();process.poll.return_value=1

@@ -1,6 +1,8 @@
 """Pure gesture state machine. Events are proposals, never native input."""
 import math
 from .profiles import validate_profile
+from .filters import OneEuro
+from .expressions import recognize
 
 def clamp(n):return max(0.,min(1.,n))
 def number(value,default=0.):
@@ -22,32 +24,34 @@ class GestureEngine:
         self.point=None;self.dwell_anchor=None;self.dwell_since=0.;self.dwell_fired=False
         self.dwell_exit=None;self.last_action=-10.;self.progress=0.;self.confidence=0.
         self.sequence_time=-1.
+        self.pinch_anchor=None;self.pinch_origin=None
+        smoothing=self.profile['smoothing'];head=self.profile['mode']!='hand'
+        self.filters=[OneEuro((.3 if head else 1.)+(1-smoothing)*(1.4 if head else 2.),2. if head else 6.) for _ in range(2)]
 
     def reset(self):
         events=[{'kind':'button','action':'up','button':'left'}] if self.held else []
         self.held=False;self.gesture='';self.fired=False;self.lock='';self.scroll_y=None
         self.dwell_anchor=None;self.dwell_fired=False;self.dwell_exit=None;self.point=None;self.progress=0.
+        self.pinch_anchor=None;self.pinch_origin=None
+        for filter in self.filters:filter.reset()
         return events
 
-    def _gesture(self,hand,face):
+    def _gesture(self,hand,face,*,paused=False):
         pose=hand.get('pose','')
         if pose=='Closed_Fist':return 'closed_fist'
+        if pose=='Open_Palm' and paused:return 'open_palm'
         pi=number(hand.get('pinch_index'),1);pm=number(hand.get('pinch_middle'),1)
-        threshold=self.profile['pinch_open'] if self.lock.startswith('pinch_') else self.profile['pinch_close']
-        if pi<threshold and pm<threshold:return 'conflict'
-        if pi<threshold:return 'pinch_index'
-        if pm<threshold and pose not in ('Thumb_Up','Thumb_Down'):return 'pinch_middle'
-        if pose=='Open_Palm':return 'open_palm'
+        index_threshold=self.profile['pinch_open'] if self.lock=='pinch_index' else self.profile['pinch_close']
+        middle_threshold=self.profile['pinch_open'] if self.lock=='pinch_middle' else self.profile['pinch_close']
+        if pi<index_threshold and pm<middle_threshold:return 'conflict'
+        if pi<index_threshold:return 'pinch_index'
+        if pm<middle_threshold and pose not in ('Thumb_Up','Thumb_Down'):return 'pinch_middle'
         if pose=='Victory':return 'two_fingers'
-        if pose in ('Thumb_Up','Thumb_Down'):return 'thumb_up' if pose=='Thumb_Up' else 'thumb_down'
-        if self.profile['expressions_calibrated']:
-            e=face.get('expressions',{});left=number(e.get('eyeBlinkLeft'));right=number(e.get('eyeBlinkRight'))
-            calibrated=self.profile['calibrated_expressions']
-            if 'wink_left' in calibrated and left>.75 and right<.25:return 'wink_left'
-            if 'wink_right' in calibrated and right>.75 and left<.25:return 'wink_right'
-            if 'smile' in calibrated and min(number(e.get('mouthSmileLeft')),number(e.get('mouthSmileRight')))>.7:return 'smile'
-            if 'brows_up' in calibrated and number(e.get('browInnerUp'))>.75:return 'brows_up'
-        return ''
+        if pose in ('Thumb_Up','Thumb_Down'):
+            gesture='thumb_up' if pose=='Thumb_Up' else 'thumb_down'
+            if self.profile['bindings'][gesture]!='none':return gesture
+        expression=recognize(face,self.profile,self.gesture)
+        return expression or ('open_palm' if pose=='Open_Palm' else '')
 
     def step(self,frame,*,paused=False):
         events=[];t=number(frame.get('timestamp'),-1)
@@ -67,12 +71,28 @@ class GestureEngine:
             yaw,pitch=self.profile['calibration']['head_neutral'];span=self.profile['head_range']*2
             raw=(clamp(.5+(number(face.get('yaw'))-yaw)/span),clamp(.5+(number(face.get('pitch'))-pitch)/span))
         raw=tuple(clamp(.5+(v-.5)*self.profile['sensitivity']) for v in raw)
-        alpha=1-self.profile['smoothing']
-        self.point=raw if self.point is None else tuple(a+alpha*(b-a) for a,b in zip(self.point,raw))
-        gesture=self._gesture(hand if mode!='head' else {},face)
+        if mode!='hand':
+            width,height=self.profile.get('_monitor_scale',(1920,1080))
+            resolution=max(1.,width/1920,height/1080)
+            for filter in self.filters:filter.minimum=(.3+(1-self.profile['smoothing'])*1.4)/resolution
+        previous_point=self.point
+        filtered=raw if not self.profile['smoothing'] else tuple(filter.step(value,t) for filter,value in zip(self.filters,raw))
+        self.point=filtered
+        gesture=self._gesture(hand if mode!='head' else {},face,paused=paused)
         # Resume is meaningful only while paused; an open hand must not freeze
         # ordinary pointing in active control or the practice simulator.
         if gesture=='open_palm' and not paused:gesture=''
+        if gesture!='conflict' and self.profile['bindings'].get(gesture,'none')=='none':gesture=''
+        if mode=='hand' and gesture.startswith('pinch_'):
+            if self.pinch_anchor is None or self.gesture!=gesture:
+                self.pinch_anchor=previous_point or filtered;self.pinch_origin=filtered
+            if self.gesture!=gesture or not self.fired or self.profile['bindings'][gesture]!='left_drag':self.point=self.pinch_anchor
+            else:self.point=tuple(clamp(a+b-c) for a,b,c in zip(self.pinch_anchor,filtered,self.pinch_origin))
+        elif self.pinch_anchor is not None:
+            self.pinch_anchor=None;self.pinch_origin=None
+            if previous_point is not None:
+                self.point=previous_point
+                for filter,value in zip(self.filters,previous_point):filter.reset();filter.step(value,t)
         if self.lock=='conflict' and gesture:
             self.progress=0.;return events
         if self.lock and self.lock!=gesture and gesture:
@@ -84,6 +104,7 @@ class GestureEngine:
             if self.held:
                 events.append({'kind':'button','action':'up','button':'left'});self.held=False
             self.gesture=gesture;self.since=t;self.fired=False;self.scroll_y=None;self.progress=0.
+            if mode=='head' and gesture:self.dwell_anchor=None;self.dwell_since=t
             if self.lock and gesture not in (self.lock,'conflict'):
                 self.lock=''
         if gesture=='conflict':
@@ -104,10 +125,13 @@ class GestureEngine:
         if gesture and self.progress>=1 and not self.fired:
             if action=='left_drag' and not paused:
                 self.held=True;self.lock=gesture;self.fired=True
+                if mode=='hand':self.pinch_origin=filtered;self.pinch_anchor=self.point
                 events.append({'kind':'button','action':'down','button':'left'})
             elif action not in ('none','scroll','left_drag') and (not paused or action=='resume'):
                 if t-self.last_action>=self.profile['cooldown_ms']/1000 or action in ('pause','resume'):
                     events.append({'kind':'action','action':action});self.last_action=t;self.fired=True;self.lock=gesture
+                    if mode=='head' and action in ('left_click','double_click','right_click'):
+                        self.dwell_anchor=self.point;self.dwell_fired=True;self.dwell_exit=None
         if mode=='head' and (self.profile['dwell'] or paused) and not gesture:
             # Normalized radius corresponds to 18 physical pixels after mapping.
             scale=self.profile.get('_monitor_scale',(1920,1080))

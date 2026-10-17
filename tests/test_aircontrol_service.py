@@ -5,8 +5,75 @@ import unittest
 from unittest.mock import AsyncMock,Mock
 from server.aircontrol.service import AirControlService
 from server.aircontrol.profiles import default_profile
+from server.aircontrol.engine import GestureEngine
 
 class AirServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_locked_desktop_cannot_start_camera(self):
+        self.service.desktop_available=lambda:False
+        with self.assertRaisesRegex(ValueError,'Unlock'):await self.service.command('start')
+        self.worker.start.assert_not_called()
+
+    async def test_lock_stops_camera_releases_input_and_reports_the_reason(self):
+        self.service.desktop_available=lambda:False;self.service.worker=self.worker
+        self.service.owns_input=True;self.service.native_down=True;self.service.state='active'
+        await self.service._loop()
+        self.assertFalse(self.service.owns_input);self.assertIsNone(self.service.worker)
+        self.assertIn('locked',self.service.message.lower());self.input.mouse_up.assert_called_once_with('left')
+
+    async def test_combined_can_calibrate_its_face_before_the_hand_enters_view(self):
+        import time
+        self.service.profile=default_profile(mode='combined');self.service.engine=GestureEngine(self.service.profile)
+        self.service.worker=self.worker;self.service.state='calibrating'
+        base=time.monotonic()-.24
+        for i in range(8):
+            stamp=base+i*.03
+            self.service.observe({'timestamp':stamp,'seq':i,'face':{'tracked':True,'count':1,'yaw':0.,'pitch':0.}},now=stamp)
+        self.service.calibrate('center')
+        self.assertTrue(self.service.calibrated);self.assertFalse(self.service.owns_input)
+    async def test_enable_does_not_replay_a_still_held_practice_pinch(self):
+        import time
+        self.service.worker=self.worker;self.service.calibrated=True;self.service.practice_frames=20;self.service.practice_actions=1
+        self.service.last_frame=time.monotonic();self.service.stable_since=time.monotonic()-.3;self.service.stable_frames=8
+        self.service.engine.lost=False;self.service.engine.held=True;self.service.engine.gesture='pinch_index'
+        self.service.display={'id':'m','rect':{'x':-100,'y':0,'width':1000,'height':800}}
+        with self.assertRaisesRegex(ValueError,'Release'):await self.service.command('enable')
+        self.assertFalse(self.service.owns_input);self.acquire.assert_not_awaited()
+
+    async def test_personal_expression_sample_is_guarded_and_keeps_input_off(self):
+        import time
+        from test_aircontrol_expressions import face
+        self.service.profile=default_profile(mode='head');self.service.worker=self.worker
+        self.service.state='practicing';self.service.last_frame=time.monotonic()
+        def sample(smile):
+            self.service.face_samples.clear();stamp=time.monotonic()
+            for i in range(8):self.service.face_samples.append({'timestamp':stamp-(7-i)/15,'face':face(smile=smile)})
+        sample(.1)
+        await self.service.command('expression_sample',{'phase':'neutral'})
+        sample(.45)
+        result=await self.service.command('expression_sample',{'phase':'gesture','gesture':'smile'})
+        self.assertIn('smile',result['aircontrol']['profile']['calibrated_expressions'])
+        self.assertLess(self.service.profile['expression_thresholds']['smile']['on'],.45)
+        self.assertFalse(self.service.owns_input);self.acquire.assert_not_awaited()
+
+    async def test_quick_hand_calibration_enters_practice_without_input(self):
+        import time
+        self.service.worker=self.worker;self.service.state='calibrating';self.service.last_frame=time.monotonic()
+        for _ in range(8):self.service.samples.append({'hand':{'x':.5,'y':.4}})
+        self.service.calibrate('center',quick=True)
+        self.assertTrue(self.service.calibrated);self.assertEqual(self.service.state,'practicing')
+        self.assertFalse(self.service.owns_input);self.acquire.assert_not_awaited()
+        for actual,expected in zip(self.service.profile['calibration']['hand_bounds'],[.25,.2,.75,.6]):self.assertAlmostEqual(actual,expected)
+
+    async def test_invalid_fine_calibration_does_not_poison_the_profile(self):
+        import time,copy
+        self.service.worker=self.worker;self.service.state='calibrating';self.service.last_frame=time.monotonic()
+        before=copy.deepcopy(self.service.profile)
+        self.service.calibration_points={k:[.5,.5] for k in ('center','top_left','top_right','bottom_left')}
+        for _ in range(8):self.service.samples.append({'hand':{'x':.51,'y':.51}})
+        with self.assertRaises(ValueError):self.service.calibrate('bottom_right')
+        self.assertEqual(self.service.profile,before)
+        self.assertNotIn('bottom_right',self.service.calibration_points)
+
     async def test_camera_failure_preserves_reason_and_releases_control(self):
         self.service.worker=self.worker;self.service.owns_input=True
         self.service.state='active';self.service.native_down=True
@@ -50,7 +117,7 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
         self.acquire=AsyncMock();self.release=AsyncMock()
         self.service=AirControlService(self.input,AsyncMock(return_value={'displays':[{'id':'m','rect':{'x':-100,'y':0,'width':1000,'height':800}}]}),
             folder=Path(self.folder.name),setup=self.setup,worker_factory=lambda _:self.worker,
-            acquire=self.acquire,release=self.release)
+            acquire=self.acquire,release=self.release,desktop_available=lambda:True)
     async def asyncTearDown(self):
         await self.service.close();self.folder.cleanup()
 
@@ -94,7 +161,7 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
         import time
         self.service.profile=default_profile(mode='combined');self.service.worker=self.worker
         self.service.state='calibrating';self.service.last_frame=time.monotonic()
-        for _ in range(6):self.service.samples.append({'face':{'yaw':2.,'pitch':1.}})
+        for _ in range(6):self.service.face_samples.append({'face':{'yaw':2.,'pitch':1.}})
         self.service.calibrate('center')
         self.assertTrue(self.service.calibrated)
         self.assertEqual(self.service.profile['calibration']['head_neutral'],[2.,1.])
@@ -113,9 +180,11 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
 
     async def test_stop_clears_preview_and_returns_phone_ownership(self):
         self.service.worker=self.worker;self.service.preview='data';self.service.owns_input=True
+        self.service.calibrated=True;self.service.practice_frames=20;self.service.practice_actions=1
         await self.service.command('stop')
         self.worker.stop.assert_called_once();self.release.assert_awaited_once()
         self.assertFalse(self.service.snapshot()['camera_active']);self.assertFalse(self.service.preview)
+        self.assertFalse(self.service.snapshot()['calibrated']);self.assertFalse(self.service.snapshot()['practice_ready'])
 
     async def test_monitor_removal_pauses_and_requires_new_calibration(self):
         import time

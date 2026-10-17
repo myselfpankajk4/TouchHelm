@@ -28,7 +28,7 @@ def default_profile(name='everyday',mode='hand'):
     return dict(version=1,name=name,mode=mode,hand='auto',camera_id='0',monitor_id='',mirror=True,
         landmarks=True,auto_dictation=True,sensitivity=1.,smoothing=.45,pinch_close=.25,
         pinch_open=.4,dwell_ms=900,hold_ms=400,cooldown_ms=700,head_range=18,
-        dwell=True,expressions_calibrated=False,calibrated_expressions=[],bindings=bindings,
+        dwell=True,expressions_calibrated=False,calibrated_expressions=[],expression_thresholds={},bindings=bindings,
         calibration={'hand_bounds':[.15,.15,.85,.85],'head_neutral':[0.,0.]})
 
 def validate_profile(profile):
@@ -57,6 +57,10 @@ def validate_profile(profile):
     if len(assigned)!=len(set(assigned)):raise ValueError('Assign an action to only one gesture')
     expressions=value['calibrated_expressions']
     if not isinstance(expressions,list) or len(expressions)>4 or any(k not in ('smile','wink_left','wink_right','brows_up') for k in expressions):raise ValueError('Invalid expression calibration')
+    thresholds=value['expression_thresholds']
+    if not isinstance(thresholds,dict) or set(thresholds)-{'smile','wink_left','wink_right','brows_up'}:raise ValueError('Invalid expression thresholds')
+    for limits in thresholds.values():
+        if not isinstance(limits,dict) or not {'on','off'}<=set(limits) or set(limits)-{'on','off','other_max'} or any(type(n) not in (int,float) or not math.isfinite(n) or not 0<=n<=1 for n in limits.values()) or limits['on']-limits['off']<.03:raise ValueError('Invalid expression thresholds')
     if any(bindings[k]!='none' and k not in expressions for k in ('smile','wink_left','wink_right','brows_up')):raise ValueError('Practice and calibrate each assigned facial expression first')
     if value['mode']=='head' and not value['dwell'] and not any(bindings[k] in ('left_click','double_click') for k in expressions):raise ValueError('Head mode needs dwell clicking or a calibrated click expression')
     calibration=value['calibration']

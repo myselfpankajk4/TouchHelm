@@ -12,6 +12,56 @@ def observation(t, *, pose='Pointing_Up', pinch=1, middle=1, x=.5, y=.5, face=Fa
 class GestureEngineTests(unittest.TestCase):
     def setUp(self):self.engine=GestureEngine(default_profile())
 
+    def test_index_drag_does_not_raise_the_other_pinch_threshold(self):
+        self.engine.step(observation(0,pinch=.15,middle=.33))
+        self.engine.step(observation(.11,pinch=.15,middle=.33))
+        events=self.engine.step(observation(.2,pinch=.2,middle=.33))
+        self.assertTrue(self.engine.held)
+        self.assertFalse(any(e.get('action')=='up' for e in events))
+
+    def test_finger_curl_does_not_move_the_click_target_but_held_drag_moves(self):
+        profile=default_profile();profile['smoothing']=0
+        engine=GestureEngine(profile)
+        engine.step(observation(0,x=.5))
+        engine.step(observation(.1,x=.43,pinch=.15))
+        self.assertAlmostEqual(engine.point[0],.5)
+        events=engine.step(observation(.21,x=.42,pinch=.15))
+        self.assertTrue(any(e.get('action')=='down' for e in events))
+        self.assertAlmostEqual(engine.point[0],.5)
+        engine.step(observation(.3,x=.49,pinch=.15))
+        self.assertAlmostEqual(engine.point[0],.6)
+
+    def test_unassigned_pose_does_not_freeze_pointer_movement(self):
+        events=self.engine.step(observation(0,pose='Thumb_Up'))
+        self.assertTrue(any(e['kind']=='pointer' for e in events))
+
+    def test_head_dwell_tolerates_small_high_frequency_pose_jitter(self):
+        for size in ((1920,1080),(3840,2160)):
+            with self.subTest(display=size):
+                self.engine=GestureEngine(default_profile(mode='head'));self.engine.profile['_monitor_scale']=size
+                clicks=[]
+                for i in range(40):
+                    frame=observation(i/15,face=True)
+                    frame['face']['yaw']=0 if i==0 else (.65 if i%2 else -.65)
+                    clicks.extend(e for e in self.engine.step(frame) if e.get('action')=='left_click')
+                self.assertEqual(len(clicks),1)
+
+    def test_unassigned_smile_does_not_block_head_dwell(self):
+        profile=default_profile(mode='head');profile['expressions_calibrated']=True;profile['calibrated_expressions']=['smile']
+        self.engine=GestureEngine(profile)
+        for i in range(2):
+            frame=observation(i,face=True);frame['face']['expressions']={'mouthSmileLeft':.9,'mouthSmileRight':.9}
+            events=self.engine.step(frame)
+        self.assertTrue(any(e.get('action')=='left_click' for e in events))
+
+    def test_expression_click_cannot_be_followed_by_a_duplicate_dwell_click(self):
+        profile=default_profile(mode='head');profile['expressions_calibrated']=True;profile['calibrated_expressions']=['smile'];profile['bindings']['smile']='left_click'
+        engine=GestureEngine(profile);actions=[]
+        for t,smile in [(0,0),(.1,.9),(.6,.9),(.7,0),(1,0),(1.7,0),(2,0)]:
+            frame=observation(t,face=True);frame['face']['expressions']={'mouthSmileLeft':smile,'mouthSmileRight':smile}
+            actions.extend(e for e in engine.step(frame) if e.get('action')=='left_click')
+        self.assertEqual(len(actions),1)
+
     def test_pinch_debounces_holds_drag_and_releases_once(self):
         self.engine.step(observation(0,pinch=.15))
         events=self.engine.step(observation(.11,pinch=.15))

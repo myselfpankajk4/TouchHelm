@@ -24,14 +24,17 @@ in this picture.*
    Close other apps using the same webcam and select **Refresh cameras**.
 4. Select **Start camera**. Nothing before this action opens the camera. Position
    your hand/face in even lighting, with room to move comfortably.
-5. In Hand mode, point at the center and each of the four comfortable corner
-   targets; hold still and select **Capture** for each. Head and Combined modes
-   capture only the neutral head pose. Use a broad comfortable range rather than
-   stretching to the edge of the camera image.
+5. In Hand mode, hold your index finger comfortably near the middle and choose
+   **Use this center** once. For a custom movement range, enable **Fine tune with
+   five targets** and capture the center/corners instead. Head and Combined modes
+   capture the neutral head pose; Combined can capture the face before the hand
+   enters view. Both sources are still required for Combined PC control.
 6. Practice with the simulated cursor. Test a pinch click in Hand/Combined or a
    dwell click in Head mode. The Practice tab opens after calibration. Practice
    sends no Windows mouse/keyboard input: **the Windows cursor stays still**.
-7. Select **Enable PC control in the session header** while tracking is steady.
+7. Release the practice pinch/expression, then select **Enable PC control in the
+   session header** while tracking is steady. Held gestures are not replayed on
+   activation.
    The state changes from **Practice · PC input off** to **PC control on**. This explicitly transfers
    TouchHelm input ownership to AirControl. An existing Remote stream changes to
    View; its picture and PC audio remain connected.
@@ -63,6 +66,12 @@ applies only while paused. A thumb–index pinch does not require a straight ind
 finger and is recognized from landmark contact rather than a canned pose name.
 Recenter during practice keeps practice running without enabling Windows input.
 
+Pinch confirmation stabilizes the click target while the index finger curls;
+keeping the pinch held still allows dragging. Pointer smoothing adapts to motion
+speed instead of applying the same lag to slow pointing and fast movement. Head
+smoothing accounts for monitor resolution while preserving the 18-pixel dwell
+target radius.
+
 The panel separately reports which sources are tracked and which gesture/action
 is accepted. The hold bar shows timing, **not recognition accuracy**. Unknown or
 weak classifier results are not displayed as a convincing "match percentage".
@@ -79,6 +88,8 @@ pauses it. Resume is explicit. Losing required tracking, stale observations,
 camera/worker failure, monitor changes or an inaccessible Windows desktop releases
 AirControl's held input. The observation watchdog uses a 250 ms freshness limit.
 Stop, switching to Phone, and shutdown close capture and return phone ownership.
+Locking Windows or opening a secure desktop also stops capture and releases
+input. Unlock and choose Start camera to begin again.
 Tracking continues when the panel is minimized; **Switch mode** alone keeps it
 running, while selecting **Control via phone** stops it.
 
@@ -88,16 +99,28 @@ remain available while phone input is blocked.
 
 ## Personalize and practice
 
+![Personal facial calibration with sample activation values](images/aircontrol-personal-face-calibration.png)
+
+*Interface preview with synthetic values; the bars measure activation, not
+recognition confidence.*
+
 - Select **Everyday**, **Presenter**, **Media** or **Custom**. Saved settings for
   each named profile are retained. Defaults reserve fist/palm as escape controls.
 - In **Gesture mappings**, assign supported poses to click/drag, scrolling,
   dictation, copy/paste/undo, app switching, Windows keyboard, media or presentation
   navigation. Duplicate/conflicting assignments are rejected. This remaps known
   inputs; it does not train arbitrary new poses.
-- To assign an expression, start Head/Combined practice, relax your face, then hold
-  a deliberate wink, smile or eyebrow raise for at least 400 ms. Calibrate the
-  observed expressions before assigning their actions. Each expression is enabled
-  separately. Head mode always needs dwell or a calibrated click expression.
+- To assign an expression, open **Practice** in Head/Combined mode. Hold a relaxed
+  face for about one second and choose **Capture relaxed face**. Select Smile,
+  Left/Right wink or Raised eyebrows, hold it for about one second and choose
+  **Capture expression**. Then select an action and **Use this action**. It applies
+  in practice without restarting the camera; test it before enabling PC control.
+  The saved threshold comes from your measured range, with a lower release
+  threshold to reduce flicker. Bars show activation, not recognition confidence.
+  Enabling PC control saves the profile; **Save settings** also saves it and
+  stops the camera for recalibration.
+  Ordinary two-eye blinks stay inactive. Simultaneous assigned expressions cancel
+  until released. Head mode still needs dwell or a calibrated click expression.
 - Settings adjust preferred hand, sensitivity, smoothing, pinch close/release
   thresholds, hold/cooldown, dwell timing, head range, camera mirroring and landmarks.
   The two pinch thresholds provide hysteresis: release must be above close.

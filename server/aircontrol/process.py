@@ -1,5 +1,6 @@
 """Bounded observation pipe. Only one frame survives reader backpressure."""
 import json
+import math
 from collections import deque
 import os
 from pathlib import Path
@@ -11,27 +12,25 @@ import time
 class CameraWorker:
     def __init__(self,setup):
         self.setup=setup;self.process=None;self.queue=queue.Queue(maxsize=1);self._usage={};self._cpu=None;self._sampled=0.
-        self._terminal=None;self._stderr=deque(maxlen=8);self._readers=[]
+        self._terminal=None;self._stderr=deque(maxlen=8);self._readers=[];self._usage_sample=None
+    def read_usage(self,sample):
+        if not isinstance(sample,dict):return
+        if any(type(sample.get(k)) not in (int,float) or not math.isfinite(sample[k]) or sample[k]<0 for k in ('at','cpu_seconds')):return
+        memory=sample.get('memory_mb')
+        if memory is not None and (type(memory) not in (int,float) or not math.isfinite(memory) or memory<=0):return
+        if self._usage_sample and sample['at']<=self._usage_sample['at']:return
+        self._usage_sample={k:sample[k] for k in ('at','cpu_seconds','memory_mb') if k in sample}
     def stats(self):
-        if time.monotonic()-self._sampled<.5:return dict(self._usage)
-        self._sampled=time.monotonic();process=self.process
+        process=self.process
         if not process or process.poll() is not None:return {}
-        try:
-            import ctypes
-            from ctypes import wintypes
-            class MEMORY(ctypes.Structure):
-                _fields_=[('size',wintypes.DWORD),('faults',wintypes.DWORD)]+[(n,ctypes.c_size_t) for n in ('peak','working','paged_peak','paged','nonpaged_peak','nonpaged','pagefile','pagefile_peak')]
-            api=ctypes.windll.kernel32;handle=wintypes.HANDLE(int(process._handle))
-            creation=wintypes.FILETIME();exit_time=wintypes.FILETIME();kernel=wintypes.FILETIME();user=wintypes.FILETIME()
-            if api.GetProcessTimes(handle,ctypes.byref(creation),ctypes.byref(exit_time),ctypes.byref(kernel),ctypes.byref(user)):
-                total=((kernel.dwHighDateTime<<32)+kernel.dwLowDateTime+(user.dwHighDateTime<<32)+user.dwLowDateTime)/1e7
-                if self._cpu:
-                    stamp,cpu=self._cpu
-                    self._usage['cpu_percent']=round(max(0.,min(100.,(total-cpu)/(self._sampled-stamp)*100/(os.cpu_count() or 1))),1)
-                self._cpu=(self._sampled,total)
-            memory=MEMORY();memory.size=ctypes.sizeof(memory)
-            if ctypes.windll.psapi.GetProcessMemoryInfo(handle,ctypes.byref(memory),memory.size):self._usage['memory_mb']=round(memory.working/1048576,1)
-        except (OSError,ValueError,AttributeError):pass
+        sample=self._usage_sample
+        if not sample:return {}
+        stamp,cpu=sample['at'],sample['cpu_seconds']
+        if self._cpu and stamp>self._cpu[0]:
+            self._usage['cpu_percent']=round(max(0.,min(100.,(cpu-self._cpu[1])/(stamp-self._cpu[0])*100/(os.cpu_count() or 1))),1)
+        self._cpu=(stamp,cpu)
+        if 'memory_mb' in sample:self._usage['memory_mb']=sample['memory_mb']
+        else:self._usage.pop('memory_mb',None)
         return dict(self._usage)
     def start(self,profile):
         self.process=subprocess.Popen([str(self.setup.python),'-u',str(Path(__file__).with_name('worker.py')),
@@ -59,6 +58,7 @@ class CameraWorker:
                     try:item=json.loads(line)
                     except ValueError:continue
                     if not isinstance(item,dict):continue
+                    self.read_usage(item.get('usage'))
                     if item.get('type')=='error':self._terminal=item
                     try:self.queue.put_nowait(item)
                     except queue.Full:
@@ -91,9 +91,16 @@ class CameraWorker:
         process,self.process=self.process,None
         if not process:return
         if process.poll() is None:
-            process.terminate()
+            try:process.stdin.write('{"action":"stop"}\n');process.stdin.flush()
+            except (OSError,ValueError):pass
             try:process.wait(timeout=1)
-            except subprocess.TimeoutExpired:process.kill();process.wait(timeout=1)
+            except subprocess.TimeoutExpired:
+                # Store/venv launchers can own a separate Python interpreter.
+                # Only this owned helper's process tree is eligible for fallback.
+                try:subprocess.run(['taskkill.exe','/PID',str(process.pid),'/T','/F'],capture_output=True,timeout=2,creationflags=getattr(subprocess,'CREATE_NO_WINDOW',0))
+                except (OSError,subprocess.TimeoutExpired):pass
+                if process.poll() is None:process.kill()
+                process.wait(timeout=1)
         for reader in self._readers:reader.join(timeout=.3)
         self._readers=[]
         for stream in (process.stdin,process.stdout,process.stderr):

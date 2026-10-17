@@ -355,6 +355,16 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
 
 
 class NativeTests(unittest.TestCase):
+    def test_interrupted_hotkey_releases_every_key_that_may_have_been_pressed(self):
+        with patch.object(native.user32,'keybd_event') as events,patch.object(native.time,'sleep',side_effect=RuntimeError('interrupted')):
+            with self.assertRaises(RuntimeError):self.controller().hotkey('ctrl','c')
+        self.assertIn((0x11,0,2,0),[call.args for call in events.call_args_list])
+
+    def test_interrupted_key_tap_still_attempts_key_release(self):
+        with patch.object(native.user32,'keybd_event') as events,patch.object(native.time,'sleep',side_effect=RuntimeError('interrupted')):
+            with self.assertRaises(RuntimeError):self.controller().key_tap('right')
+        self.assertIn((0x27,0,3,0),[call.args for call in events.call_args_list])
+
     def controller(self):
         ctrl = native.WindowsInputController.__new__(native.WindowsInputController)
         ctrl.ensure_input_desktop = lambda: None
