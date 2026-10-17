@@ -12,6 +12,30 @@ from server.config import ConfigManager
 from server.web_server import TouchHelmServer, ConnectedClient
 
 class V2ProtocolTests(unittest.IsolatedAsyncioTestCase):
+    async def test_aircontrol_blocks_phone_input_without_disconnect_or_camera_endpoint(self):
+        self.server.aircontrol.owns_input=True
+        socket=await self.client.ws_connect('/ws');await socket.receive_json()
+        await socket.send_json({'type':'auth','pin':'5678'})
+        self.assertEqual((await socket.receive_json())['input_owner'],'aircontrol')
+        await socket.send_json({'type':'move','dx':10,'dy':0})
+        self.assertFalse((await socket.receive_json())['success'])
+        self.server.input_ctrl.move_rel.assert_not_called()
+        await socket.send_json({'type':'ping','t':1})
+        self.assertEqual((await socket.receive_json())['type'],'pong')
+        await socket.send_json({'type':'aircontrol','action':'start'})
+        self.assertFalse((await socket.receive_json())['success'])
+        self.assertIsNone(self.server.aircontrol.worker)
+        self.server.aircontrol.owns_input=False;await socket.close()
+
+    async def test_aircontrol_transfer_keeps_remote_stream_and_audio(self):
+        owner=ConnectedClient(Mock(closed=False),'127.0.0.1')
+        self.server.remote.owner=owner;self.server.remote.mode='control';self.server.remote.audio=True
+        self.server.remote.worker=Mock();worker=self.server.remote.worker
+        self.server.remote._publish=Mock()
+        await self.server._air_acquire()
+        self.assertEqual(self.server.remote.mode,'view');self.assertTrue(self.server.remote.audio)
+        self.assertIs(self.server.remote.worker,worker);worker.stop.assert_not_called()
+        self.server.remote.owner=None;self.server.remote.worker=None
     async def test_text_sync_requires_pin_and_a_field_seen_by_this_client(self):
         socket=Mock(closed=False);socket.send_json=AsyncMock()
         client=ConnectedClient(socket,'127.0.0.1');client.authenticated=True

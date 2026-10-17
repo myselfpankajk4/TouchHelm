@@ -569,6 +569,38 @@ class WindowsInputController:
         if not user32.SetPhysicalCursorPos(int(x), int(y)):
             raise RuntimeError('Windows could not move the pointer in the active desktop.')
 
+    def get_physical_cursor_pos(self):
+        self.ensure_input_desktop()
+        point=POINT()
+        if not user32.GetPhysicalCursorPos(ctypes.byref(point)):
+            raise RuntimeError('Windows could not read the active desktop pointer.')
+        return point.x,point.y
+
+    def monitor_matches(self,display):
+        """Read physical monitor geometry without going through slow COM providers."""
+        class RECT(ctypes.Structure):
+            _fields_=[('left',ctypes.c_long),('top',ctypes.c_long),('right',ctypes.c_long),('bottom',ctypes.c_long)]
+        class INFO(ctypes.Structure):
+            _fields_=[('size',wintypes.DWORD),('monitor',RECT),('work',RECT),('flags',wintypes.DWORD),('device',wintypes.WCHAR*32)]
+        callback_type=ctypes.WINFUNCTYPE(wintypes.BOOL,wintypes.HANDLE,wintypes.HDC,ctypes.POINTER(RECT),wintypes.LPARAM)
+        api=user32;api.GetMonitorInfoW.argtypes=(wintypes.HANDLE,ctypes.POINTER(INFO))
+        previous=None
+        try:
+            api.SetThreadDpiAwarenessContext.restype=ctypes.c_void_p
+            previous=api.SetThreadDpiAwarenessContext(ctypes.c_void_p(-4))
+            found=[]
+            @callback_type
+            def visit(handle,dc,rect,param):
+                info=INFO();info.size=ctypes.sizeof(INFO)
+                if api.GetMonitorInfoW(handle,ctypes.byref(info)) and info.device==display.get('id'):
+                    r=info.monitor
+                    found.append({'x':r.left,'y':r.top,'width':r.right-r.left,'height':r.bottom-r.top})
+                return True
+            api.EnumDisplayMonitors(None,None,visit,0)
+            return bool(found and found[0]==display.get('rect'))
+        finally:
+            if previous:api.SetThreadDpiAwarenessContext(ctypes.c_void_p(previous))
+
     def move_rel(self, dx: float, dy: float, sensitivity: float = 1.0, acceleration: float = 1.0):
         """
         Relative mouse movement with sub-pixel accumulator and acceleration curve.

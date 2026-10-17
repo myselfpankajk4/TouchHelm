@@ -21,9 +21,10 @@ from .secure_pairing import private_storage_root, protect_user_path
 def source_build_id(root):
     """Source identity includes native Python changes, not just browser assets."""
     root = Path(root)
-    files = [root / name for name in ('main.py', 'run.bat', 'requirements.txt', 'requirements-remote.txt')]
+    files = [root / name for name in ('main.py', 'run.bat', 'requirements.txt', 'requirements-remote.txt','requirements-aircontrol.txt')]
+    files.append(root/'assets'/'aircontrol'/'manifest.json')
     suffixes = {'.py', '.js', '.css', '.html', '.json', '.svg', '.ps1', '.cs',
-                '.ico', '.png', '.webp', '.jpg', '.jpeg', '.woff2', '.woff', '.ttf', '.otf'}
+                '.ico', '.png', '.webp', '.jpg', '.jpeg', '.woff2', '.woff', '.ttf', '.otf','.task'}
     for folder in ('server', 'gui', 'web', 'assets'):
         files.extend(path for path in (root / folder).rglob('*')
             if path.is_file() and path.suffix.lower() in suffixes

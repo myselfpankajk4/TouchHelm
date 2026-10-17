@@ -47,7 +47,7 @@ const server = http.createServer((req, res) => {
   let relative = `web${name === '/' ? '/index.html' : name}`;
   if(name.startsWith('/preview/desktop/')){
     const file=name.slice('/preview/desktop/'.length)||'index.html';
-    relative=['index.html','desktop.js','desktop.css'].includes(file)?`gui/web/${file}`:`web/${file}`;
+    relative=['index.html','desktop.js','desktop.css','aircontrol.js','aircontrol.css'].includes(file)?`gui/web/${file}`:`web/${file}`;
   }
   const filename = path.resolve(root, relative);
   if (![path.join(root,'web'),path.join(root,'gui','web')].some(folder=>filename.startsWith(folder+path.sep))) {
@@ -1306,6 +1306,91 @@ test('Text sync and pairing guides visual inspection',async(page,context)=>{
       if(theme==='glass'&&appearance==='dark'&&width===1280)await screenshot(desktop,`pairing-guide-${mode}`);
     }
   }
+  await desktop.close();assert.deepEqual(issues,[]);
+},true);
+
+test('AirControl chooser opens dedicated modes without starting a camera',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.locator('#switchControlMode').click();
+  assert.equal(await desktop.locator('[data-page="home"]').isVisible(),true);
+  await desktop.locator('#chooseAir').click();
+  assert.equal(await desktop.locator('[data-page="aircontrol"]').isVisible(),true);
+  assert.equal(await desktop.locator('#airCameraBadge').textContent(),'Camera off');
+  await desktop.locator('#switchControlMode').click();await desktop.locator('#choosePhone').click();
+  assert.equal(await desktop.locator('[data-page="pairing"]').isVisible(),true);
+  await desktop.close();
+});
+
+test('AirControl ownership keeps the phone connected and drafts local until explicit Send',async page=>{
+  await typingView(page);
+  await page.evaluate(()=>{
+    const client=touchhelm;
+    client.ws.onmessage({data:JSON.stringify({type:'input_owner',owner:'aircontrol'})});
+    window.__packets.length=0;
+  });
+  await page.locator('#typeInput').fill('kept during AirControl');
+  assert.equal(await page.evaluate(()=>touchhelm.isConnected),true);
+  assert.equal(await page.evaluate(()=>touchhelm.liveTypingPaused),true);
+  assert.equal(await page.evaluate(()=>touchhelm.send({type:'click',button:'left'})),false);
+  assert.equal(await page.evaluate(()=>touchhelm.send({type:'remote_query'})),true);
+  await page.evaluate(()=>touchhelm.ws.onmessage({data:JSON.stringify({type:'input_owner',owner:'phone'})}));
+  await page.locator('#typeInput').press('!');
+  assert.deepEqual(await page.evaluate(()=>__packets.filter(p=>['text','key','click','text_sync'].includes(p.type))),[]);
+  assert.match(await page.locator('#typeInput').inputValue(),/kept during AirControl/);
+});
+
+test('AirControl practice, mapping validation and animated guide reflect explicit state',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.locator('[data-panel="aircontrol"]').click();
+  await desktop.evaluate(()=>TouchHelmAir.setPreview('practicing'));
+  assert.equal(await desktop.locator('#airEnable').isEnabled(),true);
+  await desktop.locator('#airGuideSelect').selectOption('pinch_index');
+  assert.equal(await desktop.locator('#airGuideArt').getAttribute('data-gesture'),'pinch_index');
+  await desktop.locator('[data-air-tab="mappings"]').click();
+  assert.equal(await desktop.locator('[data-air-gesture="closed_fist"]').isDisabled(),true);
+  await desktop.locator('[data-air-gesture="thumb_up"]').selectOption('right_click');
+  await desktop.locator('#airSaveMappings').click();
+  assert.match(await desktop.locator('#airMappingError').innerText(),/only one|already|duplicate/i);
+  await desktop.close();
+});
+
+test('AirControl theme and desktop scaling visual matrix',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmAir);
+  const issues=[];
+  for(const theme of ['bloom','companion','resonance','clay','glass','soft','ink'])for(const appearance of ['light','dark']){
+    await desktop.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off',motion:'reduced'},false);await TouchHelmThemes.ready;},{theme,appearance});
+    for(const [width,height]of [[820,620],[1120,800],[1440,900]]){
+      await desktop.setViewportSize({width,height});
+      for(const panel of ['home','aircontrol']){
+        await desktop.evaluate(panel=>TouchHelmDesktop.showPanel(panel),panel);
+        if(panel==='aircontrol')await desktop.evaluate(()=>TouchHelmAir.setPreview('practicing'));
+        for(const tab of panel==='aircontrol'?['controls','mappings','practice','settings']:['home']){
+          if(tab!=='home')await desktop.locator(`[data-air-tab=${tab}]`).click();
+          const errors=await desktop.evaluate(()=>{
+            const result=[],scope=document.querySelector('[data-page]:not([hidden])');
+            if(document.documentElement.scrollWidth>innerWidth+1)result.push('horizontal page overflow');
+            for(const node of scope.querySelectorAll('button,select,input:not([type=checkbox]):not([type=range])')){
+              if(!node.getClientRects().length)continue;const r=node.getBoundingClientRect();
+              if(r.width<43.5||r.height<43.5)result.push(`small target ${node.id}: ${r.width}x${r.height}`);
+              if(r.left<0||r.right>innerWidth+1)result.push(`clipped ${node.id}`);
+            }
+            return result;
+          });issues.push(...errors.map(x=>`${theme}/${appearance}/${width}/${tab}: ${x}`));
+          if(theme==='glass'&&appearance==='dark'&&width===1120)await screenshot(desktop,'aircontrol-'+tab);
+        }
+      }
+    }
+  }
+  await desktop.setViewportSize({width:1120,height:800});
+  for(const state of ['setup_required','calibrating','practicing','active','paused','tracking_lost','unavailable']){
+    await desktop.evaluate(state=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview(state);TouchHelmAir.tab('controls');},state);
+    await screenshot(desktop,'aircontrol-state-'+state);
+  }
+  await desktop.emulateMedia({reducedMotion:'reduce'});
+  assert.equal(await desktop.locator('.guide-tip').evaluate(el=>getComputedStyle(el).animationName),'none');
   await desktop.close();assert.deepEqual(issues,[]);
 },true);
 

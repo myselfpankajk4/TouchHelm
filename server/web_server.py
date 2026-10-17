@@ -72,17 +72,56 @@ class TouchHelmServer:
         from server.remote_media import MediaWorker, capabilities
         self.remote = RemoteService(config, self.desktop_services.displays, MediaWorker,
             self._release_client_input, self.input_ctrl, capabilities=capabilities,
-            notify=self._remote_state_changed, before_control=self._remote_acquire_input)
+            notify=self._remote_state_changed, before_control=self._remote_acquire_input,
+            control_allowed=lambda:not (getattr(self,'aircontrol',None) and self.aircontrol.owns_input))
         self._remote_tasks = {}
         from server.text_sync import FocusedTextService
         self.text_service = FocusedTextService()
         self._text_tasks = {}
+        from server.aircontrol.service import AirControlService
+        from server.aircontrol.overlay import AirOverlay
+        from server.aircontrol.voice import VoiceController
+        from server.secure_pairing import private_storage_root
+        self.aircontrol=AirControlService(self.input_ctrl,self.desktop_services.displays,
+            folder=private_storage_root()/'aircontrol',acquire=self._air_acquire,release=self._air_release)
+        self.aircontrol.voice=VoiceController(self.input_ctrl,allowed=lambda:self.aircontrol.owns_input and self.aircontrol.state=='active')
+        self.aircontrol.overlay=AirOverlay(self._air_hud_action)
+
+    def _air_hud_action(self,action):
+        loop=getattr(self,'_event_loop',None)
+        if not loop or loop.is_closed():return
+        def apply():
+            if action=='toggle':self.aircontrol.pause() if self.aircontrol.state=='active' else self._air_resume()
+            else:asyncio.create_task(self._air_command_safely(action))
+        loop.call_soon_threadsafe(apply)
+
+    def _air_resume(self):
+        try:self.aircontrol.resume()
+        except ValueError:pass
+
+    async def _air_command_safely(self,action):
+        with suppress(ValueError,RuntimeError):await self.aircontrol.command(action)
+
+    async def _air_acquire(self):
+        if self.remote.owner and self.remote.mode=='control':
+            # The stream itself stays alive; only its input lease changes.
+            self._release_client_input(self.remote.owner)
+            self.remote.mode='view';self.remote.revision=secrets.token_urlsafe(12)
+            self.remote.message='AirControl owns PC input. Viewing and audio remain connected.'
+            self.remote._publish()
+        for client in list(self.clients.values()):
+            self._cancel_text_request(client);self._cancel_desktop_requests(client);self._release_client_input(client)
+        self.laser_client.hide()
+        await self.broadcast({'type':'input_owner','owner':'aircontrol'})
+
+    async def _air_release(self):
+        await self.broadcast({'type':'input_owner','owner':'phone'})
 
     async def _text_request(self, client, data):
         def allowed():
             return (client.authenticated and not client.ws.closed and
                     self.clients.get(client.ws) is client and self.config.get('require_pin')
-                    and not self.remote.blocks_input(client))
+                    and not self.remote.blocks_input(client) and not self.aircontrol.owns_input)
         state = {'available':False,'message':'Enable a host PIN to sync focused PC text.'}
         if allowed():
             if data['action']=='write':
@@ -123,12 +162,16 @@ class TouchHelmServer:
         asyncio.create_task(send())
 
     def _remote_acquire_input(self):
+        if getattr(self,'aircontrol',None) and self.aircontrol.owns_input:
+            raise PermissionError('AirControl owns PC input. Switch to Phone mode on the desktop.')
         for client in list(self.clients.values()):
             self._cancel_text_request(client)
             self._release_client_input(client)
         self.laser_client.hide()
 
     async def _remote_request(self, client, data, secure):
+        if self.aircontrol.owns_input and data.get('type') in ('remote_start','remote_config') and data.get('mode',self.remote.mode)=='control':
+            await client.ws.send_json({'type':'remote_result','success':False,'message':'AirControl owns PC input. Switch to Phone mode on the desktop to take control.'});return
         result = await self.remote.request(client, data, secure)
         if client.authenticated and not client.ws.closed:
             with suppress(ConnectionError, RuntimeError): await client.ws.send_json(result)
@@ -166,7 +209,7 @@ class TouchHelmServer:
         if not client.authenticated or client.ws not in self.clients or client.ws.closed:
             return
         kind = data['type']
-        if self.remote.blocks_input(client) and kind not in ('get_desktop_state','get_apps','get_media_library','get_presentation_details','get_displays'):
+        if (self.remote.blocks_input(client) or self.aircontrol.owns_input) and kind not in ('get_desktop_state','get_apps','get_media_library','get_presentation_details','get_displays'):
             return
         try:
             if kind == 'get_desktop_state':
@@ -362,7 +405,8 @@ class TouchHelmServer:
         await client.ws.send_json({"type": "auth_res", "success": True,
                                    "message": "Connected", "volume": vol, "muted": muted,
                                    "brightness": self.input_ctrl.get_brightness(),
-                                   "config": self.config.public_data()})
+                                   "config": self.config.public_data(),
+                                   'input_owner':'aircontrol' if self.aircontrol.owns_input else 'phone'})
         return True
 
     def _release_client_input(self, client):
@@ -567,6 +611,14 @@ class TouchHelmServer:
                     if not client.authenticated:
                         continue
 
+                    if not self.aircontrol.owns_input and self.aircontrol.native_down:self.aircontrol._release_buttons()
+
+                    if self.aircontrol.owns_input and not msg_type.startswith('remote_') and msg_type not in ('ping','get_desktop_state','get_apps','get_media_library','get_displays','get_volume','get_brightness','get_system_status','get_presentation_details'):
+                        if msg_type=='text_sync':
+                            await ws.send_json({'type':'text_state','available':False,'request_id':data.get('request_id',0),'message':'AirControl owns PC input. Switch to Phone mode on the desktop to type.'})
+                        else:await ws.send_json({'type':'command_result','success':False,'message':'AirControl owns PC input. Switch to Phone mode on the desktop.'})
+                        continue
+
                     if msg_type.startswith('remote_') and msg_type != 'remote_input':
                         previous = self._remote_tasks.get(ws)
                         if msg_type in ('remote_stop', 'remote_pause'):
@@ -579,7 +631,7 @@ class TouchHelmServer:
                             self._remote_tasks[ws]=task
                         continue
                     if msg_type == 'remote_input':
-                        if not self.remote.accept_input(client,data):
+                        if self.aircontrol.owns_input or not self.remote.accept_input(client,data):
                             await ws.send_json({'type':'remote_result','success':False,'message':'Remote input is paused, stale, or view-only.'})
                             continue
                         command=data.get('command')
@@ -995,6 +1047,7 @@ class TouchHelmServer:
         response.headers['Cache-Control'] = 'no-store'
 
     async def start(self):
+        self._event_loop=asyncio.get_running_loop()
         self.app = web.Application(middlewares=[self._private_transport])
         self.app.on_response_prepare.append(self._no_cache_headers)
         self.app.router.add_get("/", self.handle_index)
@@ -1026,6 +1079,7 @@ class TouchHelmServer:
         print(f"TouchHelm Server listening on port {port}")
 
     async def stop(self):
+        await self.aircontrol.close()
         text_tasks=list(self._text_tasks.values())
         for task in text_tasks:task.cancel()
         if text_tasks:await asyncio.gather(*text_tasks,return_exceptions=True)

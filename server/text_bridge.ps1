@@ -13,6 +13,9 @@ while ($null -ne ($line = [Console]::ReadLine())) {
         $request = ConvertFrom-Json $line
         $identifier = $request.id
         if ($request.command -eq 'read') { $result = [TouchHelmFocusedText]::Read() }
+        elseif ($request.command -eq 'target') { $result = [TouchHelmFocusedText]::Target() }
+        elseif ($request.command -eq 'restore_target') { $result = [TouchHelmFocusedText]::RestoreTarget([string]$request.payload.field_id) }
+        elseif ($request.command -eq 'speech_status') { $result = [TouchHelmFocusedText]::SpeechStatus() }
         elseif ($request.command -eq 'write') {
             $p = $request.payload
             $result = [TouchHelmFocusedText]::Write([string]$p.field_id, [string]$p.revision, [string]$p.text, [string]$p.newline_mode)

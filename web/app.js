@@ -450,6 +450,7 @@ class TouchHelmClient {
             return;
           }
           this.isConnected = true;
+          this.setInputOwner(msg.input_owner||'phone');
           this.textSync?.connected(true);
           try { if(this.authPin)sessionStorage.setItem(`touchhelm_pairing_${this.host}`,this.authPin); } catch {}
           this.remote?.connected(true);
@@ -466,6 +467,8 @@ class TouchHelmClient {
           if ('brightness' in msg) {
             this.onBrightnessSync(msg.brightness);
           }
+        } else if (msg.type === 'input_owner') {
+          this.setInputOwner(msg.owner);
         } else if (msg.type === "auth_required") {
           this.remote?.connected(false);
           this.releaseDragLock();
@@ -743,13 +746,25 @@ class TouchHelmClient {
     if (this.typeInput) this.typeInput.setAttribute?.("enterkeyhint", "enter");
     if (this.typingHint) this.typingHint.textContent = !this.isConnected
       ? "Offline. Your draft stays here until you reconnect."
-      : live && this.liveTypingPaused ? "Live sync paused for an offline draft. Send restores it explicitly."
+      : this.inputOwner==='aircontrol' ? "AirControl owns PC input. Your draft stays on this phone."
+      : live && this.liveTypingPaused ? "Live sync paused for a saved draft. Send restores it explicitly."
       : live ? "Live sync is on. Return adds a line; PC Enter presses Enter on your PC."
       : "Return adds a new line. Send or Ctrl+Enter sends your draft.";
   }
 
+  setInputOwner(owner) {
+    this.inputOwner=owner==='aircontrol'?'aircontrol':'phone';
+    if(this.inputOwner==='aircontrol'){
+      this.releaseDragLock();this.controls?.releaseKeys();this.textSync?.reset();
+      this.liveTextValue='';this.liveTypingPaused=!!this.typeInput?.value;
+      this.showFeedback('AirControl owns PC input. Switch to Phone mode on the desktop to control it. Viewing and audio remain available.','info','input-owner');
+    }else this.clearFeedback('input-owner');
+    this.updateTypingUi();
+  }
+
   send(data) {
     if (!this.isConnected || !this.ws || this.ws.readyState !== WebSocket.OPEN) return false;
+    if(this.inputOwner==='aircontrol'&&!['ping','text_sync','get_desktop_state','get_apps','get_media_library','get_displays','get_volume','get_brightness','get_system_status','get_presentation_details'].includes(data.type)&&!data.type.startsWith('remote_'))return false;
     if (data.type === "media" && this.selectedMediaSession && !data.session_id) {
       data = { ...data, session_id: this.selectedMediaSession };
     }
@@ -1986,6 +2001,7 @@ class TouchHelmClient {
 
   syncLiveText(force = false) {
     if ((!force && !this.chkRealtimeTyping?.checked) || this.isComposing || !this.typeInput) return false;
+    if(this.inputOwner==='aircontrol'){if(this.typeInput.value!==this.liveTextValue)this.liveTypingPaused=true;this.updateTypingUi();return false;}
     if(!this.isConnected){if(this.typeInput.value!==this.liveTextValue)this.liveTypingPaused=true;this.updateTypingUi();return false;}
     if(this.liveTypingPaused&&!force){this.updateTypingUi();this.showFeedback('Draft edited offline. Use Send to sync it explicitly.','info','typing');return false;}
     const linked=this.textSync?.edit(force);

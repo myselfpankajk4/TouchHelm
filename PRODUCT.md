@@ -32,3 +32,13 @@ host PIN and active Trackpad/Live typing. Password and read-only fields are
 excluded. Edits revalidate field identity and revision, retain conflicting drafts,
 and never broadcast field contents. Selecting an HTTPS mode on the desktop reveals
 its setup guide beside the QR. See docs/PAIRING.md for installation and limits.
+
+AirControl adds a desktop Phone/AirControl chooser and explicit webcam start.
+Hand, Head & Face and Combined modes share calibration, non-injecting practice,
+validated profiles and native HUD/tray escape controls. Enabling transfers input
+ownership and demotes an existing Remote Control stream to View without stopping
+video/audio. Phone drafts remain local until explicit Send. Camera/inference use
+an isolated checksum-locked Windows/Python 3.13 runtime; no phone camera endpoint
+or face identity enrollment is provided. Speech uses guarded Windows Win+H and
+separate Voice Access guidance. Physical tracking/speech acceptance is recorded
+separately from synthetic/mock regressions in docs/AIRCONTROL_VERIFICATION.md.

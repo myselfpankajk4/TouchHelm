@@ -67,6 +67,9 @@ def run():
                     'if($e.Current.ProcessId -eq '+str(process.pid)+') { @{type=$e.Current.ControlType.ProgrammaticName;focus=$e.Current.HasKeyboardFocus;patterns=@($e.GetSupportedPatterns()|ForEach-Object {$_.ProgrammaticName})}|ConvertTo-Json -Compress } else { "Scratch window does not own focus" }'],capture_output=True,text=True)
                 print(diagnostic.stdout.strip())
             assert first.get('text')=='Scratch PC text','Scratch field not detected'
+            target=bridge.request('target')
+            assert target.get('available') and target.get('process_id')==process.pid,'Editable metadata target not detected'
+            assert 'text' not in target,'Dictation metadata exposed text'
             next_value='Phone edit\nSecond line 🙂'
             result=bridge.request('write',{'field_id':first['field_id'],'revision':first['revision'],'text':next_value})
             assert result.get('text')==next_value,'Phone edit not applied to scratch field'
@@ -75,7 +78,9 @@ def run():
             assert not stale.get('available'),'Stale revision was accepted'
             assert bridge.request('read').get('text')=='PC changed outside phone','PC edit not observed'
             command('password');assert not bridge.request('read').get('available'),'Password field exposed'
+            assert not bridge.request('target').get('available'),'Password accepted as a dictation target'
             command('readonly');assert not bridge.request('read').get('available'),'Read-only field exposed'
+            assert not bridge.request('target').get('available'),'Read-only dictation target accepted'
             print(json.dumps({'native_scratch_test':'passed','two_way':True,'stale_write_rejected':True,'password_excluded':True,'readonly_excluded':True}))
         finally:
             bridge.close()

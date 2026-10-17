@@ -20,8 +20,8 @@
       document.addEventListener('visibilitychange',()=>{if(document.hidden)this.reset();});
     }
     describe(text){this.status.textContent=text;this.use.hidden=!this.conflict||!this.latest?.available;}
-    enabled(){return this.toggle.checked&&this.client.chkRealtimeTyping?.checked&&this.view==='viewTrackpad'&&!document.hidden&&this.client.isConnected;}
-    canWrite(){return this.toggle.checked&&this.view==='viewTrackpad'&&!document.hidden&&this.client.isConnected;}
+    enabled(){return this.toggle.checked&&this.client.chkRealtimeTyping?.checked&&this.view==='viewTrackpad'&&!document.hidden&&this.client.isConnected&&this.client.inputOwner!=='aircontrol';}
+    canWrite(){return this.toggle.checked&&this.view==='viewTrackpad'&&!document.hidden&&this.client.isConnected&&this.client.inputOwner!=='aircontrol';}
     reset(){this.field=null;this.pending=null;this.latest=null;this.enterPending=false;this.conflict=false;this.use.hidden=true;}
     onView(view){this.view=view;if(view!=='viewTrackpad')this.reset();}
     connected(value){this.reset();this.describe(value?'Focus a PC text field to link it.':'PC text sync offline · draft kept');}

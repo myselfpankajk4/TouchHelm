@@ -13,6 +13,15 @@ Turn your phone into a Windows trackpad, keyboard, presentation remote, media co
 
 ## Features
 
+**AirControl:** choose **Control via phone** or **AirControl** at desktop startup.
+Use a PC webcam for hand pointing/pinches, head movement/dwell, or combined
+control. Calibration, a non-injecting practice cursor, remappable profiles,
+animated guides, a native status HUD and Windows dictation are included. The
+camera starts only on **Start camera**; setup uses a separate checksum-locked
+runtime. Phone viewing/audio stay connected when AirControl takes input ownership.
+[Setup and gesture guide](docs/AIRCONTROL.md) ·
+[Verification and physical-test limits](docs/AIRCONTROL_VERIFICATION.md).
+
 **Focused PC text and pairing guides:** Trackpad now reads and edits supported
 focused Windows fields in both directions. Conflicts keep the phone draft for
 review; password and read-only fields are excluded. A host PIN is required. See
@@ -186,6 +195,7 @@ gui/web/                   Shared themed desktop interface
 gui/app_window.py          Classic Tk rollback interface
 server/web_server.py       HTTP/WebSocket and authentication
 server/windows_input.py    Native input, volume and brightness
+server/aircontrol/         Isolated webcam worker, gestures, ownership, HUD and speech
 server/desktop_services.py Async catalog/context interface
 server/desktop_bridge.ps1  COM/WinRT providers
 server/osd_overlay.py      Desktop feedback

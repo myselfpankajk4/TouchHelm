@@ -6,6 +6,15 @@ from server.remote_service import RemoteService, absolute_point, private_sdp
 
 
 class RemoteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_aircontrol_winning_during_config_preserves_video_in_view_mode(self):
+        result=await self.start();self.service.state='live'
+        allowed=[True];self.service.control_allowed=lambda:allowed[0]
+        async def configuring(*args):allowed[0]=False;return {'audio':True}
+        self.worker.configure.side_effect=configuring
+        response=await self.service.request(self.client,{'type':'remote_config','session_id':result['session_id'],'mode':'control','audio':True},True)
+        self.assertTrue(response['success']);self.assertEqual(self.service.mode,'view')
+        self.assertTrue(self.service.audio);self.worker.stop.assert_not_awaited()
+
     async def test_audio_only_does_not_enumerate_or_capture_a_monitor(self):
         self.service.capabilities=lambda:{'video':False,'audio':True}
         result=await self.service.request(self.client,{'type':'remote_start','mode':'audio','audio':True},True)

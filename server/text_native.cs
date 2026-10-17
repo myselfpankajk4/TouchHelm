@@ -13,6 +13,9 @@ public static class TouchHelmFocusedText {
     [DllImport("user32.dll")] static extern IntPtr GetForegroundWindow();
     [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
     [DllImport("user32.dll")] static extern short GetAsyncKeyState(int key);
+    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
+    static AutomationElement lastTarget;
+    static IntPtr lastWindow;
     [DllImport("user32.dll", SetLastError=true)] static extern uint SendInput(uint n, INPUT[] inputs, int size);
     [StructLayout(LayoutKind.Sequential)] struct INPUT { public uint type; public UNION u; }
     [StructLayout(LayoutKind.Explicit)] struct UNION {
@@ -58,6 +61,38 @@ public static class TouchHelmFocusedText {
         return text.Length<=10000;
     }
     static string Identity(AutomationElement e) { return Hash(e.Current.ProcessId+":"+String.Join(",",e.GetRuntimeId())); }
+    public static Dictionary<string,object> Target() {
+        var e=Focused();object p;bool editable=false;
+        if(e!=null && e.TryGetCurrentPattern(ValuePattern.Pattern,out p))editable=!((ValuePattern)p).Current.IsReadOnly;
+        else if(e!=null && e.TryGetCurrentPattern(TextPattern.Pattern,out p)) {
+            var readOnly=((TextPattern)p).DocumentRange.GetAttributeValue(TextPattern.IsReadOnlyAttribute);
+            editable=readOnly is bool && !(bool)readOnly;
+        }
+        if(!editable)return Missing("Select an editable field outside TouchHelm, then use Dictate.");
+        lastTarget=e;lastWindow=GetForegroundWindow();
+        return new Dictionary<string,object>{{"available",true},{"field_id",Identity(e)},{"process_id",e.Current.ProcessId}};
+    }
+    public static Dictionary<string,object> RestoreTarget(string id) {
+        if(lastTarget==null || Identity(lastTarget)!=id)return Missing("Select the destination field again.");
+        if(!SetForegroundWindow(lastWindow))return Missing("Windows refused foreground activation. Select the destination field again.");
+        lastTarget.SetFocus();return Target();
+    }
+    public static Dictionary<string,object> SpeechStatus() {
+        bool access=System.Diagnostics.Process.GetProcessesByName("VoiceAccess").Length>0;
+        bool open=false,unknown=false;
+        foreach(var process in System.Diagnostics.Process.GetProcessesByName("TextInputHost")) {
+            var windows=AutomationElement.RootElement.FindAll(TreeScope.Children,new PropertyCondition(AutomationElement.ProcessIdProperty,process.Id));
+            foreach(AutomationElement window in windows) {
+                if(window.Current.IsOffscreen || window.Current.BoundingRectangle.Width<30 || window.Current.BoundingRectangle.Height<20)continue;
+                foreach(string id in new string[]{"VoiceTyping","Dictation","VoiceTypingPanel","VoiceTypingWindow"}) {
+                    var item=window.FindFirst(TreeScope.Subtree,new PropertyCondition(AutomationElement.AutomationIdProperty,id));
+                    if(item!=null && !item.Current.IsOffscreen)open=true;
+                }
+                if(!open)unknown=true;
+            }
+        }
+        return new Dictionary<string,object>{{"voice_access",access},{"toolbar_open",open},{"toolbar_unknown",unknown}};
+    }
     public static Dictionary<string,object> Read() {
         var e=Focused();string text;ValuePattern value;TextPattern pattern;
         if(e==null || !Content(e,out text,out value,out pattern))return Missing("Focus an editable PC text field. Protected, read-only and unsupported fields are excluded.");

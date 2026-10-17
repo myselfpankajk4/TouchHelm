@@ -41,7 +41,7 @@ def absolute_point(rect, x, y):
 
 class RemoteService:
     def __init__(self, config, displays, worker_factory, release, input_controller,
-                 *, capabilities, notify=None, before_control=None):
+                 *, capabilities, notify=None, before_control=None,control_allowed=None):
         self.config, self.displays, self.worker_factory = config, displays, worker_factory
         self.release, self.input, self.capabilities, self.notify = release, input_controller, capabilities, notify
         self.owner = self.worker = self.display = None
@@ -52,6 +52,7 @@ class RemoteService:
         self._configuring = False
         self._closing = 0
         self.before_control = before_control
+        self.control_allowed=control_allowed
 
     def snapshot(self):
         return {'type':'remote_state','session_id':self.session_id,'revision':self.revision,
@@ -130,6 +131,7 @@ class RemoteService:
                 if mode=='audio' and not caps.get('audio'):raise RuntimeError('PC audio streaming is unavailable. Check the desktop audio provider.')
                 if mode!='audio' and not caps.get('video'): raise RuntimeError(caps.get('message','Install remote streaming dependencies on the PC.'))
                 display=None if mode=='audio' else await self._monitor(data.get('display_id'))
+                if mode=='control' and self.control_allowed and not self.control_allowed():mode='view'
                 if not (client.authenticated and not client.ws.closed and self.config.get('remote_enabled') and self.config.get('require_pin')):
                     raise PermissionError('Remote access or pairing changed while monitors were loading.')
                 if self.owner or self._closing: raise ValueError('A remote session is active or still stopping.')
@@ -190,6 +192,7 @@ class RemoteService:
                 try:
                     previous_state=self.state
                     display=None if mode=='audio' else await self._monitor(data.get('display_id',self.display['id']))
+                    if mode=='control' and self.control_allowed and not self.control_allowed():mode='view'
                     if self.session_id!=sid: raise ValueError('Session ended while settings were changing.')
                     self.release(client)
                     if mode=='control' and self.mode!='control' and self.before_control:self.before_control()
@@ -197,6 +200,7 @@ class RemoteService:
                     readback=await self.worker.configure(display,quality,audio)
                     if self.session_id!=sid: raise ValueError('Session ended while settings were changing.')
                     if isinstance(readback,dict):audio=audio and bool(readback.get('audio',audio))
+                    if mode=='control' and self.control_allowed and not self.control_allowed():mode='view'
                     self.display,self.mode,self.quality,self.audio=display,mode,quality,audio
                     self.revision=secrets.token_urlsafe(12)
                     self.state,self.message=previous_state,(readback.get('message') if isinstance(readback,dict) else None) or 'Remote settings applied.'

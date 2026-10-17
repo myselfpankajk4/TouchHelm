@@ -11,6 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class WebViewShellTests(unittest.TestCase):
+    def test_aircontrol_commands_and_frames_require_owned_desktop(self):
+        self.app.window.get_current_url.return_value='https://attacker.invalid/'
+        for method,args in ((self.api.aircontrol,('start',{})),(self.api.get_aircontrol_frame,())):
+            with self.assertRaises(PermissionError):method(self.app.token,*args)
+        self.app.server.aircontrol.command.assert_not_called()
+
     def test_wireless_install_and_password_commands_require_owned_desktop(self):
         self.app.wireless_display.install=Mock()
         self.app.window.get_current_url.return_value='https://attacker.invalid/'

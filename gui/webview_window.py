@@ -69,7 +69,7 @@ class DesktopAssetServer:
         relative = path[len(prefix):]
         if not relative or any(part in ('', '.', '..') for part in relative.split('/')) or '\\' in relative:
             return None
-        if relative in ('index.html', 'desktop.css', 'desktop.js'):
+        if relative in ('index.html', 'desktop.css', 'desktop.js','aircontrol.js','aircontrol.css'):
             return GUI_WEB / relative
         if relative in ('themes.js', 'themes.css', 'theme-effects.js', 'theme-effects.css'):
             return ROOT / 'web' / relative
@@ -130,6 +130,23 @@ class DesktopAPI:
     def get_state(self, token):
         self._authorize(token)
         return self._app.snapshot()
+
+    def aircontrol(self,token,action,data=None):
+        self._authorize(token)
+        try:
+            if action=='cameras':
+                from server.aircontrol.devices import cameras
+                return {'success':True,**self._app._submit(cameras())}
+            if action=='displays':return {'success':True,**self._app._submit(self._app.server.desktop_services.displays())}
+            if action=='privacy':
+                import os
+                os.startfile('ms-settings:privacy-webcam');return {'success':True}
+            return self._app._submit(self._app.server.aircontrol.command(action,data))
+        except Exception as error:return {'success':False,'error':str(error)[:350]}
+
+    def get_aircontrol_frame(self,token):
+        self._authorize(token)
+        return self._app.server.aircontrol.snapshot(frame=True)
 
     def save_settings(self, token, settings):
         self._authorize(token)
@@ -373,6 +390,7 @@ class WebViewDesktopApp:
                     if self.config.get('require_pin', False) else '',
                 'devices': devices, 'activity': activity, 'pairing': self._pairing(),
                 'remote': self.server.remote.snapshot(), 'wireless_display':self.wireless_display.snapshot(), 'trusted_setup':self.trusted_setup.snapshot(),
+                'aircontrol':self.server.aircontrol.snapshot(),
                 'preferences': self._preferences(),
                 'diagnostics': {'engine': 'EdgeChromium / WebView2', 'python': platform.python_version(),
                     'build': self.build_id, 'source': str(ROOT), 'host': self.primary_ip,
@@ -413,6 +431,9 @@ class WebViewDesktopApp:
                 'TouchHelm', menu=pystray.Menu(pystray.MenuItem('Open TouchHelm', self.restore_from_tray, default=True),
                                             pystray.MenuItem('Stop remote session', lambda *args: self._submit(self.server.stop_remote())),
                                             pystray.MenuItem(lambda item:'Remote: '+self.server.remote.state, None, enabled=False),
+                                            pystray.MenuItem('Pause AirControl',lambda *args:self.server._air_hud_action('pause')),
+                                            pystray.MenuItem('Resume AirControl',lambda *args:self.server._air_hud_action('resume')),
+                                            pystray.MenuItem('Stop AirControl',lambda *args:self.server._air_hud_action('stop')),
                                             pystray.MenuItem('Exit', lambda *args: self.request_close())))
             self.tray_icon = icon
             def worker():
