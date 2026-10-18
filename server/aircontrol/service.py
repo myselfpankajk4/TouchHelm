@@ -13,6 +13,7 @@ from .process import CameraWorker
 from .setup import AirControlSetup
 from .expressions import levels,measure,learn
 from .hud import HEAD_ACTIONS,HEAD_SCROLL_ACTIONS,regions,practice_regions
+from .practice import PracticeSession
 
 class AirControlService:
     def __init__(self,input_controller,displays,*,folder,setup=None,worker_factory=CameraWorker,
@@ -41,6 +42,7 @@ class AirControlService:
         self.geometry_checked=0.
         self.stable_since=None;self.stable_frames=0
         self.observations=0;self.rejected_observations=0;self.observation_age=None;self.last_error=''
+        self.practice=PracticeSession();self.practice_viewport=(640,480)
 
     def snapshot(self,*,frame=False):
         setup=self.setup.snapshot()
@@ -66,6 +68,7 @@ class AirControlService:
                 'processing_delayed':self.observation_age is not None and self.observation_age>.25,'last_error':self.last_error},
             'point':self.engine.point,'tracking':not self.engine.lost and fresh,'display':self.display,
             'dwell_action':self.engine.dwell_action,'dragging':self.engine.held,'head_scroll':self.engine.head_scroll,
+            'practice':self.practice.snapshot(time.monotonic()),
             'scroll_regions':practice_regions(getattr(self,'practice_viewport',(640,480)),scrolling=self.engine.head_scroll) if self.state=='practicing' else [],
             'actions':list(self.actions),'action_catalog':ACTION_LABELS,'gesture_catalog':GESTURE_LABELS,
             'metrics':{'fps':round((len(self.times)-1)/(self.times[-1]-self.times[0]),1) if fresh and len(self.times)>1 and self.times[-1]>self.times[0] else None,
@@ -105,6 +108,7 @@ class AirControlService:
         self.last_point=None
 
     def pause(self,message='Paused. Resume explicitly when ready.',state='paused'):
+        self.practice.interrupt(time.monotonic())
         if self._voice_task and not self._voice_task.done():self._voice_task.cancel()
         self.stable_since=None;self.stable_frames=0;self.samples.clear();self.face_samples.clear()
         self._release_buttons();self.state=state;self.message=message
@@ -134,6 +138,7 @@ class AirControlService:
         if worker:await asyncio.to_thread(worker.stop)
         self.preview='';self.frame={};self.samples.clear();self.face_samples.clear();self.times.clear();self.last_frame=0
         self.calibrated=False;self.calibration_points={};self.practice_frames=0;self.practice_actions=0
+        self.practice.start('free',time.monotonic())
         self.stable_since=None;self.stable_frames=0
         if self.owns_input:
             self.owns_input=False
@@ -148,6 +153,30 @@ class AirControlService:
             if self._closing:raise RuntimeError('AirControl is stopping')
             if action=='setup':self.setup.start()
             elif action=='cancel_setup':self.setup.cancel()
+            elif action=='practice_viewport':
+                previous=self.practice.viewport
+                self.practice.set_viewport(data.get('width'),data.get('height'),data.get('revision',0))
+                self.practice_viewport=self.practice.viewport
+                if previous!=self.practice_viewport and self.state=='practicing':self.engine.reset(consume_dwell=True)
+            elif action in ('practice_start','practice_reset','practice_pause','practice_resume'):
+                if not self.worker or not self.calibrated:raise ValueError('Calibrate before starting a practice exercise.')
+                if action=='practice_start':
+                    name=data.get('name','click')
+                    if name not in ('free','click','drag','scroll'):raise ValueError('Choose a supported practice exercise.')
+                    if self.state!='practicing':
+                        self.pause('Practice exercises send no Windows input.','practicing')
+                        if self.owns_input:
+                            self.owns_input=False
+                            if self.release:await self.release()
+                            if self.overlay:self.overlay.hide()
+                    self.engine.reset(consume_dwell=True);self.practice.start(name,time.monotonic())
+                elif self.state!='practicing':raise ValueError('Return to practice before changing the exercise.')
+                elif action=='practice_reset':
+                    self.engine.reset(consume_dwell=True);self.practice.start(self.practice.name,time.monotonic())
+                elif action=='practice_pause':
+                    self.engine.reset(consume_dwell=True);self.practice.interrupt(time.monotonic())
+                else:self.practice.resume(time.monotonic())
+                self.message='Practice exercise: '+self.practice.name+'. Windows input is off.'
             elif action=='start':
                 if not self._desktop_ready():raise ValueError('Unlock Windows and return to the normal desktop before starting the camera.')
                 profile=validate_profile(data.get('profile',self.profile))
@@ -161,6 +190,7 @@ class AirControlService:
                 self.calibrated=False;self.calibration_points={};self.practice_frames=self.practice_actions=0
                 self.expression_neutral=False;self.expression_seen.clear();self.expression_candidate='';self.expression_since=0.
                 self.expression_baseline=None
+                self.practice.start('free',time.monotonic());self.practice.clear_history()
                 self.observations=0;self.rejected_observations=0;self.observation_age=None;self.last_error=''
                 self.latencies.clear();self.last_sequence=-1;self.started=time.monotonic()
                 self.worker=self.worker_factory(self.setup)
@@ -217,6 +247,8 @@ class AirControlService:
                     if self.last_point is not None and math.dist(actual,self.last_point)>12:
                         self.pause('Physical mouse took over. Resume when ready.');raise ValueError(self.message)
                     self.input.scroll(0,2 if action=='scroll_up' else -2,scroll_speed=1,invert=False)
+                elif action in ('scroll_up','scroll_down'):
+                    self.practice.consume([{'kind':'scroll','dy':2 if action=='scroll_up' else -2}],self.engine.point or (.5,.5),time.monotonic())
             elif action in HEAD_ACTIONS:
                 if not self.worker or not self.calibrated or self.profile['mode']!='head' or self.state not in ('active','practicing'):
                     raise ValueError('Calibrate Head & Face, then use its practice or active action dock.')
@@ -364,6 +396,7 @@ class AirControlService:
             practice_regions(getattr(self,'practice_viewport',(640,480)),scrolling=self.engine.head_scroll) if self.state=='practicing' else [])
         events=self.engine.step(frame,paused=self.state in ('paused','tracking_lost'))
         if self.engine.lost:
+            self.practice.interrupt(now)
             self.stable_since=None;self.stable_frames=0;self.samples.clear();self.times.clear()
             if self.state=='active':self.pause('Tracking lost. Reacquire your pose, then Resume.','tracking_lost')
             return
@@ -372,9 +405,11 @@ class AirControlService:
         self.stable_frames+=1
         if self.state=='practicing':
             self.practice_frames+=1
+            accepted=self.practice.accepted_clicks
+            self.practice.consume(events,self.engine.point,now)
             clicks=[e for e in events if e['kind']=='button' and e['action']=='down' or
                 e['kind']=='action' and e['action'] in ('left_click','right_click','double_click')]
-            self.practice_actions+=len(clicks)
+            self.practice_actions+=len(clicks) if self.practice.name=='free' else self.practice.accepted_clicks-accepted
             for event in clicks:self.actions.appendleft('Practice: '+('Left press / drag' if event['kind']=='button' else ACTION_LABELS[event['action']]))
             e=(frame.get('face') or {}).get('expressions',{})
             left=number(e.get('eyeBlinkLeft'));right=number(e.get('eyeBlinkRight'))
@@ -392,7 +427,7 @@ class AirControlService:
                 elif event['kind']=='hud_dwell' and self.overlay:self.overlay.dwell(event.get('x',0),event.get('y',0),self.display)
                 elif event['kind']=='hud_action':
                     if not self.owns_input and event['action']=='scroll_done':self.engine.set_head_scroll(False)
-                    elif not self.owns_input and event['action']=='pause':self.engine.reset(consume_dwell=True)
+                    elif not self.owns_input and event['action']=='pause':self.engine.reset(consume_dwell=True);self.practice.interrupt(now)
                     elif not self.owns_input and event['action']=='stop':asyncio.create_task(self.command('stop'))
                     elif self.owns_input and self.overlay:self.overlay.callback(event['action'])
             return

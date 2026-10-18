@@ -8,6 +8,33 @@ from server.aircontrol.profiles import default_profile
 from server.aircontrol.engine import GestureEngine
 
 class AirServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_exercise_start_returns_ownership_and_viewport_revisions_are_guarded(self):
+        self.service.worker=self.worker;self.service.calibrated=True;self.service.state='active';self.service.owns_input=True
+        await self.service.command('practice_viewport',{'width':640,'height':480,'revision':1})
+        await self.service.command('practice_start',{'name':'click'})
+        self.assertEqual(self.service.state,'practicing');self.assertFalse(self.service.owns_input)
+        self.release.assert_awaited_once()
+        await self.service.command('practice_viewport',{'width':320,'height':240,'revision':2})
+        await self.service.command('practice_viewport',{'width':640,'height':480,'revision':1})
+        self.assertEqual(self.service.snapshot()['practice']['viewport'],[320,240])
+        with self.assertRaises(ValueError):await self.service.command('practice_viewport',{'width':True,'height':240,'revision':3})
+
+    async def test_real_head_dwell_scores_practice_target_without_native_effects(self):
+        import time
+        from test_aircontrol_head_actions import face
+        s=self.service;s.profile=default_profile(mode='head');s.profile.update(smoothing=0,head_stability=0)
+        s.engine=GestureEngine(s.profile);s.worker=self.worker;s.calibrated=True;s.state='practicing'
+        await s.command('practice_start',{'name':'click'})
+        start=time.monotonic()
+        for i in range(12):
+            frame=face(start+i*.1,yaw=-9);frame['seq']=i;s.observe(frame,now=frame['timestamp'])
+        self.assertEqual(s.snapshot()['practice']['successes'],1)
+        self.assertEqual(s.practice_actions,1)
+        self.input.set_physical_cursor_pos.assert_not_called();self.input.click.assert_not_called()
+        self.acquire.assert_not_awaited()
+        await s.command('practice_pause');self.assertEqual(s.snapshot()['practice']['status'],'paused')
+        await s.command('practice_resume');self.assertEqual(s.snapshot()['practice']['status'],'running')
+
     async def test_readiness_is_local_and_explains_camera_off(self):
         self.service.worker=None
         result=self.service.activation_readiness(now=10.)
