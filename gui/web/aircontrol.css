@@ -120,3 +120,6 @@ body:not(.air-panel-hidden) .desktop-content{padding:12px 20px 28px}
 .air-panel .air-camera-column>#airVoiceMessage{margin:8px 0;font-size:12px}
 .air-panel .air-setup-summary{font-size:12px}
 @media(max-width:700px){.air-panel .air-dwell-buttons{grid-template-columns:repeat(4,minmax(0,1fr))}}
+.air-diagnostics-grid{display:grid;grid-template-columns:minmax(160px,1fr) minmax(160px,1fr);gap:12px 24px;margin:20px 0;font-size:14px;font-variant-numeric:tabular-nums}
+.air-diagnostics-grid dt{color:var(--th-muted)}.air-diagnostics-grid dd{margin:0;color:var(--th-text)}
+@media(max-width:500px){.air-diagnostics-grid{grid-template-columns:1fr;gap:4px}.air-diagnostics-grid dd{margin-bottom:12px}}

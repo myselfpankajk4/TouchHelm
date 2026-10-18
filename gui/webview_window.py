@@ -141,6 +141,7 @@ class DesktopAPI:
             if action=='privacy':
                 import os
                 os.startfile('ms-settings:privacy-webcam');return {'success':True}
+            if action=='export_report':data={'build_id':self._app.build_id}
             return self._app._submit(self._app.server.aircontrol.command(action,data))
         except Exception as error:return {'success':False,'error':str(error)[:350]}
 

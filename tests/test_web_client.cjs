@@ -1381,6 +1381,19 @@ test('AirControl repeated snapshots do not repeat live status announcements',asy
   assert.equal(mutations,0);await desktop.close();
 });
 
+test('AirControl diagnostics show unknown values and export only on request',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('practicing');TouchHelmAir.tab('diagnostics');});
+  assert.match(await desktop.locator('#airDiagnostics').innerText(),/Not measured/);
+  const downloadPromise=desktop.waitForEvent('download');await desktop.locator('#airExportReport').click();
+  const download=await downloadPromise;assert.match(download.suggestedFilename(),/aircontrol.*json/);
+  await desktop.locator('#airResetMeasurements').click();
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.camera_active),true);
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.calibrated),true);
+  await desktop.close();
+});
+
 test('AirControl chooser opens dedicated modes without starting a camera',async(page,context)=>{
   const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
   await desktop.waitForFunction(()=>window.TouchHelmAir);

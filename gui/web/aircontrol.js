@@ -131,6 +131,8 @@
       $('airExerciseStart').addEventListener('click',async()=>{if(this.viewportPending)return;if(await this.call('practice_start',{name:$('airExercise').value}))this.tab('practice');});
       $('airExerciseReset').addEventListener('click',()=>this.call('practice_reset'));
       $('airExercisePause').addEventListener('click',()=>this.call(this.state.practice?.status==='paused'?'practice_resume':'practice_pause'));
+      $('airResetMeasurements').addEventListener('click',()=>this.call('reset_measurements'));
+      $('airExportReport').addEventListener('click',()=>this.exportReport());
       $('airPractice').addEventListener('click',()=>this.tab('practice'));
       $('airReturnPractice').addEventListener('click',()=>this.call('practice'));
       $('airExpressionNeutral').addEventListener('click',()=>this.call('expression_sample',{phase:'neutral'}));
@@ -353,6 +355,7 @@
       const metrics=s.metrics||{};$('airMetrics').textContent=`Tracked updates: ${metrics.fps??'unknown'} fps · median frame-to-input latency: ${metrics.median_latency_ms??'unknown'} ms · inference: ${metrics.inference_ms??'unknown'} ms · frame age: ${metrics.frame_age_ms??'unknown'} ms · captured: ${metrics.capture_fps??'unknown'} fps · rejected stale/invalid observations: ${metrics.rejected_observations??0} · worker CPU: ${metrics.cpu_percent??'unknown'}% of total PC · worker memory: ${metrics.memory_mb??'unknown'} MB. These are measurements, not guaranteed performance.`;
       window.TouchHelmThemes?.setInteractionActive?.(active);
       this.renderPractice(s);
+      this.renderDiagnostics(s.metrics||{});
       if(!active){this.lastPreview='';$('airPreview').hidden=true;$('airPreview').removeAttribute('src');$('airLandmarks').getContext('2d').clearRect(0,0,640,480);}
     }
     renderPractice(s){
@@ -381,6 +384,29 @@
         button.style.cssText=`left:${r.rect[0]*100}%;top:${r.rect[1]*100}%;width:${(r.rect[2]-r.rect[0])*100}%;height:${(r.rect[3]-r.rect[1])*100}%;`;
         button.addEventListener('click',()=>this.call(r.action==='pause'?'practice_pause':r.action));$('airPracticeDock').append(button);
       }}
+    }
+    renderDiagnostics(metrics){
+      const fields=[['capture_fps','Camera delivery','fps'],['observation_fps','Accepted observations','fps'],['inference_ms','Inference','ms'],
+        ['frame_age_ms','Frame age','ms'],['median_latency_ms','Median frame-to-input','ms'],['p95_latency_ms','P95 frame-to-input','ms'],
+        ['latency_sample_count','Latency samples','/ 600 maximum'],['tracking_interruptions','Tracking interruptions',''],
+        ['cpu_percent','Worker CPU','% of this PC'],['memory_mb','Worker memory','MB'],['duration_seconds','Measurement duration','seconds']];
+      const key=JSON.stringify(metrics);
+      if(key!==this.diagnosticKey){this.diagnosticKey=key;const list=document.createElement('dl');list.className='air-diagnostics-grid';
+        for(const [name,label,unit]of fields){const dt=document.createElement('dt'),dd=document.createElement('dd');dt.textContent=label;
+          dd.textContent=Number.isFinite(metrics[name])?metrics[name]+' '+unit:'Not measured';list.append(dt,dd);}
+        $('airDiagnostics').replaceChildren(list);
+      }
+      $('airExportReport').disabled=this.busy;$('airResetMeasurements').disabled=this.busy;
+    }
+    async exportReport(){
+      if(this.busy)return;this.busy=true;this.render(this.state);
+      try{
+        const result=desktop.preview?{success:true,report:{version:1,build:'',mode:this.profile.mode,display_size:[],duration_seconds:0,metrics:{latency_sample_count:0,median_latency_ms:null,p95_latency_ms:null},exercises:[]}}:await desktop.invoke('aircontrol','export_report',{});
+        if(!result.success||!result.report)throw Error(result.error||'The session report is unavailable.');
+        const url=URL.createObjectURL(new Blob([JSON.stringify(result.report,null,2)],{type:'application/json'})),link=document.createElement('a');
+        link.href=url;link.download='touchhelm-aircontrol-report.json';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+      }catch(error){this.error='Report could not export: '+error.message;setText('airMessage',this.error);}
+      finally{this.busy=false;this.render(this.state);}
     }
     async pollFrame(){
       if(this.frameBusy||document.hidden||!this.state.camera_active||document.querySelector('[data-page=aircontrol]').hidden||desktop.preview)return;
@@ -430,6 +456,7 @@
       else if(action==='practice_pause')this.state.practice={...this.state.practice,status:'paused'};
       else if(action==='practice_resume')this.state.practice={...this.state.practice,status:'running'};
       else if(action==='practice_reset')return this.previewAction('practice_start',{name:this.state.practice?.name||'click'});
+      else if(action==='reset_measurements')this.state.metrics={...this.state.metrics,median_latency_ms:null,p95_latency_ms:null,latency_sample_count:0,tracking_interruptions:0,duration_seconds:0};
       else if(action.startsWith('dwell_')){this.state.dwell_action=action==='dwell_drag'&&this.state.dragging?'left_click':{left:'left_click',double:'double_click',right:'right_click',drag:'drag'}[action.slice(6)];this.state.dragging=false;}
       else if(action==='release_drag'){this.state.dragging=false;this.state.dwell_action='left_click';}
       else if(action==='save'){this.profile=data.profile;this.setPreview('ready');}

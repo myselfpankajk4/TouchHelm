@@ -8,6 +8,22 @@ from server.aircontrol.profiles import default_profile
 from server.aircontrol.engine import GestureEngine
 
 class AirServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reset_measurements_preserves_tracking_sequence_and_calibration(self):
+        s=self.service;s.worker=self.worker;s.calibrated=True;s.state='practicing';s.last_sequence=99
+        s.metrics.record_latency(25.);s.practice.start('click',1.)
+        await s.command('reset_measurements')
+        self.assertEqual(s.last_sequence,99);self.assertTrue(s.calibrated);self.assertIs(s.worker,self.worker)
+        self.assertEqual(s.practice.name,'click');self.assertIsNone(s.snapshot()['metrics']['p95_latency_ms'])
+        result=await s.command('export_report',{'build_id':'a'*32})
+        self.assertEqual(result['report']['build'],'a'*32)
+        self.assertNotIn('profile',result['report']);self.assertNotIn('frame',result['report'])
+
+    async def test_watchdog_records_only_one_tracking_interruption(self):
+        s=self.service;s.state='active';s.last_frame=10.
+        s.metrics.observe(at=10.,tracked=True)
+        s.watchdog(now=10.251);s.watchdog(now=10.5)
+        self.assertEqual(s.snapshot()['metrics']['tracking_interruptions'],1)
+
     async def test_exercise_start_returns_ownership_and_viewport_revisions_are_guarded(self):
         self.service.worker=self.worker;self.service.calibrated=True;self.service.state='active';self.service.owns_input=True
         await self.service.command('practice_viewport',{'width':640,'height':480,'revision':1})

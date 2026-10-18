@@ -11,6 +11,13 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class WebViewShellTests(unittest.TestCase):
+    def test_export_uses_running_host_build_instead_of_renderer_label(self):
+        self.app.build_id='b'*32
+        self.app._submit=Mock(return_value={'success':True,'report':{}})
+        self.app.server.aircontrol.command=Mock(return_value=object())
+        self.api.aircontrol(self.app.token,'export_report',{'build_id':'forged'})
+        self.app.server.aircontrol.command.assert_called_once_with('export_report',{'build_id':'b'*32})
+
     def test_aircontrol_commands_and_frames_require_owned_desktop(self):
         self.app.window.get_current_url.return_value='https://attacker.invalid/'
         for method,args in ((self.api.aircontrol,('start',{})),(self.api.get_aircontrol_frame,())):

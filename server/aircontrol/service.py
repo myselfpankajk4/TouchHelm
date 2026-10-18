@@ -14,6 +14,7 @@ from .setup import AirControlSetup
 from .expressions import levels,measure,learn
 from .hud import HEAD_ACTIONS,HEAD_SCROLL_ACTIONS,regions,practice_regions
 from .practice import PracticeSession
+from .metrics import SessionMetrics,bounded
 
 class AirControlService:
     def __init__(self,input_controller,displays,*,folder,setup=None,worker_factory=CameraWorker,
@@ -36,6 +37,9 @@ class AirControlService:
         self.press_point=None;self.press_at=0.
         self.samples=deque(maxlen=15);self.face_samples=deque(maxlen=15);self.calibration_points={};self.display=None
         self.latencies=deque(maxlen=600);self.times=deque(maxlen=90);self.actions=deque(maxlen=8)
+        self.metrics=SessionMetrics(self.latencies)
+        self.metrics.stop(time.monotonic())
+        self.last_usage={}
         self.started=0.;self._voice_task=None;self._closing=False
         self.expression_neutral=False;self.expression_seen=set();self.expression_candidate='';self.expression_since=0.
         self.expression_baseline=None
@@ -77,9 +81,12 @@ class AirControlService:
                 'inference_target_fps':self.frame.get('inference_target_fps'),'frame_age_ms':round(self.observation_age*1000,1) if self.observation_age is not None else None,
                 'observations':self.observations,'rejected_observations':self.rejected_observations},
             'voice':self.voice.snapshot() if self.voice else {'message':'Dictation is available from the desktop on Windows.'}}
+        result['metrics'].update(self.metrics.snapshot(time.monotonic()))
         if self.worker:
             usage=self.worker.stats()
-            if isinstance(usage,dict):result['metrics'].update(usage)
+            if isinstance(usage,dict):
+                self.last_usage={k:usage[k] for k,limit in [('cpu_percent',100),('memory_mb',1048576)] if bounded(usage.get(k),limit)}
+                result['metrics'].update(self.last_usage)
         if frame:result.update(preview=self.preview,hand_points=self.frame.get('hand_points',[]),face_points=self.frame.get('face_points',[]),seq=self.last_sequence)
         return result
 
@@ -108,6 +115,7 @@ class AirControlService:
         self.last_point=None
 
     def pause(self,message='Paused. Resume explicitly when ready.',state='paused'):
+        if state=='tracking_lost':self.metrics.mark_lost()
         self.practice.interrupt(time.monotonic())
         if self._voice_task and not self._voice_task.done():self._voice_task.cancel()
         self.stable_since=None;self.stable_frames=0;self.samples.clear();self.face_samples.clear()
@@ -127,6 +135,7 @@ class AirControlService:
             self.pause('Tracking lost. Hold a neutral pose, then Resume.','tracking_lost')
 
     async def _stop(self):
+        self.metrics.stop(time.monotonic())
         self._release_buttons()
         if self._voice_task and not self._voice_task.done():self._voice_task.cancel()
         if self.task and self.task is not asyncio.current_task():
@@ -153,6 +162,20 @@ class AirControlService:
             if self._closing:raise RuntimeError('AirControl is stopping')
             if action=='setup':self.setup.start()
             elif action=='cancel_setup':self.setup.cancel()
+            elif action=='reset_measurements':
+                self.metrics.reset(time.monotonic());self.practice.clear_history()
+                if not self.worker:self.metrics.stop(time.monotonic())
+            elif action=='export_report':
+                rect=self.display['rect'] if self.display else {}
+                report=self.metrics.report(at=time.monotonic(),mode=self.profile['mode'],display_size=[rect.get('width'),rect.get('height')],
+                    results=list(self.practice.results),build_id=data.get('build_id',''))
+                if self.worker:
+                    usage=self.worker.stats()
+                    if isinstance(usage,dict):
+                        for key,limit in [('cpu_percent',100),('memory_mb',1048576)]:
+                            if bounded(usage.get(key),limit):report['metrics'][key]=usage[key]
+                else:report['metrics'].update(self.last_usage)
+                return {'success':True,'report':report}
             elif action=='practice_viewport':
                 previous=self.practice.viewport
                 self.practice.set_viewport(data.get('width'),data.get('height'),data.get('revision',0))
@@ -199,6 +222,8 @@ class AirControlService:
                 self.practice.start('free',time.monotonic());self.practice.clear_history()
                 self.observations=0;self.rejected_observations=0;self.observation_age=None;self.last_error=''
                 self.latencies.clear();self.last_sequence=-1;self.started=time.monotonic()
+                self.metrics.reset(self.started)
+                self.last_usage={}
                 self.worker=self.worker_factory(self.setup)
                 try:await asyncio.to_thread(self.worker.start,profile)
                 except Exception:
@@ -401,6 +426,8 @@ class AirControlService:
             if self.owns_input and self.profile['mode']=='head' else
             practice_regions(getattr(self,'practice_viewport',(640,480)),scrolling=self.engine.head_scroll) if self.state=='practicing' else [])
         events=self.engine.step(frame,paused=self.state in ('paused','tracking_lost'))
+        self.metrics.observe(at=now,tracked=not self.engine.lost,capture_fps=frame.get('capture_fps'),
+            inference_ms=frame.get('inference_ms'),frame_age_ms=max(0,now-stamp)*1000)
         if self.engine.lost:
             self.practice.interrupt(now)
             self.stable_since=None;self.stable_frames=0;self.samples.clear();self.times.clear()
@@ -456,7 +483,7 @@ class AirControlService:
                 if kind=='pointer':
                     self.last_point=physical_point(self.display['rect'],event['x'],event['y'])
                     self.input.set_physical_cursor_pos(*self.last_point)
-                    self.latencies.append((time.monotonic()-stamp)*1000)
+                    self.metrics.record_latency((time.monotonic()-stamp)*1000)
                 elif kind=='button':
                     if event['action']=='down':
                         self.input.mouse_down(event['button']);self.native_down=True
@@ -499,11 +526,13 @@ class AirControlService:
         try:
             while self.worker:
                 if not self._desktop_ready():
+                    self.metrics.mark_lost()
                     await self._stop();self.message='Windows is locked or showing a secure desktop. Camera stopped. Unlock, then choose Start camera.';return
                 item=self.worker.latest()
                 if item:
                     if item.get('type')=='observation':self.observe(item)
                     elif item.get('type')=='error':
+                        self.metrics.mark_lost()
                         message=item.get('message','Camera unavailable');await self._stop();self.state='unavailable';self.message=message;return
                 if not self.last_frame and time.monotonic()-self.started>25:
                     await self._stop();self.state='unavailable';self.message='No camera observations arrived. Check the selected camera and privacy permissions.';return
