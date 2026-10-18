@@ -7,7 +7,7 @@ from server.aircontrol.service import AirControlService
 from server.aircontrol.engine import GestureEngine
 from server.aircontrol.profiles import default_profile
 from server.aircontrol.hud import layout,regions,practice_regions
-from test_aircontrol_head_actions import face
+from test_aircontrol_head_actions import face,aim
 
 
 class ScrollServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -65,7 +65,7 @@ class ScrollServiceTests(unittest.IsolatedAsyncioTestCase):
         target=next(r for r in regions(self.s.display,active=True,scrolling=True) if r['action']=='scroll_down')
         x=(target['rect'][0]+target['rect'][2])/2;y=(target['rect'][1]+target['rect'][3])/2
         for i in range(12):
-            frame=face(1+i*.1,(x-.5)*36,(y-.5)*36);frame['seq']=i
+            frame=face(1+i*.1,*aim(x,y));frame['seq']=i
             self.s.observe(frame,now=frame['timestamp'])
         self.assertTrue(self.input.scroll.called)
         self.input.set_physical_cursor_pos.assert_not_called()

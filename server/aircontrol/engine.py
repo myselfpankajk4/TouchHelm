@@ -33,6 +33,14 @@ HEAD_RANGE_REFERENCE=18.
 HEAD_SPIKE=1.5
 HEAD_ADAPT=3.
 HEAD_ADAPT_TAU=1.5
+# Turning the head all the way to a screen edge is tiring and tracking is noisiest
+# there, so the outer part of the screen is reached with less turn: past EDGE_START
+# (a share of the screen width from the center) the gain rises smoothly to EDGE_GAIN
+# and the pointer is pinned at the edge, which is perfectly steady, a little early.
+# Nodding is also a smaller movement than turning, so pitch gets VERTICAL_GAIN.
+EDGE_START=.25
+EDGE_GAIN=2.
+VERTICAL_GAIN=1.25
 
 class GestureEngine:
     def __init__(self,profile):
@@ -47,16 +55,32 @@ class GestureEngine:
         self.steady_point=None;self.pose_accepted=None;self.pose_suspect=None;self.pose_speed=(0.,0.);self.jitter=0.;self.jitter_from=None;self.jitter_time=None
         self.hud_blocked=False
         self.head_scroll=False;self.scroll_target='';self.scroll_since=0.;self.scroll_last=None
-        self.scroll_expression_blocked=False
+        self.scroll_expression_blocked=False;self.local_gain=[1.,1.]
         smoothing=self.profile['smoothing'];head=self.profile['mode']!='hand'
         self.filters=[OneEuro(self._cutoff(1.),HAND_BETA if not head else HEAD_BETA) for _ in range(2)]
 
     def _hand_gain(self,axis):
         # A smaller calibrated hand range, a smaller head range or higher
         # sensitivity magnifies tracking noise on screen, so steady it in proportion.
-        if self.profile['mode']!='hand':return max(1.,self.profile['sensitivity']*HEAD_RANGE_REFERENCE/self.profile['head_range'])
+        if self.profile['mode']!='hand':return max(1.,self.profile['sensitivity']*HEAD_RANGE_REFERENCE/self.profile['head_range'])*self.local_gain[axis]
         bounds=self.profile['calibration']['hand_bounds'];span=(bounds[2]-bounds[0],bounds[3]-bounds[1])[axis]
         return max(1.,self.profile['sensitivity']*.7/max(span,.05))
+
+    def _reach(self,offset,axis):
+        # offset is the signed distance from the screen center in screen widths (0.5 is the
+        # edge). Returns the mapped offset and how much it magnifies pose noise there.
+        offset*=VERTICAL_GAIN if axis else 1.
+        size=abs(offset)-EDGE_START;gain=VERTICAL_GAIN if axis else 1.
+        if size<=0:return offset,gain
+        ramp=(.5-EDGE_START)*2/(1+EDGE_GAIN);size=min(size,ramp)
+        mapped=EDGE_START+size+(EDGE_GAIN-1)*size*size/(2*ramp)
+        if abs(offset)-EDGE_START>=ramp:mapped=.5
+        return math.copysign(min(mapped,.5),offset),gain*(1+(EDGE_GAIN-1)*size/ramp)
+
+    def _map_pose(self,pose):
+        yaw,pitch=self.profile['calibration']['head_neutral'];span=self.profile['head_range']*2;sensitivity=self.profile['sensitivity']
+        mapped=[self._reach((v-n)/span*sensitivity,axis) for axis,(v,n) in enumerate(zip(pose,(yaw,pitch)))]
+        return tuple(clamp(.5+m[0]) for m in mapped),[m[1] for m in mapped]
 
     def _cutoff(self,resolution,axis=0):
         smoothing=self.profile['smoothing']
@@ -111,7 +135,7 @@ class GestureEngine:
         self.held=False;self.gesture='';self.fired=False;self.lock='';self.scroll_y=None
         self.dwell_anchor=None;self.dwell_fired=False;self.dwell_exit=None;self.point=None;self.progress=0.
         self.pinch_anchor=None;self.pinch_origin=None
-        self.dwell_action='left_click';self.drag_latched=False;self.dwell_target=None;self.steady_point=None;self.pose_accepted=None;self.pose_suspect=None;self.pose_speed=(0.,0.);self.jitter=0.;self.jitter_from=None;self.jitter_time=None
+        self.dwell_action='left_click';self.drag_latched=False;self.dwell_target=None;self.steady_point=None;self.pose_accepted=None;self.pose_suspect=None;self.pose_speed=(0.,0.);self.jitter=0.;self.jitter_from=None;self.jitter_time=None;self.local_gain=[1.,1.]
         self.hand_rebase=None
         self.head_scroll=False;self.scroll_target='';self.scroll_last=None
         # Interruption must not turn an uninterrupted expression into a new
@@ -192,14 +216,12 @@ class GestureEngine:
         if mode=='hand':
             x0,y0,x1,y1=self.profile['calibration']['hand_bounds']
             raw=(clamp((number(hand.get('x'),.5)-x0)/(x1-x0)),clamp((number(hand.get('y'),.5)-y0)/(y1-y0)))
+            raw=tuple(clamp(.5+(v-.5)*self.profile['sensitivity']) for v in raw)
         else:
-            yaw,pitch=self.profile['calibration']['head_neutral'];span=self.profile['head_range']*2
             pose=(number(face.get('yaw')),number(face.get('pitch')))
             if self.profile['smoothing']:pose,replay,hold_filters=self._pose_gate(pose,t)
-            raw=(clamp(.5+(pose[0]-yaw)/span),clamp(.5+(pose[1]-pitch)/span))
-            if replay:replay=(*(clamp(.5+(v-n)/span) for v,n in zip(replay,(yaw,pitch))),replay[2])
-        raw=tuple(clamp(.5+(v-.5)*self.profile['sensitivity']) for v in raw)
-        if replay:replay=(*(clamp(.5+(v-.5)*self.profile['sensitivity']) for v in replay[:2]),replay[2])
+            raw,self.local_gain=self._map_pose(pose)
+            if replay:replay=(*self._map_pose(replay[:2])[0],replay[2])
         width,height=self.profile.get('_monitor_scale',(1920,1080))
         resolution=1. if mode=='hand' else max(1.,width/1920,height/1080)
         for axis,filter in enumerate(self.filters):

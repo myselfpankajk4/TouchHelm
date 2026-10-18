@@ -8,7 +8,7 @@ from server.aircontrol.engine import GestureEngine
 from server.aircontrol.hud import regions
 from server.aircontrol.profiles import default_profile
 from server.aircontrol.service import AirControlService
-from test_aircontrol_head_actions import face
+from test_aircontrol_head_actions import face,aim
 
 
 class DailyUseReviewTests(unittest.IsolatedAsyncioTestCase):
@@ -92,7 +92,7 @@ class DailyUseReviewTests(unittest.IsolatedAsyncioTestCase):
         e=self.s.engine;e.set_head_scroll(True)
         scroll=regions(self.s.display,active=True,scrolling=True)
         target=next(r['rect'] for r in scroll if r['action']=='scroll_done')
-        yaw=((target[0]+target[2])/2-.5)*36;pitch=((target[1]+target[3])/2-.5)*36
+        yaw,pitch=aim((target[0]+target[2])/2,(target[1]+target[3])/2)
         e.hud_regions=scroll;events=[]
         for i in range(12):events+=e.step(face(i*.1,yaw,pitch))
         self.assertIn({'kind':'hud_action','action':'scroll_done'},events)

@@ -135,6 +135,17 @@ physical pixels). Higher steadiness reduces jitter; lower values follow small
 movements more closely. Existing smoothing choices are preserved; fresh Head
 profiles use 60% smoothing.
 
+**Head & Face edges and corners.** The pointer follows your head one-to-one near the
+middle of the screen. Past the middle half of its travel the pointer speeds up
+smoothly (up to twice as fast) so the edge is reached after about 15° of turning
+sideways and 12° of nodding, instead of 18° with the plain mapping, and looking
+up or down moves the pointer a little farther than the same turn sideways. Turning
+further than that keeps the pointer pinned exactly on the edge or corner, so
+Minimize, Maximize and Close in a top corner can be hit by turning slightly past
+them and holding. The filter is made calmer in step with the speed-up, so a held
+pose near an edge is as steady as one in the middle. If you still need to turn too
+far, lower **Head movement range**.
+
 After a hand pinch releases, the pointer stays at the click or drop location.
 Further hand movement continues from that position, with the movement range
 mapped toward the screen edges. Recenter or a tracking interruption clears this

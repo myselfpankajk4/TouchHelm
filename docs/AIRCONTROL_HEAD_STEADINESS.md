@@ -131,6 +131,36 @@ pause/stop, loop cleanup).
 
 Not changed: the practice cursor drawing (third pass).
 
+## Fifth pass (same day): "struggling at the edges"
+
+The mapping from head angle to screen was linear: a turn of ±18° (36° in total) covered the screen, so the last 10% of the screen needed the same slow, fine
+turning as the middle, and the cursor could only be held still by holding the head still.
+
+- **Edge reach.** Within the middle half of its travel the pointer is unchanged. Beyond it
+  the speed rises smoothly from 1× to 2× at the edge (`EDGE_START`, `EDGE_GAIN`), and the
+  edge is reached at about 15° sideways (was 18°). Further rotation is pinned exactly on the edge, so
+  there is nothing to hold still: overshooting the Close button is fine.
+- **Vertical reach.** Nodding moves the pointer 1.25× as far (`VERTICAL_GAIN`), because
+  heads turn less far up and down: the top/bottom edge is reached at about 12°.
+- **Quieter filter where the pointer is faster.** The local gain scales the same
+  noise-compensation that range and sensitivity use, so the edge band, with its 2× gain,
+  is steadied twice as hard. Synthetic held-pose RMS (σ 0.3°, 1080p, mean of 6 seeds)
+  at 15 fps: 0.2 px in the middle, 0.4 px at 14° sideways, 0.9 px at 15°, 0.1–0.3 px
+  at the vertical edge and corner; at 10 fps 0.5 px in the middle and at most 2.3 px
+  near an edge.
+- **Not changed.** Mid-screen speed, the step response, the glitch gate and the
+  dwell/hold values. The pose gate and filters operate on the mapped values as before.
+
+Tests: `HeadEdgeReachTests` in `tests/test_aircontrol_head_steadiness.py`; the HUD
+service tests aim with `aim()` (`tests/test_aircontrol_head_actions.py`) so they stay
+valid whatever the mapping.
+
+Eye tracking: not added. MediaPipe's iris landmarks give a gaze estimate, but from a
+webcam it is only accurate to about 2–5° (roughly 100–250 px on a 1080p screen) and
+jitters more than the head pose, so it would be worse than the head for hitting a
+30 px button. A hybrid (eyes for a coarse jump, head for fine aiming) is possible but
+needs a calibration step and real hardware validation.
+
 ## Evidence (synthetic, not a camera)
 
 Held head with Gaussian yaw/pitch noise σ = 0.3°, 1080p, default profile. Raw
@@ -153,6 +183,11 @@ Regressions are in `tests/test_aircontrol_head_steadiness.py` and
 (`tests/aircontrol_replay.py --baseline-ref HEAD`) passes its comparison.
 
 ## Not verified
+
+The edge reach (15°/12° to the edges, 2× speed, 1.25× vertical) comes from simulated
+poses only. Whether the speed-up near the edges feels natural, whether those angles suit your seating
+distance and camera height, and whether an edge-pinned pointer is easy to leave need a person to try
+it in practice mode. There is no setting to turn it off yet.
 
 The native cursor glide was tested only with a fake clock, a real thread writing to a
 mock, and a mocked input controller. It has not been run against `SetPhysicalCursorPos`

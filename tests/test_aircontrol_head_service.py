@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock,Mock
 from server.aircontrol.engine import GestureEngine
 from server.aircontrol.profiles import default_profile
 from server.aircontrol.service import AirControlService
-from test_aircontrol_head_actions import face
+from test_aircontrol_head_actions import face,aim
 
 
 class HeadServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -87,6 +87,6 @@ class HeadServiceTests(unittest.IsolatedAsyncioTestCase):
         self.service.state='active';self.service.owns_input=True;self.service.overlay=Mock()
         self.service.input.get_physical_cursor_pos.side_effect=lambda:self.service.last_point or (500,400)
         for seq,t in enumerate([1,2]):
-            frame=face(t,(x-.5)*36,(y-.5)*36);frame['seq']=seq;self.service.observe(frame,now=t)
+            frame=face(t,*aim(x,y));frame['seq']=seq;self.service.observe(frame,now=t)
         self.service.overlay.callback.assert_called_once_with('dwell_right')
         self.input.click.assert_not_called();self.input.mouse_down.assert_not_called()

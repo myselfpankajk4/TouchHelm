@@ -11,7 +11,7 @@ import tempfile
 import unittest
 from pathlib import Path
 from unittest.mock import patch
-from server.aircontrol.engine import GestureEngine
+from server.aircontrol.engine import GestureEngine,VERTICAL_GAIN
 from server.aircontrol.profiles import ProfileStore, default_profile
 
 SIZE=(1920,1080)
@@ -43,7 +43,7 @@ class HeadSteadinessTests(unittest.TestCase):
     def measure(self,fps,sigma=.3,**changes):
         runs=[held_pose(fps,seed,sigma,**changes) for seed in range(1,9)]
         span=changes.get('head_range',18)*2/changes.get('sensitivity',1.)
-        raw=sigma*math.sqrt(2)/span*SIZE[0]
+        raw=sigma*math.sqrt(1+VERTICAL_GAIN**2)/span*SIZE[0]
         return statistics.mean(r for r,_ in runs)/raw,max(p for _,p in runs)/raw
 
     def test_held_pose_is_far_steadier_than_the_raw_pose(self):
@@ -91,6 +91,65 @@ class HeadSteadinessTests(unittest.TestCase):
         profile=default_profile(mode='head')
         self.assertGreaterEqual(profile['head_stability'],8)
         self.assertLess(profile['head_stability'],profile['dwell_radius'])
+
+
+class HeadEdgeReachTests(unittest.TestCase):
+    """Screen edges, corners and the title-bar buttons must be reachable and holdable with less head travel."""
+    def point_at(self,yaw,pitch,fps=15,sigma=0.):
+        e=engine();rng=random.Random(3)
+        for i in range(fps*4):e.step(face(i/fps,yaw+rng.gauss(0,sigma),pitch+rng.gauss(0,sigma)))
+        return e.point[0],e.point[1]
+
+    def test_middle_of_the_screen_is_unchanged(self):
+        x,y=self.point_at(6.,0.)
+        self.assertAlmostEqual(x,.5+6/36,delta=.005)
+        self.assertAlmostEqual(y,.5,delta=.005)
+
+    def test_edges_are_reached_with_less_rotation_than_the_old_linear_mapping(self):
+        x,_=self.point_at(15.5,0.);_,y=self.point_at(0.,12.5)
+        self.assertGreaterEqual(x,.995);self.assertGreaterEqual(y,.995)
+        x,_=self.point_at(-15.5,0.);_,y=self.point_at(0.,-12.5)
+        self.assertLessEqual(x,.005);self.assertLessEqual(y,.005)
+
+    def test_corner_is_pinned_and_turning_further_changes_nothing(self):
+        for yaw,pitch in ((15.5,12.5),(25.,20.),(40.,35.)):
+            x,y=self.point_at(yaw,pitch);self.assertGreaterEqual(x,.999);self.assertGreaterEqual(y,.999)
+
+    def test_mapping_is_continuous_monotonic_and_never_more_than_double_speed(self):
+        engine_=engine();step=.002;previous=None
+        for axis in (0,1):
+            previous=None
+            for i in range(-300,301):
+                mapped,gain=engine_._reach(i*step,axis)
+                self.assertLessEqual(abs(mapped),.5)
+                if previous is not None:
+                    self.assertGreaterEqual(mapped,previous[0]-1e-9,'monotonic')
+                    self.assertLessEqual(abs(gain-previous[1]),.02,'gain has no jumps')
+                    slope=(mapped-previous[0])/step
+                    self.assertLessEqual(slope,(2.+.01)*(1.25 if axis else 1.),'speed is bounded')
+                previous=(mapped,gain)
+
+    def test_holding_near_an_edge_is_as_steady_as_holding_in_the_middle(self):
+        for fps in (10,15):
+            for yaw,pitch in ((12.,0.),(14.,0.),(0.,10.),(14.,11.5),(20.,20.)):
+                runs=[]
+                for seed in range(1,5):
+                    e=engine();rng=random.Random(seed);points=[]
+                    for i in range(fps*12):
+                        t=i/fps;e.step(face(t,yaw+rng.gauss(0,.3),pitch+rng.gauss(0,.3)))
+                        if t>=3:points.append((e.point[0]*SIZE[0],e.point[1]*SIZE[1]))
+                    cx=statistics.mean(q[0] for q in points);cy=statistics.mean(q[1] for q in points)
+                    distances=[math.hypot(q[0]-cx,q[1]-cy) for q in points]
+                    runs.append((math.sqrt(statistics.mean(d*d for d in distances)),max(distances)))
+                self.assertLess(statistics.mean(r for r,_ in runs),4.,f'{fps} fps {yaw},{pitch} rms')
+                self.assertLess(max(p for _,p in runs),22.,f'{fps} fps {yaw},{pitch} peak')
+
+    def test_deliberate_move_toward_an_edge_is_still_quick(self):
+        fps=15;e=engine()
+        for i in range(fps*2):e.step(face(i/fps,10.,0.))
+        start=e.point[0]
+        for i in range(1,int(fps*.25)+1):e.step(face(2+i/fps,15.,0.))
+        self.assertGreaterEqual((e.point[0]-start)/(1.-start),.85)
 
 
 def glitchy_pose(fps,seed,sigma,spike,seconds=14):
