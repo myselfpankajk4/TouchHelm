@@ -170,9 +170,15 @@ class AirControlService:
                             if self.release:await self.release()
                             if self.overlay:self.overlay.hide()
                     self.engine.reset(consume_dwell=True);self.practice.start(name,time.monotonic())
+                    if self.profile['mode']=='head':
+                        if name=='drag':self.engine.select_dwell('drag')
+                        elif name=='scroll':self.engine.set_head_scroll(True)
                 elif self.state!='practicing':raise ValueError('Return to practice before changing the exercise.')
                 elif action=='practice_reset':
                     self.engine.reset(consume_dwell=True);self.practice.start(self.practice.name,time.monotonic())
+                    if self.profile['mode']=='head':
+                        if self.practice.name=='drag':self.engine.select_dwell('drag')
+                        elif self.practice.name=='scroll':self.engine.set_head_scroll(True)
                 elif action=='practice_pause':
                     self.engine.reset(consume_dwell=True);self.practice.interrupt(time.monotonic())
                 else:self.practice.resume(time.monotonic())

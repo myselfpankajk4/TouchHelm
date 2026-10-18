@@ -35,6 +35,15 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
         await s.command('practice_pause');self.assertEqual(s.snapshot()['practice']['status'],'paused')
         await s.command('practice_resume');self.assertEqual(s.snapshot()['practice']['status'],'running')
 
+    async def test_head_exercises_select_the_required_simulated_action(self):
+        s=self.service;s.worker=self.worker;s.calibrated=True;s.state='practicing'
+        s.profile=default_profile(mode='head');s.engine=GestureEngine(s.profile)
+        await s.command('practice_start',{'name':'drag'})
+        self.assertEqual(s.engine.dwell_action,'drag')
+        await s.command('practice_start',{'name':'scroll'})
+        self.assertTrue(s.engine.head_scroll)
+        self.input.scroll.assert_not_called();self.acquire.assert_not_awaited()
+
     async def test_readiness_is_local_and_explains_camera_off(self):
         self.service.worker=None
         result=self.service.activation_readiness(now=10.)

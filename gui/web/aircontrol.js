@@ -2,6 +2,7 @@
 (() => {
   'use strict';
   const $=id=>document.getElementById(id),desktop=window.TouchHelmDesktop;
+  const setText=(id,value)=>{if($(id).textContent!==String(value))$(id).textContent=value;};
   if(!desktop)return;
   const labels={none:'No action',left_drag:'Left press / drag',left_click:'Left click',right_click:'Right click',double_click:'Double click',scroll:'Scroll',pause:'Pause',resume:'Resume',dictate:'Windows dictation',recenter:'Recenter',play_pause:'Play / pause',next_track:'Next track',previous_track:'Previous track',next_slide:'Next slide',previous_slide:'Previous slide',copy:'Copy',paste:'Paste',undo:'Undo',switch_app:'Switch app',keyboard:'Windows keyboard'};
   const gestures={pinch_index:'Thumb + index pinch',pinch_middle:'Thumb + middle pinch',two_fingers:'Two fingers',closed_fist:'Closed fist',open_palm:'Open palm',thumb_up:'Thumbs up',thumb_down:'Thumbs down',smile:'Deliberate smile',wink_left:'Left wink',wink_right:'Right wink',brows_up:'Raised eyebrows'};
@@ -28,7 +29,7 @@
     constructor(){
       this.profile=defaults();this.state={state:'setup_required',camera_active:false,owns_input:false,profile:this.profile,setup:{state:'setup_required',ready:false,message:'Prepare the isolated camera runtime. Your phone controls keep working.'},voice:{message:'Select a PC text field, then use Dictate.'}};
       this.dirty=false;this.busy=false;this.frameBusy=false;this.cameras=[];this.guidePinned=false;this.lastPreview='';this.lastSeq=-1;this.error='';
-      $('airStage').before($('airCalibrationControls'));
+      this.mountWorkspace();
       $('airEnable').before($('airStart'));
       this.mappingRows();this.loadProfile(this.profile);this.bind();this.guide(this.profile.mode==='hand'?'point':'head');
       if(desktop.state?.aircontrol)this.render(desktop.state.aircontrol);else this.render(this.state);
@@ -39,6 +40,53 @@
       });
       this.frameTimer=setInterval(()=>this.pollFrame(),100);
       document.body.classList.add('air-panel-hidden');
+    }
+    mountWorkspace(){
+      const panel=document.querySelector('[data-page=aircontrol]'),coach=$('airCoach'),workspace=panel.querySelector('.air-workspace');
+      const progress=document.createElement('div');progress.className='air-progress-row';$('airWorkflow').before(progress);progress.append($('airWorkflow'),$('airSetupSummary'));
+      panel.querySelector('.air-heading>div').append($('airModeSummary'));
+      panel.dataset.airCurrentTab='controls';this.currentTab='controls';this.viewportRevision=0;
+      workspace.before(panel.querySelector('.air-tabs'));
+      coach.prepend($('airCalibrationControls'));
+      const guide=document.createElement('details');guide.id='airGuideDisclosure';
+      const summary=document.createElement('summary');summary.textContent='Gesture help';guide.append(summary);
+      for(const id of ['airGuideTitle','airGuideArt','airGuideDescription'])guide.append($(id));
+      guide.append($('airGuideSelect').parentElement);coach.append(guide);
+      coach.insertBefore($('airHeadActions'),guide);
+      const scroll=document.createElement('div');scroll.className='air-scroll-controls';
+      scroll.innerHTML='<button id="airScroll" class="secondary-button">Scroll</button><button id="airScrollUp" class="secondary-button" hidden>Scroll up</button><button id="airScrollDown" class="secondary-button" hidden>Scroll down</button><button id="airScrollDone" class="secondary-button" hidden>Return to pointer</button>';
+      $('airHeadActions').append(scroll);
+      const exercises=document.createElement('div');exercises.id='airExerciseControls';exercises.className='air-exercise-controls';
+      exercises.innerHTML='<h2>Practice a task</h2><label for="airExercise">Exercise</label><select id="airExercise"><option value="click">Click three targets</option><option value="drag">Drag to a destination</option><option value="scroll">Scroll to a marker</option><option value="free">Free practice</option></select><button id="airExerciseStart" class="secondary-button">Start exercise</button><div class="button-row"><button id="airExerciseReset" class="quiet-button">Reset exercise</button><button id="airExercisePause" class="quiet-button">Pause exercise</button></div><p id="airExerciseResult" role="status"></p><span id="airExerciseTime" class="muted" aria-live="off"></span>';
+      coach.insertBefore(exercises,$('airHeadActions'));
+      $('airStage').append($('airPracticeScreen'));
+      const settings=panel.querySelector('[data-air-content=settings]');settings.prepend(panel.querySelector('.air-expression-setup'));
+      const setup=document.createElement('details');setup.id='airSetupChoices';setup.open=true;
+      setup.innerHTML='<summary>Camera, monitor and control mode</summary>';
+      setup.append(panel.querySelector('.air-mode-row'),panel.querySelector('.air-selectors'),$('airCameraMessage'));
+      workspace.after(setup);panel.querySelector('[data-air-content=controls]').append($('airSetup'));
+      panel.querySelector('.air-session-actions').append($('airInstall'),$('airCancelInstall'));
+      for(const tab of panel.querySelectorAll('[data-air-tab]')){
+        tab.id='air-tab-'+tab.dataset.airTab;tab.setAttribute('aria-controls','air-panel-'+tab.dataset.airTab);
+        const content=panel.querySelector(`[data-air-content=${tab.dataset.airTab}]`);
+        content.id='air-panel-'+tab.dataset.airTab;content.setAttribute('aria-labelledby',tab.id);content.tabIndex=0;
+      }
+      this.viewportObserver=new ResizeObserver(()=>this.queueViewport());this.viewportObserver.observe($('airStage'));
+    }
+    queueViewport(){
+      if(this.viewportQueued)return;this.viewportQueued=true;
+      requestAnimationFrame(async()=>{
+        this.viewportQueued=false;const r=$('airStage').getBoundingClientRect();
+        const width=Math.round(r.width),height=Math.round(r.height);
+        if(width<160||height<160||width>8192||height>8192)return;
+        const key=width+'x'+height;if(key===this.viewportKey)return;
+        this.viewportKey=key;this.lastViewport={width,height};const revision=++this.viewportRevision;
+        this.viewportPending=revision;
+        try{
+          if(!desktop.preview){const result=await desktop.invoke('aircontrol','practice_viewport',{width,height,revision});if(!result.success)throw Error(result.error);if(revision===this.viewportRevision){this.viewportPending=0;if(result.aircontrol)this.render(result.aircontrol);}}
+          else if(revision===this.viewportRevision){this.viewportPending=0;this.renderPractice(this.state);}
+        }catch(error){this.viewportKey='';this.error='Practice area could not update: '+error.message;setText('airMessage',this.error);}
+      });
     }
     mappingRows(){
       const rows=Object.entries(gestures).map(([key,name])=>{
@@ -78,6 +126,11 @@
       $('airEnable').addEventListener('click',()=>this.call('enable'));
       for(const button of document.querySelectorAll('[data-air-dwell]'))button.addEventListener('click',()=>this.call('dwell_'+button.dataset.airDwell));
       $('airReleaseDrag').addEventListener('click',()=>this.call('release_drag'));
+      $('airChangeSetup').addEventListener('click',async()=>{if(this.state.camera_active&&!await this.call('stop'))return;$('airSetupChoices').open=true;$('airSetupChoices').scrollIntoView({block:'nearest'});});
+      for(const [id,action]of [['airScroll','head_scroll'],['airScrollUp','scroll_up'],['airScrollDown','scroll_down'],['airScrollDone','scroll_done']])$(id).addEventListener('click',()=>this.call(action));
+      $('airExerciseStart').addEventListener('click',async()=>{if(this.viewportPending)return;if(await this.call('practice_start',{name:$('airExercise').value}))this.tab('practice');});
+      $('airExerciseReset').addEventListener('click',()=>this.call('practice_reset'));
+      $('airExercisePause').addEventListener('click',()=>this.call(this.state.practice?.status==='paused'?'practice_resume':'practice_pause'));
       $('airPractice').addEventListener('click',()=>this.tab('practice'));
       $('airReturnPractice').addEventListener('click',()=>this.call('practice'));
       $('airExpressionNeutral').addEventListener('click',()=>this.call('expression_sample',{phase:'neutral'}));
@@ -88,7 +141,7 @@
       for(const button of document.querySelectorAll('[data-air-mode]'))button.addEventListener('click',async()=>{
         if(this.busy)return;const mode=button.dataset.airMode;
         this.profile.mode=mode;this.dirty=true;this.loadMode(mode);this.guide(mode==='hand'?'point':'head');
-        if(this.state.camera_active)await this.start();
+        this.render(this.state);
       });
       for(const button of document.querySelectorAll('[data-air-tab]')){
         button.addEventListener('click',()=>this.tab(button.dataset.airTab));
@@ -141,11 +194,11 @@
     }
     async save(){
       try{const profile=this.capture();this.validate(profile);$('airMappingError').hidden=true;await this.call('save',{profile});}
-      catch(error){this.error=error.message;$('airMappingError').textContent=error.message;$('airMappingError').hidden=false;$('airMessage').textContent=error.message;}
+      catch(error){this.error=error.message;$('airMappingError').textContent=error.message;$('airMappingError').hidden=false;setText('airMessage',error.message);}
     }
     async start(){
       try{const profile=this.capture();this.validate(profile);if(await this.call('start',{profile})){this.profile=profile;this.dirty=false;this.tab('controls');}}
-      catch(error){this.error=error.message;$('airMessage').textContent=error.message;}
+      catch(error){this.error=error.message;setText('airMessage',error.message);}
     }
     async call(action,data){
       if(this.busy)return false;this.error='';this.busy=true;this.render(this.state);
@@ -162,12 +215,18 @@
           if(action==='enable'){this.tab('controls');document.querySelector('.desktop-content').scrollTop=0;}
         }
         return true;
-      }catch(error){this.error=error.message;$('airMessage').textContent=error.message;return false;}
+      }catch(error){this.error=error.message;setText('airMessage',error.message);return false;}
       finally{this.busy=false;this.render(this.state);}
     }
     tab(name){
       for(const node of document.querySelectorAll('[data-air-tab]')){const active=node.dataset.airTab===name;node.setAttribute('aria-selected',String(active));node.tabIndex=active?0:-1;}
       for(const node of document.querySelectorAll('[data-air-content]'))node.hidden=node.dataset.airContent!==name;
+      this.currentTab=name;document.querySelector('[data-page=aircontrol]').dataset.airCurrentTab=name;
+      this.renderPractice(this.state);
+      $('airPracticeScreen').hidden=name!=='practice';$('airExerciseControls').hidden=name!=='practice';
+      if(['settings','mappings','diagnostics'].includes(name))document.querySelector(`[data-air-content=${name}]`).scrollIntoView({block:'start'});
+      else document.querySelector('.desktop-content').scrollTop=0;
+      this.queueViewport();
     }
     guide(name){const value=guides[name]||guides.point;$('airGuideTitle').textContent=value[0];$('airGuideDescription').textContent=value[1];$('airGuideArt').dataset.gesture=guides[name]?name:'point';$('airGuideSelect').value=guides[name]?name:'point';}
     nextTarget(){
@@ -190,25 +249,36 @@
     }
     render(state){
       this.state=state||this.state;const s=this.state,setup=s.setup||{},active=!!s.camera_active;
+      const view=window.TouchHelmAirView.derive(s,this.profile);this.view=view;
       if(s.profile&&!this.dirty)this.loadProfile(s.profile);
-      $('airState').textContent=s.state==='practicing'?'Practice · PC input off':s.state==='active'?'PC control on':String(s.state||'setup_required').replaceAll('_',' ').replace(/^./,c=>c.toUpperCase());$('airState').dataset.state=s.state;
+      setText('airState',s.state==='practicing'?'Practice · PC input off':s.state==='active'?'PC control on':String(s.state||'setup_required').replaceAll('_',' ').replace(/^./,c=>c.toUpperCase()));$('airState').dataset.state=s.state;
       const practiceMessage=s.practice_ready?'Practice click recognized. Choose Enable PC control above to move the Windows cursor.':'Practice only: move the simulated cursor below and test a click. Your Windows cursor stays still until you enable PC control.';
-      $('airMessage').textContent=this.error||s.message||(s.state==='practicing'?practiceMessage:'Choose Start camera for calibration and practice.');
+      setText('airMessage',this.error||s.message||(s.state==='practicing'?practiceMessage:'Choose Start camera for calibration and practice.'));
+      $('airReadiness').textContent=view.instruction;$('airModeSummary').textContent=view.modeSummary;
+      $('airSetupChoices').hidden=active;$('airChangeSetup').hidden=!active;
+      $('airWorkflow').hidden=s.owns_input;
+      const steps=['camera','calibrate','practice','enable'];
+      for(const item of document.querySelectorAll('[data-air-step]')){
+        const current=item.dataset.airStep===view.step;item.toggleAttribute('data-current',current);
+        if(current)item.setAttribute('aria-current','step');else item.removeAttribute('aria-current');
+        item.dataset.complete=String(steps.indexOf(item.dataset.airStep)<steps.indexOf(view.step));
+      }
       $('homeAirStatus').textContent=active?'AirControl camera is running. Selecting Phone stops it; Switch mode alone leaves the session intact.':'The camera stays off until you choose Start camera.';
       $('airSetup').hidden=!!setup.ready;$('airSetupMessage').textContent=setup.message||'Prepare the isolated camera runtime.';
       const installing=setup.state==='installing';$('airSetupProgress').hidden=!installing;
       if(Number.isFinite(setup.progress))$('airSetupProgress').value=setup.progress;else $('airSetupProgress').removeAttribute('value');
       $('airInstall').disabled=this.busy||installing;$('airCancelInstall').hidden=!installing;
+      $('airInstall').hidden=!!setup.ready;
       $('airPause').disabled=this.busy||!s.owns_input;$('airPause').textContent=s.state==='active'?'Pause':'Resume';
       $('airPause').hidden=!s.owns_input;
       $('airStop').disabled=this.busy||!active;$('airStart').disabled=this.busy||!setup.ready||!this.cameras.length||active;
-      $('airStart').hidden=active;$('airStop').hidden=!active;
+      $('airStart').hidden=active||!setup.ready;$('airStop').hidden=!active;
       $('airStart').textContent=active?'Camera running':'Start camera';$('airCamera').disabled=active;$('airRefreshCameras').disabled=active;
       $('airMonitor').disabled=active;$('airRecenter').disabled=this.busy||!active;
       $('airCaptureTarget').disabled=this.busy||!active||s.calibrated||!['calibrating','practicing'].includes(s.state)||!(s.calibration_ready??s.tracking);
       $('airRestartCalibration').disabled=this.busy||!active;$('airPractice').disabled=!s.calibrated;
-      $('airEnable').disabled=this.busy||!active||!s.practice_ready||!s.calibrated||s.owns_input;
-      $('airEnable').hidden=!active||!!s.owns_input;
+      $('airEnable').disabled=this.busy||!active||!(s.activation?.ready??s.practice_ready)||!s.calibrated||s.owns_input;
+      $('airEnable').hidden=!active||!!s.owns_input||!s.calibrated;
       $('airReturnPractice').disabled=this.busy||!active||!s.calibrated;
       $('airCameraBadge').textContent=!active?'Camera off':s.state==='practicing'?'Practice cursor only':s.state==='active'?'Windows control on':s.owns_input?'PC input paused':'Calibration · PC input off';
       $('airCameraEmpty').hidden=active&&!!this.lastPreview;
@@ -253,16 +323,19 @@
       $('airPracticePointer').style.setProperty('--dwell-progress',Math.round((s.progress||0)*360)+'deg');
       const head=s.profile?.mode==='head',selection=s.dwell_action||'left_click';
       $('airHeadActions').hidden=!head||!active||!s.calibrated;
+      $('airScroll').hidden=!!s.head_scroll;
+      for(const id of ['airScrollUp','airScrollDown','airScrollDone'])$(id).hidden=!s.head_scroll;
+      for(const id of ['airScroll','airScrollUp','airScrollDown','airScrollDone'])$(id).disabled=this.busy||!['active','practicing'].includes(s.state);
       for(const button of document.querySelectorAll('[data-air-dwell]')){
         const action={left:'left_click',double:'double_click',right:'right_click',drag:'drag'}[button.dataset.airDwell];
         button.setAttribute('aria-pressed',String(action===selection));button.disabled=this.busy||!['active','practicing'].includes(s.state);
       }
-      $('airReleaseDrag').disabled=this.busy||!s.dragging;
+      $('airReleaseDrag').disabled=this.busy||!s.dragging;$('airReleaseDrag').hidden=!s.dragging;
       $('airDwellStatus').textContent=s.dragging?'Drag held. Move to the destination, then settle to drop. Release drag also lets go immediately.':selection==='drag'?'Drag: settle to hold, move to the destination, then settle to drop.':
         'Settle to '+(labels[selection]||'Left click').toLowerCase()+'. Move away before clicking again. Right and double-click return to Left click.';
       $('airDwellProgress').value=Math.max(0,Math.min(1,s.progress||0));
       $('airDwellProgress').setAttribute('aria-valuetext',Math.round((s.progress||0)*100)+'% of dwell hold');
-      $('airPracticeAction').textContent=s.actions?.[0]||labels[s.action]||'Waiting for your first move';
+      setText('airPracticeAction',s.actions?.[0]||labels[s.action]||'Waiting for your first move');
       const expression=s.expression_practice||{};
       if(s.profile?.calibrated_expressions){this.profile.calibrated_expressions=[...s.profile.calibrated_expressions];this.profile.expressions_calibrated=!!s.profile.expressions_calibrated;this.profile.expression_thresholds=structuredClone(s.profile.expression_thresholds||{});}
       const selected=$('airExpressionSelect').value,limits=s.profile?.expression_thresholds?.[selected];
@@ -274,17 +347,45 @@
         const value=expression.values?.[meter.dataset.airExpression];meter.value=Number.isFinite(value)?value:0;
         meter.setAttribute('aria-valuetext',Number.isFinite(value)?Math.round(value*100)+'% activation':'Unavailable');
       }
-      $('airExpressionResult').textContent=this.error||(!faceReady?'Use Head & Face or Combined practice with your face clearly tracked.':
+      setText('airExpressionResult',this.error||(!faceReady?'Use Head & Face or Combined practice with your face clearly tracked.':
         limits?'Personal threshold '+Math.round(limits.on*100)+'% activation. Test '+gestures[selected]+' in practice before enabling PC control.':
-        expression.measured_neutral?'Relaxed face captured. Hold '+gestures[selected]+' for one second, then Capture expression.':'Hold a relaxed face for one second, then capture it.');
+        expression.measured_neutral?'Relaxed face captured. Hold '+gestures[selected]+' for one second, then Capture expression.':'Hold a relaxed face for one second, then capture it.'));
       const metrics=s.metrics||{};$('airMetrics').textContent=`Tracked updates: ${metrics.fps??'unknown'} fps · median frame-to-input latency: ${metrics.median_latency_ms??'unknown'} ms · inference: ${metrics.inference_ms??'unknown'} ms · frame age: ${metrics.frame_age_ms??'unknown'} ms · captured: ${metrics.capture_fps??'unknown'} fps · rejected stale/invalid observations: ${metrics.rejected_observations??0} · worker CPU: ${metrics.cpu_percent??'unknown'}% of total PC · worker memory: ${metrics.memory_mb??'unknown'} MB. These are measurements, not guaranteed performance.`;
       window.TouchHelmThemes?.setInteractionActive?.(active);
+      this.renderPractice(s);
       if(!active){this.lastPreview='';$('airPreview').hidden=true;$('airPreview').removeAttribute('src');$('airLandmarks').getContext('2d').clearRect(0,0,640,480);}
+    }
+    renderPractice(s){
+      const p=s.practice||{name:'free',status:'idle',targets:[]},key=JSON.stringify([p.name,p.targets,p.target_index]);
+      $('airHeadActions').hidden=s.profile?.mode!=='head'||!s.camera_active||!s.calibrated||(this.currentTab==='practice'&&p.name!=='free');
+      if(key!==this.targetKey){
+        this.targetKey=key;$('airTaskTargets').replaceChildren();
+        for(const [i,t]of (p.targets||[]).entries()){
+          const target=document.createElement('div');target.className='air-task-target'+(i===(p.name==='drag'?0:p.target_index)?' is-current':'');
+          target.style.cssText=`left:${t.x*100}%;top:${t.y*100}%;width:${t.width*100}%;height:${t.height*100}%;`;
+          target.textContent=p.name==='drag'?(i?'Drop here':'Hold here'):String(i+1);$('airTaskTargets').append(target);
+        }
+      }
+      $('airPracticeScreen').hidden=this.currentTab!=='practice';$('airExerciseControls').hidden=this.currentTab!=='practice';
+      $('airPracticeDocument').hidden=p.name!=='scroll';$('airPracticeDocument').style.setProperty('--document-position',p.document_position||0);
+      $('airTaskPrompt').textContent=p.status==='complete'?'Exercise complete. Reset to try again.':p.status==='paused'?'Exercise paused. Resume when ready.':p.name==='click'?'Settle on the highlighted target, then click.':p.name==='drag'?'Hold the source, move to the destination, then release.':p.name==='scroll'?'Scroll down until you reach the destination.':'Move freely. Settle to click, or use a pinch.';
+      setText('airExerciseResult',p.name==='free'?'Free practice. Windows input stays off until Enable.':`${p.successes||0} completed, ${p.misses||0} missed. ${p.status==='complete'?'Exercise complete.':''}`);
+      $('airExerciseTime').textContent=p.name==='free'?'':'Elapsed '+Math.round((p.elapsed_ms||0)/1000)+' seconds';
+      $('airExerciseStart').disabled=this.busy||!s.camera_active||!s.calibrated||!!this.viewportPending;
+      $('airExerciseReset').disabled=this.busy||s.state!=='practicing'||p.name==='free';
+      $('airExercisePause').disabled=this.busy||s.state!=='practicing'||!['running','paused'].includes(p.status);
+      $('airExercisePause').textContent=p.status==='paused'?'Resume exercise':'Pause exercise';
+      const regions=s.scroll_regions||[],dockKey=JSON.stringify(regions);
+      if(dockKey!==this.dockKey){this.dockKey=dockKey;$('airPracticeDock').replaceChildren();for(const r of regions){
+        const button=document.createElement('button');button.type='button';button.textContent=r.label;button.dataset.action=r.action;
+        button.style.cssText=`left:${r.rect[0]*100}%;top:${r.rect[1]*100}%;width:${(r.rect[2]-r.rect[0])*100}%;height:${(r.rect[3]-r.rect[1])*100}%;`;
+        button.addEventListener('click',()=>this.call(r.action==='pause'?'practice_pause':r.action));$('airPracticeDock').append(button);
+      }}
     }
     async pollFrame(){
       if(this.frameBusy||document.hidden||!this.state.camera_active||document.querySelector('[data-page=aircontrol]').hidden||desktop.preview)return;
       this.frameBusy=true;
-      try{const state=await desktop.invoke('get_aircontrol_frame');this.render(state);this.draw(state);}catch(error){$('airMessage').textContent='Camera preview unavailable: '+error.message;}
+      try{const state=await desktop.invoke('get_aircontrol_frame');this.render(state);this.draw(state);}catch(error){setText('airMessage','Camera preview unavailable: '+error.message);}
       finally{this.frameBusy=false;}
     }
     draw(state){
@@ -317,6 +418,18 @@
       }
       else if(action==='expression_bind')this.state.profile.bindings[data.gesture]=data.action;
       else if(action==='practice')this.setPreview('practicing');
+      else if(action==='head_scroll'){this.state.head_scroll=true;this.state.scroll_regions=[];}
+      else if(action==='scroll_done'){this.state.head_scroll=false;this.state.scroll_regions=[];}
+      else if(action==='practice_start'){
+        this.setPreview('practicing');const name=data.name;
+        const w=64/(this.lastViewport?.width||640),h=64/(this.lastViewport?.height||480),centers=name==='click'?[[.25,.5],[.75,.5],[.5,.25]]:name==='drag'?[[.25,.5],[.75,.5]]:[];
+        this.state.practice={name,status:name==='free'?'idle':'running',targets:centers.map(([x,y])=>({x:x-w/2,y:y-h/2,width:w,height:h})),target_index:0,successes:0,misses:0,elapsed_ms:0,document_position:0};
+        if(this.profile.mode==='head'&&name==='drag')this.state.dwell_action='drag';
+        if(this.profile.mode==='head'&&name==='scroll')this.state.head_scroll=true;
+      }
+      else if(action==='practice_pause')this.state.practice={...this.state.practice,status:'paused'};
+      else if(action==='practice_resume')this.state.practice={...this.state.practice,status:'running'};
+      else if(action==='practice_reset')return this.previewAction('practice_start',{name:this.state.practice?.name||'click'});
       else if(action.startsWith('dwell_')){this.state.dwell_action=action==='dwell_drag'&&this.state.dragging?'left_click':{left:'left_click',double:'double_click',right:'right_click',drag:'drag'}[action.slice(6)];this.state.dragging=false;}
       else if(action==='release_drag'){this.state.dragging=false;this.state.dwell_action='left_click';}
       else if(action==='save'){this.profile=data.profile;this.setPreview('ready');}

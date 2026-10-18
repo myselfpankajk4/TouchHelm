@@ -33,3 +33,90 @@
 @media(max-width:700px){.air-heading{top:-20px}}
 .air-dwell-buttons button:not(:disabled):not([aria-pressed=true]):hover{background:var(--th-hover,var(--th-panel))}
 .air-head-actions{padding:16px 0 18px;border-bottom:1px solid var(--th-border);margin-bottom:18px}.air-head-actions[hidden]{display:none}.air-dwell-heading{display:flex;align-items:baseline;gap:12px;flex-wrap:wrap;font-size:13px;margin-bottom:12px}.air-dwell-heading span{font-size:12px}.air-dwell-buttons{display:flex;gap:8px;flex-wrap:wrap}.air-dwell-buttons button{min-height:44px;display:inline-flex;align-items:center;justify-content:center;gap:8px;padding:10px 14px;background:var(--th-surface);color:var(--th-text);border:1px solid var(--th-border);border-radius:var(--th-key-radius,8px);font:inherit;font-size:13px;cursor:pointer}.air-dwell-buttons button[aria-pressed=true]{background:var(--th-accent);color:var(--th-on-accent);border-color:var(--th-accent);font-weight:650}.air-dwell-buttons button:disabled{opacity:.5;cursor:default}.air-dwell-buttons svg{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}.air-dwell-feedback{display:flex;gap:14px;align-items:center;margin-top:12px}.air-dwell-feedback progress{width:96px;height:8px;flex-shrink:0;accent-color:var(--th-accent)}.air-dwell-feedback p{font-size:12px;line-height:1.5;margin:0;color:var(--th-muted)}.air-practice-pointer{width:30px;height:30px;border:0;background:conic-gradient(var(--th-accent) var(--dwell-progress,0deg),var(--th-border) 0);box-shadow:none}.air-practice-pointer:after{content:'';position:absolute;inset:4px;border-radius:50%;background:var(--th-panel);border:1px solid var(--th-text)}.air-practice-pointer[data-dragging=true]{outline:3px solid var(--th-accent);outline-offset:3px}@media(max-width:650px){.air-dwell-buttons{display:grid;grid-template-columns:1fr 1fr}.air-dwell-buttons button:last-child{grid-column:1/-1}.air-dwell-feedback{align-items:start;flex-direction:column;gap:8px}}
+/* Daily workspace: the movement area leads; controls describe the current task. */
+body:not(.air-panel-hidden) .desktop-nav{width:160px;padding:16px 8px}
+body:not(.air-panel-hidden) .desktop-nav button{gap:8px;padding:10px;font-size:13px}
+body:not(.air-panel-hidden) .desktop-content{padding:12px 20px 28px}
+.air-panel .air-heading{top:-12px;padding:8px 0;margin:0 0 8px;min-height:60px;flex-wrap:nowrap}
+.air-panel .air-heading h1{font-size:28px;letter-spacing:-.03em}
+.air-panel .air-session-actions{gap:6px;justify-content:flex-end}
+.air-panel .air-state{max-width:135px;font-size:12px}
+.air-panel #airMessage{font-size:13px;line-height:1.5;margin:0 0 8px;max-width:75ch}
+.air-workflow{display:flex;list-style:none;padding:0;margin:0 0 8px;gap:0;max-width:480px}
+.air-workflow li{flex:1;min-width:0;border-bottom:2px solid var(--th-border);padding:4px 8px 6px 0;font-size:12px;color:var(--th-muted)}
+.air-workflow li[data-current]{border-color:var(--th-accent);color:var(--th-text);font-weight:650}
+.air-workflow li[data-complete=true]{border-color:var(--th-accent)}
+.air-readiness{margin:0 0 4px;font-size:12px;color:var(--th-muted);max-width:75ch}
+.air-setup-summary{display:flex;align-items:center;justify-content:space-between;gap:12px;font-size:12px;color:var(--th-muted)}
+.air-setup-summary .quiet-button{min-height:44px;padding:8px}
+.air-panel .air-tabs{position:sticky;top:48px;z-index:5;background:var(--th-bg);margin:0 0 12px;gap:0;scrollbar-width:thin}
+.air-panel .air-tabs button{padding:8px 12px;min-height:44px;font-size:13px}
+.air-panel .air-workspace{grid-template-columns:minmax(0,1fr) 228px;gap:16px;align-items:start}
+.air-panel .air-stage{min-height:240px;border-radius:var(--th-radius,12px);aspect-ratio:4/3}
+.air-panel .air-coach{display:flex;flex-direction:column;gap:12px;padding:0 0 0 16px;margin:0;border:0;border-left:1px solid var(--th-border);border-radius:0;box-shadow:none;background:transparent;min-width:0}
+.air-panel .air-coach-top{font-size:12px;margin:0;gap:8px;align-items:start}
+.air-panel .air-coach-top span:first-child{flex:1}
+.air-panel .air-coach #airDetected{margin:0;font-size:12px;line-height:1.5}
+.air-panel .air-hold-track{margin:0;height:4px}
+.air-panel .air-head-actions{padding:0;margin:0;border:0}
+.air-panel .air-dwell-heading{margin:0 0 8px}
+.air-panel .air-dwell-heading .muted{display:none}
+.air-panel .air-dwell-buttons{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.air-panel .air-dwell-buttons button{font-size:12px;padding:8px;min-height:44px}
+.air-panel .air-dwell-buttons button:last-child{grid-column:1/-1}
+.air-panel .air-dwell-feedback{align-items:start;flex-direction:column;gap:8px;margin-top:10px}
+.air-panel .air-dwell-feedback progress{width:100%}
+.air-scroll-controls{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.air-scroll-controls button{flex:1 1 85px;font-size:12px}
+.air-panel .air-calibration-controls{display:flex;flex-direction:column;align-items:stretch;padding:0 0 12px;margin:0}
+.air-panel .air-calibration-controls p{font-size:13px;line-height:1.5}
+.air-panel .air-calibration-controls button{margin:0}
+#airGuideDisclosure{border-top:1px solid var(--th-border);padding-top:4px}
+#airGuideDisclosure summary{display:flex;align-items:center;font-size:13px;font-weight:600;cursor:pointer;min-height:44px}
+#airGuideDisclosure h2{font-size:16px;margin:8px 0}
+#airGuideDisclosure .air-guide-art{width:100%;height:100px;margin:8px 0}
+#airGuideDisclosure p{font-size:13px;line-height:1.5;margin:8px 0}
+#airGuideDisclosure label{font-size:12px;display:grid;gap:6px}
+#airSetupChoices{border-bottom:1px solid var(--th-border);margin:12px 0 16px;padding:0 0 8px}
+#airSetupChoices summary{display:flex;align-items:center;min-height:44px;font-size:13px;cursor:pointer;font-weight:600}
+#airSetupChoices .air-mode-row{margin:8px 0 16px}
+.air-panel .air-section{margin-top:16px;scroll-margin-top:116px}
+.air-panel .air-onboarding{gap:16px}
+.air-panel .air-onboarding .air-step-number{display:none}
+.air-panel .air-onboarding h2{font-size:16px}
+.air-panel .air-expression-setup{margin:0 0 24px;padding:0 0 20px;border-top:0;border-bottom:1px solid var(--th-border)}
+.air-panel .air-practice-screen{position:absolute;inset:0;min-height:0;max-height:none;margin:0;border:0;border-radius:inherit;background:var(--th-surface);overflow:hidden;z-index:3}
+.air-panel .air-practice-pointer{position:absolute;z-index:5;pointer-events:none}
+.air-panel .air-practice-result{position:absolute;left:12px;bottom:8px;max-width:calc(100% - 24px);z-index:4;font-size:12px;color:var(--th-text);background:var(--th-panel);padding:6px 8px;border-radius:4px}
+.air-task-target{position:absolute;display:grid;place-items:center;border:2px solid var(--th-border);border-radius:var(--th-key-radius,8px);color:var(--th-muted);font-size:14px;font-weight:650;min-width:64px;min-height:64px}
+.air-task-target.is-current{border-color:var(--th-accent);color:var(--th-on-accent);background:var(--th-accent)}
+.air-task-prompt{position:absolute;left:16px;right:16px;top:12px;margin:0;font-size:13px;line-height:1.5;color:var(--th-text)}
+.air-exercise-controls{display:grid;gap:8px;padding-bottom:12px;border-bottom:1px solid var(--th-border)}
+.air-exercise-controls h2{font-size:16px;margin:0 0 4px}
+.air-exercise-controls label{font-size:12px}
+.air-exercise-controls .button-row{gap:4px;margin:0}
+.air-exercise-controls .button-row button{flex:1;padding:8px 4px;font-size:12px}
+#airExerciseResult{font-size:12px;line-height:1.5;margin:0;color:var(--th-muted)}
+.air-practice-dock{position:absolute;inset:0;pointer-events:none;z-index:6}
+.air-practice-dock button{position:absolute;pointer-events:auto;min-width:44px;min-height:44px;border:1px solid var(--th-border);border-radius:var(--th-key-radius,8px);color:var(--th-text);background:var(--th-panel);font-size:13px}
+.air-practice-document{position:absolute;inset:48px 16px 36px;overflow:hidden;padding:16px;border:1px solid var(--th-border);border-radius:8px;color:var(--th-text);background:var(--th-panel)}
+.air-practice-document h3{font-size:16px;margin:0 0 8px}
+.air-practice-document p{font-size:13px}
+.air-document-lines{height:500px;transform:translateY(calc(var(--document-position,0) * -260px));background:repeating-linear-gradient(to bottom,var(--th-border) 0 2px,transparent 2px 28px);margin:24px 0}
+.air-document-goal{position:absolute;left:16px;right:16px;top:calc(115% - var(--document-position,0) * 100%);padding:12px;background:var(--th-accent);color:var(--th-on-accent);font-size:14px;border-radius:6px}
+@media(max-width:960px){body:not(.air-panel-hidden) .desktop-nav{width:144px}body:not(.air-panel-hidden) .desktop-content{padding:12px 16px 24px}.air-panel .air-workspace{grid-template-columns:minmax(0,1fr) 208px;gap:12px}.air-panel .air-coach{padding-left:12px}.air-panel .air-heading h1{font-size:26px}.air-panel .air-session-actions .primary-button,.air-panel .air-session-actions .secondary-button{padding:8px 10px;font-size:12px}.air-panel .air-state{max-width:124px}.air-panel .air-tabs button{padding:8px 10px}}
+@media(max-width:700px){body:not(.air-panel-hidden) .desktop-nav{width:100%;padding:4px 8px;gap:2px}body:not(.air-panel-hidden) .desktop-nav button{font-size:12px;padding:8px}body:not(.air-panel-hidden) .desktop-header{padding:8px 12px}.air-panel .air-heading{flex-wrap:wrap;top:-12px;min-height:0}.air-panel .air-session-actions{justify-content:flex-start;margin:0}.air-panel .air-workspace{grid-template-columns:1fr}.air-panel .air-coach{padding:12px 0 0;border-left:0;border-top:1px solid var(--th-border)}.air-panel .air-tabs{top:92px}.air-panel .air-stage{min-height:240px}.air-panel .air-dwell-buttons{grid-template-columns:repeat(2,minmax(0,1fr))}.air-panel .air-settings-grid{grid-template-columns:1fr}.air-panel .air-mode-row{flex-wrap:wrap}.air-panel .air-mode-row button{min-width:100px}.air-setup-summary{flex-wrap:wrap}.air-panel .air-expression-levels{grid-template-columns:1fr 1fr}}
+.air-progress-row{display:flex;align-items:center;gap:12px;margin-bottom:8px}
+.air-progress-row .air-workflow{flex:1;margin:0;max-width:none}
+.air-progress-row .air-setup-summary{flex-shrink:0}
+.air-heading #airModeSummary{font-size:12px;line-height:1.3;color:var(--th-muted)}
+@media(max-width:700px){.air-progress-row{align-items:start;flex-wrap:wrap}.air-progress-row .air-workflow{min-width:220px}}
+.air-panel .air-dwell-buttons{grid-template-columns:repeat(4,minmax(0,1fr))}
+.air-panel .air-dwell-buttons button{font-size:12px;line-height:1.25;padding:4px;overflow-wrap:normal}
+.air-panel .air-dwell-buttons svg{display:none}
+.air-panel .air-dwell-buttons button:last-child{grid-column:1/-1}
+.air-panel .air-dwell-feedback p{font-size:12px;line-height:1.4}
+.air-panel .air-camera-column>.button-row{margin-top:8px}
+.air-panel .air-camera-column>#airVoiceMessage{margin:8px 0;font-size:12px}
+.air-panel .air-setup-summary{font-size:12px}
+@media(max-width:700px){.air-panel .air-dwell-buttons{grid-template-columns:repeat(4,minmax(0,1fr))}}

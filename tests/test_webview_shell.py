@@ -101,6 +101,7 @@ class WebViewShellTests(unittest.TestCase):
         self.assertIsNone(server.resolve('/desktop/secret/server.key'))
         self.assertIsNone(server.resolve('/desktop/wrong/index.html'))
         self.assertEqual(server.resolve('/desktop/secret/index.html'), ROOT / 'gui/web/index.html')
+        self.assertEqual(server.resolve('/desktop/secret/aircontrol-view.js'), ROOT / 'gui/web/aircontrol-view.js')
 
     def test_desktop_preferences_use_shared_theme_values_and_persist(self):
         preferences = {'theme': 'ink', 'appearance': 'light', 'motion': 'reduced', 'contrast': 'increased'}

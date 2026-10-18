@@ -69,7 +69,7 @@ class DesktopAssetServer:
         relative = path[len(prefix):]
         if not relative or any(part in ('', '.', '..') for part in relative.split('/')) or '\\' in relative:
             return None
-        if relative in ('index.html', 'desktop.css', 'desktop.js','aircontrol.js','aircontrol.css'):
+        if relative in ('index.html', 'desktop.css', 'desktop.js','aircontrol.js','aircontrol.css','aircontrol-view.js'):
             return GUI_WEB / relative
         if relative in ('themes.js', 'themes.css', 'theme-effects.js', 'theme-effects.css'):
             return ROOT / 'web' / relative

@@ -47,7 +47,7 @@ const server = http.createServer((req, res) => {
   let relative = `web${name === '/' ? '/index.html' : name}`;
   if(name.startsWith('/preview/desktop/')){
     const file=name.slice('/preview/desktop/'.length)||'index.html';
-    relative=['index.html','desktop.js','desktop.css','aircontrol.js','aircontrol.css'].includes(file)?`gui/web/${file}`:`web/${file}`;
+    relative=['index.html','desktop.js','desktop.css','aircontrol.js','aircontrol.css','aircontrol-view.js'].includes(file)?`gui/web/${file}`:`web/${file}`;
   }
   const filename = path.resolve(root, relative);
   if (![path.join(root,'web'),path.join(root,'gui','web')].some(folder=>filename.startsWith(folder+path.sep))) {
@@ -1325,6 +1325,62 @@ test('Text sync and pairing guides visual inspection',async(page,context)=>{
   await desktop.close();assert.deepEqual(issues,[]);
 },true);
 
+test('AirControl daily workspace keeps the stage visible and readiness authoritative',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:820,height:620});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('practicing');});
+  const visible=await desktop.locator('#airStage').evaluate(n=>{const r=n.getBoundingClientRect();return Math.min(innerHeight,r.bottom)-Math.max(0,r.top);});
+  assert.ok(visible>=240,`stage has ${visible}px visible`);
+  await desktop.evaluate(()=>TouchHelmAir.render({...TouchHelmAir.state,activation:{ready:false,code:'release_gesture',message:'Relax your expression before enabling.'}}));
+  assert.equal(await desktop.locator('#airEnable').isDisabled(),true);
+  assert.match(await desktop.locator('#airReadiness').innerText(),/Relax your expression/);
+  await screenshot(desktop,'aircontrol-daily-workspace-small');await desktop.close();
+});
+
+test('AirControl exercise controls and head scrolling stay explicit',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:1120,height:800});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('active');});
+  await desktop.locator('[data-air-tab=practice]').click();
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.owns_input),true);
+  await desktop.locator('#airExercise').selectOption('click');await desktop.locator('#airExerciseStart').click();
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.state),'practicing');
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.owns_input),false);
+  assert.equal(await desktop.locator('.air-task-target').count(),3);
+  await screenshot(desktop,'aircontrol-daily-practice');
+  await desktop.locator('[data-air-tab=controls]').click();
+  await desktop.locator('#airScroll').click();assert.equal(await desktop.locator('#airScrollDone').isVisible(),true);
+  await desktop.locator('#airScrollDone').click();assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.head_scroll),false);
+  await desktop.close();
+});
+
+test('AirControl keyboard tabs and 200 percent equivalent reflow retain escape controls',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:410,height:620});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('active');});
+  await desktop.locator('[data-air-tab=controls]').focus();await desktop.keyboard.press('ArrowRight');
+  assert.equal(await desktop.locator('[data-air-tab=mappings]').getAttribute('aria-selected'),'true');
+  const relation=await desktop.locator('[data-air-tab=mappings]').getAttribute('aria-controls');
+  assert.equal(await desktop.locator('#'+relation).getAttribute('aria-labelledby'),'air-tab-mappings');
+  assert.equal(await desktop.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+  await desktop.locator('[data-air-tab=controls]').click();
+  for(const id of ['airPause','airStop']){const r=await desktop.locator('#'+id).boundingBox();assert.ok(r&&r.x>=0&&r.x+r.width<=410&&r.height>=44);}
+  await screenshot(desktop,'aircontrol-daily-reflow');await desktop.close();
+});
+
+test('AirControl repeated snapshots do not repeat live status announcements',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmAir);
+  const mutations=await desktop.evaluate(async()=>{
+    TouchHelmAir.setPreview('practicing');let count=0;
+    const observer=new MutationObserver(records=>count+=records.length);
+    observer.observe(document.getElementById('airMessage'),{childList:true,subtree:true,characterData:true});
+    for(let i=0;i<10;i++)TouchHelmAir.render(TouchHelmAir.state);
+    await Promise.resolve();observer.disconnect();return count;
+  });
+  assert.equal(mutations,0);await desktop.close();
+});
+
 test('AirControl chooser opens dedicated modes without starting a camera',async(page,context)=>{
   const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
   await desktop.waitForFunction(()=>window.TouchHelmAir);
@@ -1362,6 +1418,7 @@ test('AirControl practice, mapping validation and animated guide reflect explici
   await desktop.locator('[data-panel="aircontrol"]').click();
   await desktop.evaluate(()=>TouchHelmAir.setPreview('practicing'));
   assert.equal(await desktop.locator('#airEnable').isEnabled(),true);
+  await desktop.locator('#airGuideDisclosure summary').click();
   await desktop.locator('#airGuideSelect').selectOption('pinch_index');
   assert.equal(await desktop.locator('#airGuideArt').getAttribute('data-gesture'),'pinch_index');
   await desktop.locator('[data-air-tab="mappings"]').click();
@@ -1401,7 +1458,7 @@ test('AirControl calibration shows a live finger and keeps its next action besid
       tracking_sources:{hand:true,face:false,hand_enabled:true,face_enabled:false}};
     TouchHelmAir.render(state);TouchHelmAir.draw(state);
   });
-  assert.equal(await desktop.locator('.air-camera-column #airCaptureTarget').count(),1);
+  assert.equal(await desktop.locator('.air-coach #airCaptureTarget').count(),1);
   assert.match(await desktop.locator('#airCalibrationStep').innerText(),/1 of 1/);
   await desktop.locator('#airFineCalibration').check();
   assert.match(await desktop.locator('#airCalibrationStep').innerText(),/1 of 5/);
@@ -1447,6 +1504,7 @@ test('AirControl personal face calibration exposes activation and applies a test
   await desktop.evaluate(()=>TouchHelmAir.draw({...TouchHelmAir.state,tracking_sources:{face:true,hand:false,face_enabled:true,hand_enabled:false}}));
   assert.equal(await desktop.locator('#airTrackedPointer').isVisible(),true);
   assert.match(await desktop.locator('#airTrackedPointer').innerText(),/Head pointer/);
+  await desktop.locator('[data-air-tab=settings]').click();
   await desktop.locator('#airExpressionNeutral').click();
   assert.match(await desktop.locator('#airExpressionResult').innerText(),/relaxed.*captured/i);
   await desktop.locator('#airExpressionSelect').selectOption('smile');
@@ -1490,6 +1548,7 @@ test('AirControl Head is default and its action dock explains drag and releases 
   await desktop.locator('#airReleaseDrag').click();
   assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.dragging),false);
   await screenshot(desktop,'aircontrol-head-actions');
+  await desktop.locator('#airChangeSetup').click();
   await desktop.locator('[data-air-mode=hand]').click();
   assert.equal(await desktop.locator('#airHeadActions').isVisible(),false);
   await desktop.close();
