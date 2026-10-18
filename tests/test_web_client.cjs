@@ -1459,6 +1459,21 @@ test('AirControl personal face calibration exposes activation and applies a test
   await desktop.close();
 });
 
+test('AirControl practice keeps calibration feedback visible and separates readiness guidance',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:820,height:620});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{
+    TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('practicing');
+    TouchHelmAir.render({...TouchHelmAir.state,message:'Relaxed face captured. Hold your selected expression, then capture it.',practice_ready:false});
+  });
+  assert.match(await desktop.locator('#airMessage').innerText(),/Relaxed face captured/);
+  assert.match(await desktop.locator('#airPracticeResult').textContent(),/Windows input is off/);
+  await desktop.evaluate(()=>TouchHelmAir.render({...TouchHelmAir.state,message:'Personal expression threshold captured. Choose its action and test it in practice.',practice_ready:true,practice_frames:20,practice_actions:1}));
+  assert.match(await desktop.locator('#airMessage').innerText(),/threshold captured/);
+  assert.match(await desktop.locator('#airPracticeResult').textContent(),/Enable PC control/);
+  await screenshot(desktop,'aircontrol-practice-feedback');await desktop.close();
+});
+
 test('AirControl Head is default and its action dock explains drag and releases it in practice',async(page,context)=>{
   const desktop=await context.newPage();await desktop.setViewportSize({width:1120,height:800});
   await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);

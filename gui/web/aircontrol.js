@@ -193,7 +193,7 @@
       if(s.profile&&!this.dirty)this.loadProfile(s.profile);
       $('airState').textContent=s.state==='practicing'?'Practice · PC input off':s.state==='active'?'PC control on':String(s.state||'setup_required').replaceAll('_',' ').replace(/^./,c=>c.toUpperCase());$('airState').dataset.state=s.state;
       const practiceMessage=s.practice_ready?'Practice click recognized. Choose Enable PC control above to move the Windows cursor.':'Practice only: move the simulated cursor below and test a click. Your Windows cursor stays still until you enable PC control.';
-      $('airMessage').textContent=this.error||(s.state==='practicing'?practiceMessage:s.message)||'Choose Start camera for calibration and practice.';
+      $('airMessage').textContent=this.error||s.message||(s.state==='practicing'?practiceMessage:'Choose Start camera for calibration and practice.');
       $('homeAirStatus').textContent=active?'AirControl camera is running. Selecting Phone stops it; Switch mode alone leaves the session intact.':'The camera stays off until you choose Start camera.';
       $('airSetup').hidden=!!setup.ready;$('airSetupMessage').textContent=setup.message||'Prepare the isolated camera runtime.';
       const installing=setup.state==='installing';$('airSetupProgress').hidden=!installing;

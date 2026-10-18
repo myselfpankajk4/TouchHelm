@@ -8,6 +8,48 @@ from server.aircontrol.profiles import default_profile
 from server.aircontrol.engine import GestureEngine
 
 class AirServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_readiness_is_local_and_explains_camera_off(self):
+        self.service.worker=None
+        result=self.service.activation_readiness(now=10.)
+        self.assertEqual(result['code'],'camera_off');self.assertFalse(result['ready'])
+        self.acquire.assert_not_awaited();self.service.displays.assert_not_awaited()
+        self.input.mouse_down.assert_not_called()
+
+    async def test_readiness_matches_enable_and_repeated_enable_cannot_acquire_twice(self):
+        import time
+        self.service.worker=self.worker;self.service.state='practicing'
+        self.service.calibrated=True;self.service.practice_frames=20;self.service.practice_actions=1
+        self.service.engine.lost=False;self.service.last_frame=time.monotonic()
+        self.service.stable_since=time.monotonic()-.3;self.service.stable_frames=8
+        self.service.display={'id':'m','rect':{'x':-100,'y':0,'width':1000,'height':800}}
+        self.assertTrue(self.service.activation_readiness()['ready'])
+        await self.service.command('enable')
+        self.assertEqual(self.service.activation_readiness()['code'],'already_active')
+        with self.assertRaises(ValueError):await self.service.command('enable')
+        self.acquire.assert_awaited_once()
+
+    async def test_readiness_freshness_and_required_neutral_pose(self):
+        self.service.worker=self.worker;self.service.state='practicing';self.service.calibrated=True
+        self.service.practice_frames=20;self.service.practice_actions=1;self.service.engine.lost=False
+        self.service.last_frame=10.;self.service.stable_since=9.;self.service.stable_frames=8
+        self.service.display={'id':'m','rect':{'x':0,'y':0,'width':1000,'height':800}}
+        self.assertEqual(self.service.activation_readiness(now=10.25)['code'],'ready')
+        self.assertEqual(self.service.activation_readiness(now=10.251)['code'],'tracking_required')
+        self.service.engine.held=True
+        self.assertEqual(self.service.activation_readiness(now=10.2)['code'],'release_gesture')
+
+    async def test_readiness_explains_each_remaining_setup_gate(self):
+        s=self.service;s.worker=self.worker;s.state='practicing';s.last_frame=10.
+        self.assertEqual(s.activation_readiness(now=10.)['code'],'calibration_required')
+        s.calibrated=True
+        self.assertEqual(s.activation_readiness(now=10.)['code'],'practice_required')
+        s.practice_frames=20;s.practice_actions=1
+        self.assertEqual(s.activation_readiness(now=10.)['code'],'tracking_required')
+        s.engine.lost=False
+        self.assertEqual(s.activation_readiness(now=10.)['code'],'steady_required')
+        s.stable_since=9.;s.stable_frames=8
+        self.assertEqual(s.activation_readiness(now=10.)['code'],'monitor_required')
+
     async def test_locked_desktop_cannot_start_camera(self):
         self.service.desktop_available=lambda:False
         with self.assertRaisesRegex(ValueError,'Unlock'):await self.service.command('start')
@@ -32,7 +74,7 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.service.calibrated);self.assertFalse(self.service.owns_input)
     async def test_enable_does_not_replay_a_still_held_practice_pinch(self):
         import time
-        self.service.worker=self.worker;self.service.calibrated=True;self.service.practice_frames=20;self.service.practice_actions=1
+        self.service.worker=self.worker;self.service.state='practicing';self.service.calibrated=True;self.service.practice_frames=20;self.service.practice_actions=1
         self.service.last_frame=time.monotonic();self.service.stable_since=time.monotonic()-.3;self.service.stable_frames=8
         self.service.engine.lost=False;self.service.engine.held=True;self.service.engine.gesture='pinch_index'
         self.service.display={'id':'m','rect':{'x':-100,'y':0,'width':1000,'height':800}}
@@ -151,7 +193,7 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_enable_transfers_input_only_after_validated_practice(self):
         import time
         await self.service.command('start',{'profile':default_profile(mode='hand')})
-        self.service.calibrated=True;self.service.practice_frames=20;self.service.practice_actions=1
+        self.service.state='practicing';self.service.calibrated=True;self.service.practice_frames=20;self.service.practice_actions=1
         self.service.engine.lost=False;self.service.last_frame=time.monotonic()
         self.service.stable_since=time.monotonic()-.3;self.service.stable_frames=8
         await self.service.command('enable')

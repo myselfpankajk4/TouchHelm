@@ -77,6 +77,12 @@ physical pixels). Higher steadiness reduces jitter; lower values follow small
 movements more closely. Existing smoothing choices are preserved; fresh Head
 profiles use 60% smoothing.
 
+After a hand pinch releases, the pointer stays at the click or drop location.
+Further hand movement continues from that position, with the movement range
+mapped toward the screen edges. Recenter or a tracking interruption clears this
+temporary adjustment. If you release at a movement boundary, move inward and
+back to reach that edge again.
+
 ## Head-only clicks and dragging
 
 ![Head dwell action dock with sample state](images/aircontrol-head-actions.png)
@@ -96,7 +102,9 @@ profiles use 60% smoothing.
    destination, then settle again to drop. The cursor ring and panel show
    **Drag held**. **Release drag**, Pause, Stop and tracking loss also release it.
 5. Right-click and double-click are one-shot selections; after use they return to
-   ordinary left-click. Drag also returns to left-click after dropping. If dwell
+   ordinary left-click. Drag also returns to left-click after dropping. After
+   **Release drag**, move away before dwelling to click again. If an expression
+   was holding the drag, relax it before using it again. If dwell
    was disabled in your saved profile, explicitly choosing a dwell action enables
    it for the current session; it does not silently rewrite that saved choice.
 
@@ -155,6 +163,9 @@ recognition confidence.*
   stops the camera for recalibration.
   Ordinary two-eye blinks stay inactive. Simultaneous assigned expressions cancel
   until released. Head mode still needs dwell or a calibrated click expression.
+  A wink requires valid readings from both eyes; missing opposite-eye data
+  cannot be treated as an open eye. Missing unrelated expression channels do not
+  change the threshold used for a valid expression.
 - Settings adjust preferred hand, sensitivity, smoothing, pinch close/release
   thresholds, hold/cooldown, dwell timing, head range, camera mirroring and landmarks.
   The two pinch thresholds provide hysteresis: release must be above close.

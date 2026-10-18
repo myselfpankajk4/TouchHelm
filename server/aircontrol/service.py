@@ -47,7 +47,7 @@ class AirControlService:
         state=self.state
         if not self.worker and setup['ready'] and state=='setup_required':state='ready'
         fresh=time.monotonic()-self.last_frame<=.25
-        result={'state':state,'message':self.message,'setup':setup,'camera_active':self.worker is not None,
+        result={'state':state,'message':self.message,'activation':self.activation_readiness(),'setup':setup,'camera_active':self.worker is not None,
             'owns_input':self.owns_input,'profile':copy.deepcopy(self.profile),'calibrated':self.calibrated,
             'calibration_ready':fresh and (tracked(self.frame.get('hand') or {}) if self.profile['mode']=='hand' else tracked(self.frame.get('face') or {}) and (self.frame.get('face') or {}).get('count')==1),
             'profiles':copy.deepcopy(self.profiles),
@@ -79,8 +79,24 @@ class AirControlService:
         if frame:result.update(preview=self.preview,hand_points=self.frame.get('hand_points',[]),face_points=self.frame.get('face_points',[]),seq=self.last_sequence)
         return result
 
-    def _release_buttons(self):
-        self.engine.reset()
+    def activation_readiness(self,*,now=None):
+        """Local, side-effect-free guidance shared with the Enable guard."""
+        now=time.monotonic() if now is None else now
+        checks=[
+            (not self.worker,'camera_off','Start the camera to begin calibration.'),
+            (self.owns_input,'already_active','PC control is already enabled.'),
+            (not self.calibrated,'calibration_required','Capture your comfortable neutral position first.'),
+            (self.state!='practicing' or self.practice_frames<15 or not self.practice_actions,'practice_required','Complete calibration and test a click in practice first.'),
+            (self.engine.lost or not 0<=now-self.last_frame<=.25,'tracking_required','Hold a steady tracked pose before enabling control.'),
+            (self.engine.held or bool(self.engine.gesture and self.profile['bindings'].get(self.engine.gesture,'none')!='none'),'release_gesture','Release the practice gesture, then enable PC control with a neutral pointing pose.'),
+            (self.stable_since is None or self.stable_frames<5 or now-self.stable_since<.2,'steady_required','Hold a steady tracked pose for a moment before enabling control.'),
+            (not self.display,'monitor_required','No monitor is available. Refresh monitors and restart calibration.')]
+        for blocked,code,message in checks:
+            if blocked:return {'ready':False,'code':code,'message':message}
+        return {'ready':True,'code':'ready','message':'Ready to enable PC control. Your phone will return to View.'}
+
+    def _release_buttons(self,*,consume_dwell=False):
+        self.engine.reset(consume_dwell=consume_dwell)
         if self.native_down:
             try:self.input.mouse_up('left')
             except Exception:pass
@@ -162,11 +178,8 @@ class AirControlService:
                     if self.overlay:self.overlay.hide()
             elif action=='enable':
                 if not self._desktop_ready():raise ValueError('Unlock Windows before enabling PC control.')
-                if not self.worker or not self.calibrated or self.practice_frames<15 or not self.practice_actions:raise ValueError('Complete calibration and test a click in practice first')
-                if self.engine.lost or time.monotonic()-self.last_frame>.25:raise ValueError('Hold a steady tracked pose before enabling control')
-                if not self._stable():raise ValueError('Hold a steady tracked pose for a moment before enabling control')
-                if self.engine.held or self.engine.gesture and self.profile['bindings'].get(self.engine.gesture,'none')!='none':raise ValueError('Release the practice gesture, then enable PC control with a neutral pointing pose.')
-                if not self.display:raise ValueError('No monitor is available')
+                readiness=self.activation_readiness()
+                if not readiness['ready']:raise ValueError(readiness['message'])
                 current=await self.displays()
                 if not any(d.get('id')==self.display['id'] and d.get('rect')==self.display['rect'] for d in current.get('displays',[])):raise ValueError('Monitor geometry changed. Restart camera calibration.')
                 self._release_buttons();self.owns_input=True
@@ -186,11 +199,13 @@ class AirControlService:
                 if not self.worker or not self.calibrated or self.profile['mode']!='head' or self.state not in ('active','practicing'):
                     raise ValueError('Calibrate Head & Face, then use its practice or active action dock.')
                 dropping=self.engine.held and action=='dwell_drag'
-                if self.engine.held:self._release_buttons()
+                if self.engine.held:self._release_buttons(consume_dwell=True)
                 selected='left_click' if dropping else HEAD_ACTIONS[action]
                 self.engine.select_dwell(selected)
                 self.message='Drag released. Dwell returns to Left click.' if dropping else 'Dwell action: '+('Drag — settle to hold, move, then settle to drop.' if action=='dwell_drag' else ACTION_LABELS[selected])
-            elif action=='release_drag':self._release_buttons();self.message='Drag released. Dwell returns to Left click.'
+            elif action=='release_drag':
+                self._release_buttons(consume_dwell=True)
+                self.message='Drag released. Move away before dwelling to click again.'
             elif action=='resume':self.resume()
             elif action=='recenter':
                 if not self.worker:raise ValueError('Start the camera first')

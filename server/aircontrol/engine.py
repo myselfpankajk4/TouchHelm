@@ -25,18 +25,27 @@ class GestureEngine:
         self.dwell_exit=None;self.last_action=-10.;self.progress=0.;self.confidence=0.
         self.sequence_time=-1.
         self.pinch_anchor=None;self.pinch_origin=None
+        self.hand_rebase=None
         self.dwell_action='left_click';self.drag_latched=False;self.hud_regions=[];self.dwell_target=None
         self.steady_point=None
         self.hud_blocked=False
         smoothing=self.profile['smoothing'];head=self.profile['mode']!='hand'
         self.filters=[OneEuro((.3 if head else 1.)+(1-smoothing)*(1.4 if head else 2.),6.) for _ in range(2)]
 
-    def reset(self):
+    def reset(self,*,consume_dwell=False):
+        point=self.point if consume_dwell else None
+        blocked=consume_dwell and bool(self.gesture)
         events=[{'kind':'button','action':'up','button':'left'}] if self.held else []
         self.held=False;self.gesture='';self.fired=False;self.lock='';self.scroll_y=None
         self.dwell_anchor=None;self.dwell_fired=False;self.dwell_exit=None;self.point=None;self.progress=0.
         self.pinch_anchor=None;self.pinch_origin=None
         self.dwell_action='left_click';self.drag_latched=False;self.dwell_target=None;self.steady_point=None
+        self.hand_rebase=None
+        if blocked:self.gesture=self.lock='conflict'
+        if point is not None:
+            # An explicit drop consumes the dwell at this location just like a
+            # dwell drop does. Departure is required before another PC click.
+            self.point=self.dwell_anchor=point;self.dwell_fired=True;self.dwell_target=''
         for filter in self.filters:filter.reset()
         return events
 
@@ -89,6 +98,20 @@ class GestureEngine:
             for filter in self.filters:filter.minimum=(.3+(1-self.profile['smoothing'])*1.4)/resolution
         previous_point=self.point
         filtered=raw if not self.profile['smoothing'] else tuple(filter.step(value,t) for filter,value in zip(self.filters,raw))
+        if mode=='hand' and self.hand_rebase is not None:
+            origin,target=self.hand_rebase
+            # Re-anchor after finger release. Interpolate toward both screen
+            # edges so the retained drag offset cannot strand an edge.
+            anchored=[];origins=list(origin);targets=list(target)
+            for i,(v,a,b) in enumerate(zip(filtered,origin,target)):
+                if v<a:mapped=v*b/a
+                elif a<1:mapped=b+(v-a)*(1-b)/(1-a)
+                else:mapped=b
+                anchored.append(clamp(mapped))
+                # A release exactly at a boundary needs departure before that
+                # edge can be reached again, without a stationary-pointer jump.
+                if a in (0.,1.) and v!=a:origins[i]=v;targets[i]=clamp(mapped)
+            self.hand_rebase=(tuple(origins),tuple(targets));filtered=tuple(anchored)
         if mode!='hand':
             scale=self.profile.get('_monitor_scale',(1920,1080));radius=self.profile['head_stability']
             if self.steady_point is None:self.steady_point=filtered
@@ -117,7 +140,8 @@ class GestureEngine:
             self.pinch_anchor=None;self.pinch_origin=None
             if previous_point is not None:
                 self.point=previous_point
-                for filter,value in zip(self.filters,previous_point):filter.reset();filter.step(value,t)
+                if mode=='hand':self.hand_rebase=(raw,previous_point)
+                for filter,value in zip(self.filters,raw if mode=='hand' else previous_point):filter.reset();filter.step(value,t)
         if self.lock=='conflict' and gesture:
             self.progress=0.;return events
         if self.lock and self.lock!=gesture and gesture:
