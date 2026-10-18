@@ -148,3 +148,31 @@ Controls use gently rounded corners, with smaller radii for dense keys and large
 - Don't expand decoration, glows, simulated telemetry, or empty cards at the expense of task controls.
 - Don't manufacture slide counts, playlists, successful saves, or ready connection states.
 - Don't introduce a second Windows Start button or move ordinary typing out of Trackpad.
+
+## AirControl daily-use workspace — 18 October 2026
+
+The live movement area leads the desktop AirControl page. Use a compact persistent
+session bar, setup-only Camera/Calibrate/Practice/Enable progression, a contextual
+inspector, and Session/Practice/Personal settings/Diagnostics tabs. The mode and
+camera selectors belong behind Change setup during a session; it explicitly
+stops control before presenting a fresh setup flow.
+
+Preserve the mouse mark, seven theme families and Segoe UI/system typography.
+Use existing theme variables rather than hard-coded default colors; the default
+blue-black/slate/cyan palette remains. Use 26–30 px page titles, 18–20 px section
+titles, 14–16 px body/main controls and at least 12 px supporting information.
+Group with 4/8/12/16/24 px spacing and restrained edges. Remove promotional
+uppercase eyebrows and oversized gesture art from the working surface.
+
+At 820×620 the stage begins in the initial view with at least 240 visible pixels.
+Narrow effective widths reflow to one column. Controls retain 44 px targets,
+keyboard focus and associated tab panels. Reduced motion removes spatial
+animation. Live status changes only when its meaning changes; elapsed practice
+time is separate from the live announcement.
+
+Practice targets use the service's normalized geometry, with at least 64 px
+visual targets. Head drag and scroll exercises select their simulated action.
+During exercises the task inspector replaces the ordinary action dock. Head
+scroll uses a visible virtual cursor with immediate direction departure; its
+Up/Down/Done geometry is shared with hit testing. No simulated exercise injects
+Windows input. See docs/AIRCONTROL_DAILY_USE_RELEASE.md for current screenshots.

@@ -1,5 +1,11 @@
 # AirControl reliability review — 18 October 2026
 
+The [daily-use workspace release](AIRCONTROL_DAILY_USE_RELEASE.md) extends this
+review with guided setup, task-based practice, Head scrolling, sanitized reports,
+403 Python / 80 browser / 86 JavaScript passes, a 36-scenario replay comparison,
+and 22 axe scans with no reported violations. Earlier counts below describe
+their own historical repair passes.
+
 ## Follow-up: release continuity and expression evidence
 
 The approved follow-up repaired three reproducible control defects and the

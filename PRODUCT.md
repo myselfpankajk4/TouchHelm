@@ -49,3 +49,14 @@ without facial calibration. The shared native HUD geometry routes head dwell on
 its controls without injecting desktop clicks. Calibrated expressions may hold a
 drag. Physical-pixel steadiness and dwell radius are adjustable; interruption
 releases app-owned input. Camera starts only through the explicit user action.
+
+The daily-use AirControl workspace puts the movement area before setup details,
+with persistent session/escape controls and service-derived activation guidance.
+Session, Practice, Personal settings and Diagnostics separate the user's tasks.
+Click/drag/scroll exercises use authoritative simulated events and validated stage
+geometry; starting a task from active control explicitly returns ownership.
+Head-only scrolling holds the Windows cursor at its entry position and uses a
+virtual cursor for Up/Down/Done. All interruption paths cancel scrolling. Session
+reports contain bounded, allowlisted measurements, no camera/field data, and are
+exported only on request. See docs/AIRCONTROL_DAILY_USE_RELEASE.md for evidence
+and the still-pending participating-user camera acceptance.

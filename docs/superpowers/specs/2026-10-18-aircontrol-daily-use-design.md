@@ -2,7 +2,7 @@
 
 Date: 18 October 2026
 
-Status: Written design for user review; implementation has not started.
+Status: Approved design; implementation is under final review. Physical acceptance remains pending.
 
 ## Purpose and approved direction
 
