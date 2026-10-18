@@ -29,6 +29,8 @@ class GestureEngine:
         self.dwell_action='left_click';self.drag_latched=False;self.hud_regions=[];self.dwell_target=None
         self.steady_point=None
         self.hud_blocked=False
+        self.head_scroll=False;self.scroll_target='';self.scroll_since=0.;self.scroll_last=None
+        self.scroll_expression_blocked=False
         smoothing=self.profile['smoothing'];head=self.profile['mode']!='hand'
         self.filters=[OneEuro((.3 if head else 1.)+(1-smoothing)*(1.4 if head else 2.),6.) for _ in range(2)]
 
@@ -41,6 +43,8 @@ class GestureEngine:
         self.pinch_anchor=None;self.pinch_origin=None
         self.dwell_action='left_click';self.drag_latched=False;self.dwell_target=None;self.steady_point=None
         self.hand_rebase=None
+        self.head_scroll=False;self.scroll_target='';self.scroll_last=None
+        self.scroll_expression_blocked=False
         if blocked:self.gesture=self.lock='conflict'
         if point is not None:
             # An explicit drop consumes the dwell at this location just like a
@@ -48,6 +52,31 @@ class GestureEngine:
             self.point=self.dwell_anchor=point;self.dwell_fired=True;self.dwell_target=''
         for filter in self.filters:filter.reset()
         return events
+
+    def set_head_scroll(self,enabled):
+        if type(enabled) is not bool or self.profile['mode']!='head':
+            raise ValueError('Head scrolling requires Head & Face mode.')
+        previous=self.point
+        events=self.reset(consume_dwell=True)
+        self.point=previous;self.head_scroll=enabled
+        self.scroll_expression_blocked=not enabled
+        return events
+
+    def _head_scroll_step(self,hud,t,*,gap=False):
+        self.gesture='';self.progress=0.
+        if gap or hud!=self.scroll_target:
+            self.scroll_target=hud;self.scroll_since=t;self.scroll_last=None
+        if not hud:return []
+        self.progress=clamp((t-self.scroll_since)/(self.profile['dwell_ms']/1000))
+        if self.progress<1:return []
+        if hud in ('scroll_up','scroll_down'):
+            if self.scroll_last is None or t-self.scroll_last>=.15:
+                self.scroll_last=t
+                return [{'kind':'scroll','dy':2 if hud=='scroll_up' else -2}]
+        elif hud in ('scroll_done','pause','stop') and self.scroll_last is None:
+            self.scroll_last=t
+            return [{'kind':'hud_action','action':hud}]
+        return []
 
     def select_dwell(self,action):
         if action not in ('left_click','right_click','double_click','drag'):raise ValueError('Choose a supported dwell action')
@@ -77,6 +106,7 @@ class GestureEngine:
     def step(self,frame,*,paused=False):
         events=[];t=number(frame.get('timestamp'),-1)
         if t<=self.sequence_time:return events
+        gap=self.sequence_time>=0 and t-self.sequence_time>.25
         self.sequence_time=t
         hand=frame.get('hand') or {};face=frame.get('face') or {};mode=self.profile['mode']
         hand_ok=tracked(hand);face_ok=tracked(face)
@@ -123,8 +153,14 @@ class GestureEngine:
             filtered=self.steady_point
         self.point=filtered
         hud=next((r['action'] for r in self.hud_regions if r['rect'][0]<=self.point[0]<=r['rect'][2] and r['rect'][1]<=self.point[1]<=r['rect'][3]),'') if mode=='head' else ''
+        if self.head_scroll:return self._head_scroll_step(hud,t,gap=gap)
         if not hud:self.hud_blocked=False
         gesture=self._gesture(hand if mode!='head' else {},face,paused=paused)
+        if self.scroll_expression_blocked:
+            if gesture:
+                self.gesture=self.lock='conflict';self.progress=0.
+                return [{'kind':'pointer','x':self.point[0],'y':self.point[1]}]
+            self.scroll_expression_blocked=False
         if hud or self.drag_latched:gesture=''
         # Resume is meaningful only while paused; an open hand must not freeze
         # ordinary pointing in active control or the practice simulator.
