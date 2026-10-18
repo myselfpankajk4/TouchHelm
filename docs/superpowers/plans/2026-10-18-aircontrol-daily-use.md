@@ -186,7 +186,7 @@ Record the installed versions and upstream license references in the development
 
 **Interfaces:** Documentation reflects the delivered snapshot/command names and actual measurements; it does not add new product behavior. The release note separates implementation, automated evidence, and physical acceptance.
 
-- [ ] **Step 1 — Run the complete suites** and inspect exit codes/results:
+- [x] **Step 1 — Run the complete suites** and inspect exit codes/results:
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p 'test_*.py'
@@ -199,10 +199,10 @@ git diff --check
 
 The known sandbox can block Store Python, temporary ACL checks, and the browser's local server. Use approved command escalation for those environmental restrictions; do not weaken app authentication or camera/input guards. Do not run the legacy root `test_touchhelm.py` against real user apps; it intentionally sends native input.
 
-- [ ] **Step 2 — Review** the full change against every acceptance item, including phone retained drafts, Remote view/audio, ownership, saved modes, model checksums, session stop/recovery, and report privacy. Request one independent review when a compatible reviewer is available. If delegation still fails on its configured model, disclose that limitation and perform a direct review; do not report an independent review that did not occur.
-- [ ] **Step 3 — Document physical acceptance** as a 30-minute participating-user checklist: explicit Start/Enable, click/drag/scroll tasks, ordinary blink rejection, personal expressions, pause/resume, occlusion/reacquisition, physical takeover, and available camera unplug/reconnect. Collect only the sanitized report and comfort feedback. Do not start the webcam automatically; mark all scenarios not performed as unverified.
-- [ ] **Step 4 — Update** the product/design/help documents and release evidence with actual test counts, replay results, screenshots inspected, deviations, and outstanding physical checks. No unsupported recognition-accuracy or camera-FPS claims. Keep the original brand/theme direction and explain the practice-versus-active distinction.
-- [ ] **Step 5 — Commit** scoped release documentation with `docs: record AirControl daily-use verification`. Report the code delivered and automated results separately from physical readiness. External publishing, merging, and tracker replacement are outside this plan.
+- [x] **Step 2 — Review** the full change against every acceptance item, including phone retained drafts, Remote view/audio, ownership, saved modes, model checksums, session stop/recovery, and report privacy. Request one independent review when a compatible reviewer is available. If delegation still fails on its configured model, disclose that limitation and perform a direct review; do not report an independent review that did not occur.
+- [x] **Step 3 — Document physical acceptance** as a 30-minute participating-user checklist: explicit Start/Enable, click/drag/scroll tasks, ordinary blink rejection, personal expressions, pause/resume, occlusion/reacquisition, physical takeover, and available camera unplug/reconnect. Collect only the sanitized report and comfort feedback. Do not start the webcam automatically; mark all scenarios not performed as unverified.
+- [x] **Step 4 — Update** the product/design/help documents and release evidence with actual test counts, replay results, screenshots inspected, deviations, and outstanding physical checks. No unsupported recognition-accuracy or camera-FPS claims. Keep the original brand/theme direction and explain the practice-versus-active distinction.
+- [x] **Step 5 — Commit** scoped release documentation with `docs: record AirControl daily-use verification`. Report the code delivered and automated results separately from physical readiness. External publishing, merging, and tracker replacement are outside this plan.
 
 ## Plan self-review and execution handoff
 

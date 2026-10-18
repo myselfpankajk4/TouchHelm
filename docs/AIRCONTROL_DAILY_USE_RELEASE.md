@@ -29,6 +29,14 @@ accuracy. All screenshots here contain explicit synthetic preview state.
   the owned host supplies the running build label.
 - Earlier hand release continuity, complete wink evidence, explicit-drop dwell
   consumption and calibrated expression rearming repairs remain covered.
+- Enable rechecks readiness after monitor lookup and ownership acquisition;
+  failed revalidation returns ownership. Held expressions must relax before
+  Enable/Resume, including after scrolling or tracking loss. Scroll Done requires
+  departure from the restored HUD before another HUD action can dwell.
+- Interrupted Head exercises restore their required action on explicit resume.
+  Early drag drops can be retried without resetting the exercise. Resizing
+  pauses scoring without adding a miss; reloaded renderers synchronize viewport
+  revisions and hide targets until the service acknowledges matching dimensions.
 
 ![Minimum desktop workspace, synthetic state](images/aircontrol-daily-workspace.png)
 
@@ -38,10 +46,10 @@ accuracy. All screenshots here contain explicit synthetic preview state.
 
 | Check | Observed result |
 | --- | --- |
-| Full Python suite | 403 passed; native input mocked |
-| Full browser behavior | 80/80 passed, including phone/Remote/pairing and desktop |
+| Full Python suite | 411 passed; native input mocked |
+| Full browser behavior | 81/81 passed, including phone/Remote/pairing and desktop |
 | JavaScript units | 86 passed, one existing optional DOM test skipped |
-| AirControl browser/visual/accessibility batch | 16/16 passed |
+| AirControl browser/visual/accessibility batch | 17/17 passed |
 | Layout coverage | Seven themes, light/dark, 820×620 / 1120×800 / 1440×900; 410 CSS px effective reflow and keyboard escape controls |
 | Axe audit | 22 scans across session states and theme appearances; zero reported violations |
 | Status announcements | Identical snapshots produce zero repeated message mutations |
@@ -53,8 +61,39 @@ The layout batch checks bounds and minimum targets; screenshots of the minimum
 workspace, practice, calibration and sampled theme states were inspected. The
 410 CSS px viewport represents the reflow width of an 820 px workspace at 200%
 zoom; this is not a claim that all Windows DPI/device combinations were tested.
-The final independent code-review outcome is recorded in the execution ledger
-and final delivery message.
+An independent review found five Important issues: expression rearming,
+activation revalidation, HUD re-entry, exercise recovery and viewport agreement.
+Each received a failing regression before its fix. The final verification below
+covers the corrected implementation. No Critical issue was reported.
+One concurrent whole-suite run hit an existing launcher test's 20 ms timeout.
+Its isolated 10-test module passed, and the complete 411-test rerun passed
+without concurrent browser load. No launcher behavior or timeout was changed.
+
+## Review decisions and remaining limitation
+
+The following execution decisions preserve the approved scope:
+
+1. Work stayed in the current `main` checkout as requested, with local commits
+   and no push. Cost if wrong: less isolation from other work in that checkout.
+2. Physical acceptance requires an explicit participating-user session; plan
+   approval did not start the camera. Cost if wrong: comfort and detector limits
+   remain unknown until that session.
+3. Baseline release-safety repairs and readiness were committed together because
+   they share lifecycle code. Cost if wrong: reverting either needs care.
+4. Head Drag/Scroll exercises select their required simulated action because the
+   task inspector replaces the ordinary action dock. Cost if wrong: a practice
+   action choice may surprise someone; Windows input remains off.
+5. The review's physical recognition, fatigue, camera-disconnect and 30-minute
+   scenarios remain deferred to the participating-user trial. Cost if wrong:
+   real-world faults can remain undiscovered until that trial.
+6. Additional real monitor/DPI and native activation configurations remain
+   unverified. Shared geometry tests and a non-activating native HUD smoke check
+   cover only their tested paths. Cost if wrong: configuration-specific faults
+   can remain.
+
+Deferred minor: Frame age and observation rate retain their last observed values
+when delivery stalls, rather than showing current age or historical labels.
+Active control uses separate freshness guards and pauses on stale tracking.
 
 ## Synthetic motion comparison
 

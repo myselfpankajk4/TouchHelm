@@ -55,8 +55,10 @@ inspect exercises while a session is active; **Start exercise** deliberately
 returns to non-injecting practice. Choose Click three targets, Drag to a
 destination, Scroll to a marker, or Free practice. A successful exercise click
 can satisfy activation practice; completing all exercises is optional. Resize
-restarts the current attempt without counting a miss. Pause/Resume exercise does
-not enable PC control.
+pauses the current attempt without counting a miss. Wait for the practice area
+to update, then choose **Resume exercise**. Drag and Scroll restore their
+required simulated action on resume; an early drag drop can be retried by
+returning to the source. Pause/Resume exercise does not enable PC control.
 
 ![Simulated target-based practice](images/aircontrol-daily-practice.png)
 

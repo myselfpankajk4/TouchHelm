@@ -1368,6 +1368,38 @@ test('AirControl keyboard tabs and 200 percent equivalent reflow retain escape c
   await screenshot(desktop,'aircontrol-daily-reflow');await desktop.close();
 });
 
+test('AirControl viewport reload resynchronizes revisions before showing exercise targets',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{
+    TouchHelmDesktop.showPanel('aircontrol');const air=TouchHelmAir;
+    air.setPreview('practicing');air.previewAction('practice_start',{name:'click'});air.tab('practice');
+    clearInterval(air.frameTimer);air.viewportObserver.disconnect();air.viewportQueued=false;
+    air.viewportKey='';air.viewportRevision=0;TouchHelmDesktop.preview=false;
+    window.__viewportCalls=[];
+    const retained={...structuredClone(air.state),practice:{...structuredClone(air.state.practice),viewport_revision:40,viewport:[640,480]}};
+    TouchHelmDesktop.invoke=async(method,action,data)=>{
+      if(action!=='practice_viewport')return {success:true,aircontrol:retained};
+      __viewportCalls.push(data);
+      if(__viewportCalls.length===1)return {success:true,aircontrol:retained};
+      return new Promise(resolve=>window.__ackViewport=()=>resolve({success:true,aircontrol:{...retained,practice:{...retained.practice,status:'paused',viewport_revision:data.revision,viewport:[data.width,data.height]}}}));
+    };
+    air.queueViewport();
+  });
+  await desktop.waitForFunction(()=>__viewportCalls.length>=1&&TouchHelmAir.viewportQueued===false);
+  await desktop.waitForTimeout(80);
+  assert.ok(await desktop.evaluate(()=>__viewportCalls.length>=2),'stale acknowledgement must trigger a newer revision');
+  assert.equal(await desktop.locator('#airExerciseStart').isDisabled(),true);
+  assert.equal(await desktop.locator('.air-task-target').first().isVisible(),false);
+  await desktop.evaluate(()=>__ackViewport());
+  await desktop.waitForFunction(()=>TouchHelmAir.viewportPending===0);
+  const result=await desktop.evaluate(()=>({sent:__viewportCalls.at(-1),practice:TouchHelmAir.state.practice}));
+  assert.ok(result.sent.revision>40);assert.equal(result.practice.viewport_revision,result.sent.revision);
+  assert.deepEqual(result.practice.viewport,[result.sent.width,result.sent.height]);
+  assert.equal(await desktop.locator('.air-task-target').first().isVisible(),true);
+  await desktop.close();
+});
+
 test('AirControl repeated snapshots do not repeat live status announcements',async(page,context)=>{
   const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
   await desktop.waitForFunction(()=>window.TouchHelmAir);

@@ -82,11 +82,27 @@
         const key=width+'x'+height;if(key===this.viewportKey)return;
         this.viewportKey=key;this.lastViewport={width,height};const revision=++this.viewportRevision;
         this.viewportPending=revision;
+        this.renderPractice(this.state);
         try{
-          if(!desktop.preview){const result=await desktop.invoke('aircontrol','practice_viewport',{width,height,revision});if(!result.success)throw Error(result.error);if(revision===this.viewportRevision){this.viewportPending=0;if(result.aircontrol)this.render(result.aircontrol);}}
+          if(!desktop.preview){
+            const result=await desktop.invoke('aircontrol','practice_viewport',{width,height,revision});
+            if(!result.success)throw Error(result.error);
+            if(revision!==this.viewportPending)return;
+            const p=result.aircontrol?.practice,ack=p?.viewport_revision;
+            if(!Number.isSafeInteger(ack)||ack<0||ack>=2147483647||!Array.isArray(p.viewport))throw Error('Practice area acknowledgement is unavailable.');
+            this.viewportRevision=Math.max(this.viewportRevision,ack);
+            if(ack!==revision||ack<this.state.practice?.viewport_revision||p.viewport[0]!==width||p.viewport[1]!==height){
+              this.viewportKey='';this.queueViewport();return;
+            }
+            this.viewportPending=0;this.render(result.aircontrol);
+          }
           else if(revision===this.viewportRevision){this.viewportPending=0;this.renderPractice(this.state);}
-        }catch(error){this.viewportKey='';this.error='Practice area could not update: '+error.message;setText('airMessage',this.error);}
+        }catch(error){if(revision!==this.viewportPending)return;this.viewportKey='';this.error='Practice area could not update: '+error.message;setText('airMessage',this.error);}
       });
+    }
+    practiceViewportReady(s=this.state){
+      const p=s.practice,v=this.lastViewport;
+      return desktop.preview||!this.viewportPending&&!!v&&p?.viewport?.[0]===v.width&&p.viewport[1]===v.height&&p.viewport_revision===this.viewportRevision;
     }
     mappingRows(){
       const rows=Object.entries(gestures).map(([key,name])=>{
@@ -203,6 +219,10 @@
       catch(error){this.error=error.message;setText('airMessage',error.message);}
     }
     async call(action,data){
+      if(['practice_start','practice_reset','practice_resume'].includes(action)){
+        if(!this.practiceViewportReady())return false;
+        data={...data,viewport_revision:this.state.practice?.viewport_revision};
+      }
       if(this.busy)return false;this.error='';this.busy=true;this.render(this.state);
       try{
         const response=desktop.preview?this.previewAction(action,data):await desktop.invoke('aircontrol',action,data||{});
@@ -251,6 +271,7 @@
     }
     render(state){
       this.state=state||this.state;const s=this.state,setup=s.setup||{},active=!!s.camera_active;
+      if(Number.isSafeInteger(s.practice?.viewport_revision)&&s.practice.viewport_revision>=0)this.viewportRevision=Math.max(this.viewportRevision,s.practice.viewport_revision);
       const view=window.TouchHelmAirView.derive(s,this.profile);this.view=view;
       if(s.profile&&!this.dirty)this.loadProfile(s.profile);
       setText('airState',s.state==='practicing'?'Practice · PC input off':s.state==='active'?'PC control on':String(s.state||'setup_required').replaceAll('_',' ').replace(/^./,c=>c.toUpperCase()));$('airState').dataset.state=s.state;
@@ -360,6 +381,8 @@
     }
     renderPractice(s){
       const p=s.practice||{name:'free',status:'idle',targets:[]},key=JSON.stringify([p.name,p.targets,p.target_index]);
+      const viewportReady=this.practiceViewportReady(s);
+      $('airTaskTargets').hidden=!viewportReady;$('airPracticeDock').hidden=!viewportReady;
       $('airHeadActions').hidden=s.profile?.mode!=='head'||!s.camera_active||!s.calibrated||(this.currentTab==='practice'&&p.name!=='free');
       if(key!==this.targetKey){
         this.targetKey=key;$('airTaskTargets').replaceChildren();
@@ -371,12 +394,12 @@
       }
       $('airPracticeScreen').hidden=this.currentTab!=='practice';$('airExerciseControls').hidden=this.currentTab!=='practice';
       $('airPracticeDocument').hidden=p.name!=='scroll';$('airPracticeDocument').style.setProperty('--document-position',p.document_position||0);
-      $('airTaskPrompt').textContent=p.status==='complete'?'Exercise complete. Reset to try again.':p.status==='paused'?'Exercise paused. Resume when ready.':p.name==='click'?'Settle on the highlighted target, then click.':p.name==='drag'?'Hold the source, move to the destination, then release.':p.name==='scroll'?'Scroll down until you reach the destination.':'Move freely. Settle to click, or use a pinch.';
+      $('airTaskPrompt').textContent=!viewportReady?'Updating the practice area. Exercises wait for matching geometry.':p.status==='complete'?'Exercise complete. Reset to try again.':p.status==='paused'?'Exercise paused. Resume when ready.':p.name==='click'?'Settle on the highlighted target, then click.':p.name==='drag'?'Hold the source, move to the destination, then release.':p.name==='scroll'?'Scroll down until you reach the destination.':'Move freely. Settle to click, or use a pinch.';
       setText('airExerciseResult',p.name==='free'?'Free practice. Windows input stays off until Enable.':`${p.successes||0} completed, ${p.misses||0} missed. ${p.status==='complete'?'Exercise complete.':''}`);
       $('airExerciseTime').textContent=p.name==='free'?'':'Elapsed '+Math.round((p.elapsed_ms||0)/1000)+' seconds';
-      $('airExerciseStart').disabled=this.busy||!s.camera_active||!s.calibrated||!!this.viewportPending;
-      $('airExerciseReset').disabled=this.busy||s.state!=='practicing'||p.name==='free';
-      $('airExercisePause').disabled=this.busy||s.state!=='practicing'||!['running','paused'].includes(p.status);
+      $('airExerciseStart').disabled=this.busy||!s.camera_active||!s.calibrated||!viewportReady;
+      $('airExerciseReset').disabled=this.busy||s.state!=='practicing'||p.name==='free'||!viewportReady;
+      $('airExercisePause').disabled=this.busy||s.state!=='practicing'||!['running','paused'].includes(p.status)||(p.status==='paused'&&!viewportReady);
       $('airExercisePause').textContent=p.status==='paused'?'Resume exercise':'Pause exercise';
       const regions=s.scroll_regions||[],dockKey=JSON.stringify(regions);
       if(dockKey!==this.dockKey){this.dockKey=dockKey;$('airPracticeDock').replaceChildren();for(const r of regions){

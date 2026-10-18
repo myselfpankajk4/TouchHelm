@@ -6,8 +6,8 @@ action dock, smoothing and native click/drag evidence. The earlier
 [reliability review](AIRCONTROL_RELIABILITY_REVIEW.md) covers prior repairs,
 open-source comparison and measured camera limits. Earlier results below are
 historical observations, not evidence of current physical gesture accuracy.
-Current daily-workspace automated totals: **403 Python**, **80 browser behavior**,
-**86 JavaScript unit passes** (one optional skip), and **16 AirControl
+Current daily-workspace automated totals: **411 Python**, **81 browser behavior**,
+**86 JavaScript unit passes** (one optional skip), and **17 AirControl
 behavior/visual/accessibility checks**. The
 [daily-use release](AIRCONTROL_DAILY_USE_RELEASE.md) records the new workspace,
 practice tasks, scrolling, diagnostics and 36-scenario motion comparison.

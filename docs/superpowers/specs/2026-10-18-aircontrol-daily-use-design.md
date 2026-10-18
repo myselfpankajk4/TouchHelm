@@ -2,7 +2,7 @@
 
 Date: 18 October 2026
 
-Status: Approved design; implementation is under final review. Physical acceptance remains pending.
+Status: Implemented and independently reviewed; five Important findings fixed with regression tests. Physical acceptance remains pending.
 
 ## Purpose and approved direction
 

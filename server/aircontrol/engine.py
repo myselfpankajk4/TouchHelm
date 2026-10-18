@@ -37,6 +37,8 @@ class GestureEngine:
     def reset(self,*,consume_dwell=False):
         point=self.point if consume_dwell else None
         blocked=consume_dwell and bool(self.gesture)
+        neutral_required=(self.scroll_expression_blocked or self.head_scroll or
+            self.profile['mode']!='hand' and self.gesture in ('smile','wink_left','wink_right','brows_up','conflict'))
         events=[{'kind':'button','action':'up','button':'left'}] if self.held else []
         self.held=False;self.gesture='';self.fired=False;self.lock='';self.scroll_y=None
         self.dwell_anchor=None;self.dwell_fired=False;self.dwell_exit=None;self.point=None;self.progress=0.
@@ -44,7 +46,9 @@ class GestureEngine:
         self.dwell_action='left_click';self.drag_latched=False;self.dwell_target=None;self.steady_point=None
         self.hand_rebase=None
         self.head_scroll=False;self.scroll_target='';self.scroll_last=None
-        self.scroll_expression_blocked=False
+        # Interruption must not turn an uninterrupted expression into a new
+        # press. Only a valid, neutral observation below releases this latch.
+        self.scroll_expression_blocked=neutral_required
         if blocked:self.gesture=self.lock='conflict'
         if point is not None:
             # An explicit drop consumes the dwell at this location just like a
@@ -59,7 +63,8 @@ class GestureEngine:
         previous=self.point
         events=self.reset(consume_dwell=True)
         self.point=previous;self.head_scroll=enabled
-        self.scroll_expression_blocked=not enabled
+        self.scroll_expression_blocked=not enabled or self.scroll_expression_blocked
+        if not enabled:self.hud_blocked=True
         return events
 
     def _head_scroll_step(self,hud,t,*,gap=False):

@@ -99,12 +99,28 @@ class AirControlService:
             (not self.calibrated,'calibration_required','Capture your comfortable neutral position first.'),
             (self.state!='practicing' or self.practice_frames<15 or not self.practice_actions,'practice_required','Complete calibration and test a click in practice first.'),
             (self.engine.lost or not 0<=now-self.last_frame<=.25,'tracking_required','Hold a steady tracked pose before enabling control.'),
-            (self.engine.held or bool(self.engine.gesture and self.profile['bindings'].get(self.engine.gesture,'none')!='none'),'release_gesture','Release the practice gesture, then enable PC control with a neutral pointing pose.'),
+            (self._neutral_blocked(),'release_gesture','Release the practice gesture and return to pointing, then enable PC control with a neutral pose.'),
             (self.stable_since is None or self.stable_frames<5 or now-self.stable_since<.2,'steady_required','Hold a steady tracked pose for a moment before enabling control.'),
             (not self.display,'monitor_required','No monitor is available. Refresh monitors and restart calibration.')]
         for blocked,code,message in checks:
             if blocked:return {'ready':False,'code':code,'message':message}
         return {'ready':True,'code':'ready','message':'Ready to enable PC control. Your phone will return to View.'}
+
+    def _neutral_blocked(self,*,resuming=False):
+        gesture=self.engine.gesture;action=self.profile['bindings'].get(gesture,'none')
+        return (self.engine.held or self.engine.head_scroll or self.engine.scroll_expression_blocked or
+            gesture=='conflict' or bool(gesture and action!='none' and not (resuming and action=='resume')))
+
+    def _require_activation(self):
+        if self._closing:raise ValueError('AirControl is stopping.')
+        if not self._desktop_ready():raise ValueError('Unlock Windows before enabling PC control.')
+        readiness=self.activation_readiness()
+        if not readiness['ready']:raise ValueError(readiness['message'])
+
+    def _restore_practice_action(self):
+        if self.profile['mode']=='head' and self.practice.status=='running':
+            if self.practice.name=='drag':self.engine.select_dwell('drag')
+            elif self.practice.name=='scroll':self.engine.set_head_scroll(True)
 
     def _release_buttons(self,*,consume_dwell=False):
         self.engine.reset(consume_dwell=consume_dwell)
@@ -182,11 +198,12 @@ class AirControlService:
                 self.practice_viewport=self.practice.viewport
                 if previous!=self.practice_viewport and self.state=='practicing':
                     self.engine.reset(consume_dwell=True)
-                    if self.profile['mode']=='head':
-                        if self.practice.name=='drag':self.engine.select_dwell('drag')
-                        elif self.practice.name=='scroll':self.engine.set_head_scroll(True)
+                    self._restore_practice_action()
+                    self.practice.interrupt(time.monotonic())
             elif action in ('practice_start','practice_reset','practice_pause','practice_resume'):
                 if not self.worker or not self.calibrated:raise ValueError('Calibrate before starting a practice exercise.')
+                if action!='practice_pause' and 'viewport_revision' in data and (type(data['viewport_revision']) is not int or data['viewport_revision']!=self.practice.revision):
+                    raise ValueError('Practice area changed. Wait for the area to update, then try again.')
                 if action=='practice_start':
                     name=data.get('name','click')
                     if name not in ('free','click','drag','scroll'):raise ValueError('Choose a supported practice exercise.')
@@ -197,18 +214,15 @@ class AirControlService:
                             if self.release:await self.release()
                             if self.overlay:self.overlay.hide()
                     self.engine.reset(consume_dwell=True);self.practice.start(name,time.monotonic())
-                    if self.profile['mode']=='head':
-                        if name=='drag':self.engine.select_dwell('drag')
-                        elif name=='scroll':self.engine.set_head_scroll(True)
+                    self._restore_practice_action()
                 elif self.state!='practicing':raise ValueError('Return to practice before changing the exercise.')
                 elif action=='practice_reset':
                     self.engine.reset(consume_dwell=True);self.practice.start(self.practice.name,time.monotonic())
-                    if self.profile['mode']=='head':
-                        if self.practice.name=='drag':self.engine.select_dwell('drag')
-                        elif self.practice.name=='scroll':self.engine.set_head_scroll(True)
+                    self._restore_practice_action()
                 elif action=='practice_pause':
                     self.engine.reset(consume_dwell=True);self.practice.interrupt(time.monotonic())
-                else:self.practice.resume(time.monotonic())
+                else:
+                    self.practice.resume(time.monotonic());self._restore_practice_action()
                 self.message='Practice exercise: '+self.practice.name+'. Windows input is off.'
             elif action=='start':
                 if not self._desktop_ready():raise ValueError('Unlock Windows and return to the normal desktop before starting the camera.')
@@ -243,19 +257,20 @@ class AirControlService:
                     if self.release:await self.release()
                     if self.overlay:self.overlay.hide()
             elif action=='enable':
-                if not self._desktop_ready():raise ValueError('Unlock Windows before enabling PC control.')
-                readiness=self.activation_readiness()
-                if not readiness['ready']:raise ValueError(readiness['message'])
+                self._require_activation();display=copy.deepcopy(self.display)
                 current=await self.displays()
-                if not any(d.get('id')==self.display['id'] and d.get('rect')==self.display['rect'] for d in current.get('displays',[])):raise ValueError('Monitor geometry changed. Restart camera calibration.')
-                self._release_buttons();self.owns_input=True
+                self._require_activation()
+                if self.display!=display or not any(d.get('id')==display['id'] and d.get('rect')==display['rect'] for d in current.get('displays',[])):raise ValueError('Monitor geometry changed. Restart camera calibration.')
+                self._release_buttons()
                 try:
                     if self.acquire:await self.acquire()
+                    self._require_activation()
+                    if self.display!=display:raise ValueError('Monitor changed. Restart camera calibration.')
                 except BaseException:
                     self.owns_input=False
                     if self.release:await self.release()
                     raise
-                self.state='active'
+                self.owns_input=True;self.state='active'
                 self.message='AirControl is active. Ctrl+Alt+Space pauses or resumes.'
                 self.store.save(self.profile)
                 self.profiles[self.profile['name']]=copy.deepcopy(self.profile)
@@ -364,6 +379,7 @@ class AirControlService:
         if not self.display:raise ValueError('Monitor changed. Stop the camera and recalibrate for the available monitor.')
         if self.engine.lost or time.monotonic()-self.last_frame>.25:raise ValueError('Wait for stable tracking before resuming')
         if not self._stable():raise ValueError('Hold a steady tracked pose for a moment before resuming')
+        if self._neutral_blocked(resuming=True):raise ValueError('Release your expression and hold a neutral pose before resuming.')
         self._release_buttons();self.engine.hud_blocked=True;self.state='active';self.message='AirControl resumed.'
 
     def calibrate(self,target,*,quick=False):
@@ -443,7 +459,10 @@ class AirControlService:
         if self.state=='practicing':
             self.practice_frames+=1
             accepted=self.practice.accepted_clicks
+            misses=self.practice.misses
             self.practice.consume(events,self.engine.point,now)
+            if self.practice.name=='drag' and self.practice.misses>misses and not self.engine.held:
+                self._restore_practice_action()
             clicks=[e for e in events if e['kind']=='button' and e['action']=='down' or
                 e['kind']=='action' and e['action'] in ('left_click','right_click','double_click')]
             self.practice_actions+=len(clicks) if self.practice.name=='free' else self.practice.accepted_clicks-accepted
