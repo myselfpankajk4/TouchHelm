@@ -36,6 +36,42 @@ further on every noisy frame, so tracking noise leaked straight to the cursor.
   calibration does, and falls back to the latest frame if there are fewer than
   five steady samples.
 
+## Second pass (same day): "improved but still shaking"
+
+- **Your saved profile kept the old hold.** Saved profiles only filled *missing*
+  keys with new defaults, so a profile saved with the old Head steadiness of 4 px
+  never received 8 px. The profile file now records a tuning revision; the first
+  time an older file is read, a Head steadiness that still equals the old default
+  (4) becomes the new default (8). Every other saved value is left alone, and a
+  value you save afterwards (including 4) is never overridden. If you changed
+  Head steadiness yourself to something other than 4, it is kept as you set it.
+- **Single-frame tracking glitches are rejected.** A jump in head yaw/pitch over
+  1.5° waits one frame. If the next frame is back near the last good pose the
+  glitch is dropped. Otherwise the move was real, the delayed frame is replayed
+  into the filter, and the cursor is exactly where it would have been, so a
+  deliberate move is delayed only on its first frame. Before this, a one-frame
+  glitch opened the speed filter and went straight to the cursor (about 100 px).
+  Does not apply with Smoothing at 0.
+- **The stillness hold widens with measured noise.** The hold grows by 3× the
+  average per-frame movement of the filtered pose (1.5 s time constant), ignoring
+  frames that move farther than the hold itself, up to twice Head steadiness and
+  never past 80% of the dwell radius (so 14 px at the default). Deliberate moves
+  neither widen the hold nor lag behind it.
+
+Held-pose results (RMS px, mean of 8 seeds, 1080p, default profile):
+
+| Tracking model | 10 fps before → now | 30 fps before → now |
+| --- | ---: | ---: |
+| White noise 0.3° | 2.7 → 0.8 | 1.1 → 0.5 |
+| White noise 0.5° | 9.2 → 6.1 | 8.2 → 5.7 |
+| 0.3° noise + 1 s correlated sway 0.3° | 12.7 → 9.3 | 11.2 → 9.8 |
+| 0.3° noise + 3% single-frame glitches of 1.5–3° | 27 → 6 | 33 → 13 |
+
+The 90% step response is unchanged (100 ms at 10 fps, 67 ms at 15 and 30 fps).
+Two glitched frames in a row are still treated as a real move, so peaks of about
+60–100 px remain possible in that case. A genuine slow sway of the head is, by
+design, followed rather than held, which is why the sway row stays highest.
+
 ## Evidence (synthetic, not a camera)
 
 Held head with Gaussian yaw/pitch noise σ = 0.3°, 1080p, default profile. Raw
@@ -59,7 +95,10 @@ Regressions are in `tests/test_aircontrol_head_steadiness.py` and
 
 ## Not verified
 
-No physical face or camera was used; the numbers come from simulated noise.
+No physical face or camera was used; the numbers come from simulated noise
+(white noise, a correlated sway, and isolated one-frame glitches). Whether real
+glitches are one frame long, and whether the 1.5° gate and the 14 px widened hold
+feel right, are unverified.
 Real tracking noise differs by camera, lighting and person, so whether 8 px of
 hold and the new slow-drift lag feel right needs a person to try it in practice
 mode. If aiming feels sluggish, lower Head steadiness or Smoothing.

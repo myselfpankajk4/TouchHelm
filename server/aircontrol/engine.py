@@ -30,6 +30,9 @@ HEAD_BETA=16.
 # tracking noise and does not open the filter.
 HEAD_FLOOR=.1
 HEAD_RANGE_REFERENCE=18.
+HEAD_SPIKE=1.5
+HEAD_ADAPT=3.
+HEAD_ADAPT_TAU=1.5
 
 class GestureEngine:
     def __init__(self,profile):
@@ -41,7 +44,7 @@ class GestureEngine:
         self.pinch_anchor=None;self.pinch_origin=None
         self.hand_rebase=None
         self.dwell_action='left_click';self.drag_latched=False;self.hud_regions=[];self.dwell_target=None
-        self.steady_point=None
+        self.steady_point=None;self.pose_accepted=None;self.pose_suspect=None;self.jitter=0.;self.jitter_from=None;self.jitter_time=None
         self.hud_blocked=False
         self.head_scroll=False;self.scroll_target='';self.scroll_since=0.;self.scroll_last=None
         self.scroll_expression_blocked=False
@@ -60,6 +63,34 @@ class GestureEngine:
         if self.profile['mode']=='hand':return (.15+(1-smoothing)*.65)/self._hand_gain(axis)
         return (HEAD_CUTOFF+(1-smoothing)*HEAD_CUTOFF*4.6)/resolution/self._hand_gain(axis)
 
+    def _pose_gate(self,pose,t):
+        # Face tracking sometimes glitches for one frame (a blink or a lost landmark).
+        # A jump over HEAD_SPIKE degrees waits one frame: if the next frame is back near
+        # the last good pose the glitch is dropped, otherwise the move was real and the
+        # delayed frame is replayed so the filter ends up exactly where it would have.
+        # Returns (pose to use, delayed pose to replay first, hold the filters this frame).
+        accepted,suspect=self.pose_accepted,self.pose_suspect
+        far=lambda a,b:math.hypot(a[0]-b[0],a[1]-b[1])>HEAD_SPIKE
+        if accepted is None or t-accepted[2]>.25:
+            self.pose_accepted=(*pose,t);self.pose_suspect=None;return pose,None,False
+        if suspect is None:
+            if not far(pose,accepted):self.pose_accepted=(*pose,t);return pose,None,False
+            self.pose_suspect=(*pose,t);return accepted[:2],None,True
+        self.pose_suspect=None;self.pose_accepted=(*pose,t)
+        if t-suspect[2]>.25 or not far(pose,accepted):return pose,None,False
+        return pose,suspect,False
+
+    def _noisy_radius(self,filtered,scale,radius,t,dwell_cap):
+        # How far the filtered pose moves between frames is the noise a hold must absorb
+        # when the head is meant to be still; widen the hold in proportion, but keep it
+        # inside the dwell radius so dwell clicking still works.
+        if self.jitter_from is not None and t>self.jitter_time:
+            moved=math.hypot(*((filtered[i]-self.jitter_from[i])*scale[i] for i in range(2)))
+            weight=1-math.exp(-(t-self.jitter_time)/HEAD_ADAPT_TAU)
+            if moved<=radius:self.jitter+=weight*(moved-self.jitter)
+        self.jitter_from=filtered;self.jitter_time=t
+        return min(max(radius,radius+HEAD_ADAPT*self.jitter),max(radius,min(2*radius,.8*dwell_cap)))
+
     def reset(self,*,consume_dwell=False):
         point=self.point if consume_dwell else None
         blocked=consume_dwell and bool(self.gesture)
@@ -69,7 +100,7 @@ class GestureEngine:
         self.held=False;self.gesture='';self.fired=False;self.lock='';self.scroll_y=None
         self.dwell_anchor=None;self.dwell_fired=False;self.dwell_exit=None;self.point=None;self.progress=0.
         self.pinch_anchor=None;self.pinch_origin=None
-        self.dwell_action='left_click';self.drag_latched=False;self.dwell_target=None;self.steady_point=None
+        self.dwell_action='left_click';self.drag_latched=False;self.dwell_target=None;self.steady_point=None;self.pose_accepted=None;self.pose_suspect=None;self.jitter=0.;self.jitter_from=None;self.jitter_time=None
         self.hand_rebase=None
         self.head_scroll=False;self.scroll_target='';self.scroll_last=None
         # Interruption must not turn an uninterrupted expression into a new
@@ -146,13 +177,18 @@ class GestureEngine:
         if not valid:
             events=self.reset();self.lost=True;self.confidence=0.;return events
         self.lost=False;self.confidence=None
+        replay=None;hold_filters=False
         if mode=='hand':
             x0,y0,x1,y1=self.profile['calibration']['hand_bounds']
             raw=(clamp((number(hand.get('x'),.5)-x0)/(x1-x0)),clamp((number(hand.get('y'),.5)-y0)/(y1-y0)))
         else:
             yaw,pitch=self.profile['calibration']['head_neutral'];span=self.profile['head_range']*2
-            raw=(clamp(.5+(number(face.get('yaw'))-yaw)/span),clamp(.5+(number(face.get('pitch'))-pitch)/span))
+            pose=(number(face.get('yaw')),number(face.get('pitch')))
+            if self.profile['smoothing']:pose,replay,hold_filters=self._pose_gate(pose,t)
+            raw=(clamp(.5+(pose[0]-yaw)/span),clamp(.5+(pose[1]-pitch)/span))
+            if replay:replay=(*(clamp(.5+(v-n)/span) for v,n in zip(replay,(yaw,pitch))),replay[2])
         raw=tuple(clamp(.5+(v-.5)*self.profile['sensitivity']) for v in raw)
+        if replay:replay=(*(clamp(.5+(v-.5)*self.profile['sensitivity']) for v in replay[:2]),replay[2])
         width,height=self.profile.get('_monitor_scale',(1920,1080))
         resolution=1. if mode=='hand' else max(1.,width/1920,height/1080)
         for axis,filter in enumerate(self.filters):
@@ -160,7 +196,10 @@ class GestureEngine:
             filter.beta=(HAND_BETA if mode=='hand' else HEAD_BETA)/self._hand_gain(axis)
             if mode!='hand':filter.floor=HEAD_FLOOR*self._hand_gain(axis)
         previous_point=self.point
-        filtered=raw if not self.profile['smoothing'] else tuple(filter.step(value,t) for filter,value in zip(self.filters,raw))
+        if replay:
+            for filter,value in zip(self.filters,replay):filter.step(value,replay[2])
+        if hold_filters and all(f.value is not None for f in self.filters):filtered=tuple(f.value for f in self.filters)
+        else:filtered=raw if not self.profile['smoothing'] else tuple(filter.step(value,t) for filter,value in zip(self.filters,raw))
         if mode=='hand' and self.hand_rebase is not None:
             origin,target=self.hand_rebase
             # Re-anchor after finger release. Interpolate toward both screen
@@ -178,6 +217,7 @@ class GestureEngine:
         hand_hold=mode=='hand' and self.profile['smoothing'] and self.profile['hand_stability']
         if mode!='hand' or hand_hold:
             scale=self.profile.get('_monitor_scale',(1920,1080));radius=self.profile['hand_stability' if mode=='hand' else 'head_stability']*(self._hand_gain(0)+self._hand_gain(1))/2
+            if mode!='hand':radius=self._noisy_radius(filtered,scale,radius,t,dwell_cap=self.profile['dwell_radius'])
             if self.steady_point is None:self.steady_point=filtered
             dx,dy=((filtered[i]-self.steady_point[i])*scale[i] for i in range(2))
             distance=math.hypot(dx,dy)

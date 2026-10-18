@@ -72,8 +72,22 @@ def validate_profile(profile):
     value['version']=1
     return value
 
+# Revision of the tuning defaults a saved file was written with. Files written before it
+# existed carry the old head_stability default (4 px), which validate_profile cannot
+# replace because it only fills missing keys.
+TUNING=2
+OLD_HEAD_STABILITY=4
+
+def upgrade_profile(profile,tuning):
+    if tuning<2 and isinstance(profile,dict) and type(profile.get('head_stability')) in (int,float) and profile['head_stability']==OLD_HEAD_STABILITY:
+        profile=dict(profile,head_stability=default_profile()['head_stability'])
+    return profile
+
 class ProfileStore:
     def __init__(self,path):self.path=Path(path)
+    def _tuning(self,data):
+        value=data.get('tuning',1)
+        return value if type(value) is int else 1
     def _data(self):
         try:
             value=json.loads(self.path.read_text(encoding='utf-8'))
@@ -83,16 +97,17 @@ class ProfileStore:
         data=self._data();profiles={name:default_profile(name) for name in ('everyday','presenter','media','custom')}
         candidates=data.get('profiles',{}) if 'profiles' in data else {data.get('name','everyday'):data}
         if isinstance(candidates,dict):
+            tuning=self._tuning(data)
             for name,profile in candidates.items():
                 try:
-                    if name in profiles:profiles[name]=validate_profile(profile)
+                    if name in profiles:profiles[name]=validate_profile(upgrade_profile(profile,tuning))
                 except (TypeError,ValueError):pass
         return profiles
     def read(self):
         try:
             data=self._data()
             if 'profiles' in data:return self.all().get(data.get('active'),default_profile())
-            return validate_profile(data)
+            return validate_profile(upgrade_profile(data,self._tuning(data)))
         except (OSError,ValueError,TypeError):return default_profile()
     def save(self,profile):
         value=validate_profile(profile)
@@ -100,6 +115,6 @@ class ProfileStore:
         self.path.parent.mkdir(parents=True,exist_ok=True)
         from server.secure_pairing import protect_user_path
         protect_user_path(self.path.parent)
-        temporary=self.path.with_suffix('.tmp');temporary.write_text(json.dumps({'version':1,'active':value['name'],'profiles':profiles}),encoding='utf-8')
+        temporary=self.path.with_suffix('.tmp');temporary.write_text(json.dumps({'version':1,'tuning':TUNING,'active':value['name'],'profiles':profiles}),encoding='utf-8')
         protect_user_path(temporary);temporary.replace(self.path)
         return value

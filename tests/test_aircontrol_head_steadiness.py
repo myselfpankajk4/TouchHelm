@@ -5,10 +5,14 @@ to the raw mapped noise so they hold across the head_range and sensitivity setti
 """
 import math
 import random
+import json
 import statistics
+import tempfile
 import unittest
+from pathlib import Path
+from unittest.mock import patch
 from server.aircontrol.engine import GestureEngine
-from server.aircontrol.profiles import default_profile
+from server.aircontrol.profiles import ProfileStore, default_profile
 
 SIZE=(1920,1080)
 
@@ -87,6 +91,79 @@ class HeadSteadinessTests(unittest.TestCase):
         profile=default_profile(mode='head')
         self.assertGreaterEqual(profile['head_stability'],8)
         self.assertLess(profile['head_stability'],profile['dwell_radius'])
+
+
+def glitchy_pose(fps,seed,sigma,spike,seconds=14):
+    """Held head whose tracking sometimes returns a wrong pose for a single frame."""
+    r=random.Random(seed);e=engine();points=[]
+    for i in range(fps*seconds):
+        t=i/fps;yaw,pitch=r.gauss(0,sigma),r.gauss(0,sigma)
+        if r.random()<spike:pitch+=r.choice((-1,1))*r.uniform(1.5,3.)
+        if r.random()<spike:yaw+=r.choice((-1,1))*r.uniform(1.5,3.)
+        e.step(face(t,yaw,pitch))
+        if t>=2:points.append((e.point[0]*SIZE[0],e.point[1]*SIZE[1]))
+    cx=statistics.mean(p[0] for p in points);cy=statistics.mean(p[1] for p in points)
+    return math.sqrt(statistics.mean((p[0]-cx)**2+(p[1]-cy)**2 for p in points))
+
+
+class HeadGlitchTests(unittest.TestCase):
+    def test_single_frame_tracking_glitches_barely_move_the_cursor(self):
+        for fps in (10,15,30):
+            rms=statistics.mean(glitchy_pose(fps,seed,.3,.03) for seed in range(1,9))
+            self.assertLess(rms,16.,f'{fps} fps rms px (about 30 px without glitch rejection)')
+
+    def test_one_wrong_frame_is_dropped_and_the_cursor_does_not_flinch(self):
+        for fps in (10,15,30):
+            e=engine()
+            for i in range(fps*2):e.step(face(i/fps))
+            start=e.point[0]*SIZE[0];worst=0.
+            for i in range(fps*2,fps*4):
+                yaw=4. if i==fps*3 else 0.
+                e.step(face(i/fps,yaw=yaw,pitch=-yaw/2))
+                worst=max(worst,abs(e.point[0]*SIZE[0]-start))
+            self.assertLess(worst,3.,f'{fps} fps')
+
+    def test_noisier_tracking_is_held_within_the_widened_stillness_zone(self):
+        for fps in (10,15,30):
+            rms=statistics.mean(held_pose(fps,seed,sigma=.5)[0] for seed in range(1,9))
+            self.assertLess(rms,8.5,f'{fps} fps rms px (about 9 px without the adaptive hold)')
+
+    def test_widened_hold_stays_inside_the_dwell_radius(self):
+        e=engine();e.jitter=500.
+        widened=e._noisy_radius((.5,.5),SIZE,8.,1.,dwell_cap=22.)
+        self.assertGreater(widened,8.)
+        self.assertLess(widened,22.)
+        self.assertEqual(e._noisy_radius((.5,.5),SIZE,0.,2.,dwell_cap=22.),0.,'a zero hold stays off')
+
+class SavedProfileMigrationTests(unittest.TestCase):
+    def write(self,folder,data):
+        path=Path(folder)/'profile.json';path.write_text(json.dumps(data),encoding='utf-8');return ProfileStore(path)
+
+    def test_profile_saved_with_the_old_default_picks_up_the_new_hold(self):
+        old=default_profile(mode='head');old['head_stability']=4.;old['smoothing']=.5
+        with tempfile.TemporaryDirectory() as folder:
+            store=self.write(folder,{'version':1,'active':'everyday','profiles':{'everyday':old}})
+            profile=store.read()
+            self.assertEqual(profile['head_stability'],8.)
+            self.assertEqual(profile['smoothing'],.5,'other saved choices are kept')
+
+    def test_legacy_single_profile_file_is_upgraded_too(self):
+        old=default_profile(mode='head');old['head_stability']=4
+        with tempfile.TemporaryDirectory() as folder:
+            self.assertEqual(self.write(folder,old).read()['head_stability'],8.)
+
+    def test_a_choice_saved_after_the_upgrade_is_never_overridden(self):
+        with tempfile.TemporaryDirectory() as folder:
+            store=ProfileStore(Path(folder)/'profile.json')
+            profile=default_profile(mode='head');profile['head_stability']=4.
+            with patch('server.secure_pairing.protect_user_path'):store.save(profile)
+            self.assertEqual(ProfileStore(store.path).read()['head_stability'],4.)
+
+    def test_other_old_values_are_not_touched(self):
+        old=default_profile(mode='head');old['head_stability']=0.
+        with tempfile.TemporaryDirectory() as folder:
+            store=self.write(folder,{'version':1,'active':'everyday','profiles':{'everyday':old}})
+            self.assertEqual(store.read()['head_stability'],0.)
 
 
 if __name__=='__main__':unittest.main()
