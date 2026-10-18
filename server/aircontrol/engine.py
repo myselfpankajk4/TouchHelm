@@ -21,6 +21,15 @@ def tracked(source):
 # cutoff steadies a held finger; beta opens the filter quickly for deliberate
 # movement so tracking does not feel dragged behind the finger.
 HAND_BETA=9.
+# Head pose is steadied the same way. 0.12 Hz is the resting cutoff at
+# maximum smoothing; it widens as Smoothing is lowered. The reference range is
+# the default head_range, so a tighter range or higher sensitivity steadies more.
+HEAD_CUTOFF=.12
+HEAD_BETA=16.
+# Head pose speed below this (about 3.6 deg/s at the default range) is treated as
+# tracking noise and does not open the filter.
+HEAD_FLOOR=.1
+HEAD_RANGE_REFERENCE=18.
 
 class GestureEngine:
     def __init__(self,profile):
@@ -37,18 +46,19 @@ class GestureEngine:
         self.head_scroll=False;self.scroll_target='';self.scroll_since=0.;self.scroll_last=None
         self.scroll_expression_blocked=False
         smoothing=self.profile['smoothing'];head=self.profile['mode']!='hand'
-        self.filters=[OneEuro(self._cutoff(1.),HAND_BETA if not head else 6.) for _ in range(2)]
+        self.filters=[OneEuro(self._cutoff(1.),HAND_BETA if not head else HEAD_BETA) for _ in range(2)]
 
     def _hand_gain(self,axis):
-        # A smaller calibrated hand range (or higher sensitivity) magnifies
-        # landmark noise on screen, so steady it in proportion.
+        # A smaller calibrated hand range, a smaller head range or higher
+        # sensitivity magnifies tracking noise on screen, so steady it in proportion.
+        if self.profile['mode']!='hand':return max(1.,self.profile['sensitivity']*HEAD_RANGE_REFERENCE/self.profile['head_range'])
         bounds=self.profile['calibration']['hand_bounds'];span=(bounds[2]-bounds[0],bounds[3]-bounds[1])[axis]
         return max(1.,self.profile['sensitivity']*.7/max(span,.05))
 
     def _cutoff(self,resolution,axis=0):
         smoothing=self.profile['smoothing']
         if self.profile['mode']=='hand':return (.15+(1-smoothing)*.65)/self._hand_gain(axis)
-        return (.3+(1-smoothing)*1.4)/resolution
+        return (HEAD_CUTOFF+(1-smoothing)*HEAD_CUTOFF*4.6)/resolution/self._hand_gain(axis)
 
     def reset(self,*,consume_dwell=False):
         point=self.point if consume_dwell else None
@@ -147,7 +157,8 @@ class GestureEngine:
         resolution=1. if mode=='hand' else max(1.,width/1920,height/1080)
         for axis,filter in enumerate(self.filters):
             filter.minimum=self._cutoff(resolution,axis)
-            if mode=='hand':filter.beta=HAND_BETA/self._hand_gain(axis)
+            filter.beta=(HAND_BETA if mode=='hand' else HEAD_BETA)/self._hand_gain(axis)
+            if mode!='hand':filter.floor=HEAD_FLOOR*self._hand_gain(axis)
         previous_point=self.point
         filtered=raw if not self.profile['smoothing'] else tuple(filter.step(value,t) for filter,value in zip(self.filters,raw))
         if mode=='hand' and self.hand_rebase is not None:
@@ -166,7 +177,7 @@ class GestureEngine:
             self.hand_rebase=(tuple(origins),tuple(targets));filtered=tuple(anchored)
         hand_hold=mode=='hand' and self.profile['smoothing'] and self.profile['hand_stability']
         if mode!='hand' or hand_hold:
-            scale=self.profile.get('_monitor_scale',(1920,1080));radius=self.profile['hand_stability']*(self._hand_gain(0)+self._hand_gain(1))/2 if mode=='hand' else self.profile['head_stability']
+            scale=self.profile.get('_monitor_scale',(1920,1080));radius=self.profile['hand_stability' if mode=='hand' else 'head_stability']*(self._hand_gain(0)+self._hand_gain(1))/2
             if self.steady_point is None:self.steady_point=filtered
             dx,dy=((filtered[i]-self.steady_point[i])*scale[i] for i in range(2))
             distance=math.hypot(dx,dy)
@@ -199,8 +210,14 @@ class GestureEngine:
             self.pinch_anchor=None;self.pinch_origin=None
             if previous_point is not None:
                 self.point=previous_point
-                if mode=='hand':self.hand_rebase=(raw,previous_point);self.steady_point=previous_point
-                for filter,value in zip(self.filters,raw if mode=='hand' else previous_point):filter.reset();filter.step(value,t)
+                if mode=='hand':self.hand_rebase=(raw,previous_point)
+                self.steady_point=previous_point
+                for filter,value,held in zip(self.filters,raw,previous_point):
+                    filter.reset();filter.step(value,t)
+                    # Head pose keeps the held point as its starting value and then
+                    # eases toward the head; seeding the held point as a sample
+                    # would read the gap as a fast move and jump the pointer.
+                    if mode!='hand':filter.value=held
         if self.lock=='conflict' and gesture:
             self.progress=0.;return events
         if self.lock and self.lock!=gesture and gesture:

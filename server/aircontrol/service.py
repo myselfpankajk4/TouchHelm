@@ -317,7 +317,7 @@ class AirControlService:
                 if self.profile['mode']!='hand':
                     face=self.frame.get('face') or {}
                     if not face or time.monotonic()-self.last_frame>.25:raise ValueError('Face tracking is not ready')
-                    self.profile['calibration']['head_neutral']=[number(face.get('yaw')),number(face.get('pitch'))]
+                    self.profile['calibration']['head_neutral']=self._head_neutral(face)
                     self.engine.profile['calibration']=copy.deepcopy(self.profile['calibration'])
                 if self.owns_input:self.pause('Recentered. Hold a neutral pose and Resume.')
                 else:self.pause('Recentered. Continue with the practice cursor; Windows input is off.',
@@ -381,6 +381,14 @@ class AirControlService:
         if not self._stable():raise ValueError('Hold a steady tracked pose for a moment before resuming')
         if self._neutral_blocked(resuming=True):raise ValueError('Release your expression and hold a neutral pose before resuming.')
         self._release_buttons();self.engine.hud_blocked=True;self.state='active';self.message='AirControl resumed.'
+
+    def _head_neutral(self,face):
+        # One pose sample carries tracking noise; average the recent steady ones so
+        # Recenter does not bake a random offset into the neutral position.
+        values=[s['face'] for s in self.face_samples if s.get('face')]
+        if len(values)>=5 and all(statistics.pstdev([number(v.get(c)) for v in values])<=3 for c in ('yaw','pitch')):
+            return [statistics.mean(number(v.get(c)) for v in values) for c in ('yaw','pitch')]
+        return [number(face.get('yaw')),number(face.get('pitch'))]
 
     def calibrate(self,target,*,quick=False):
         if type(quick) is not bool or quick and (self.profile['mode']!='hand' or target!='center'):raise ValueError('Quick setup captures the hand center only')
@@ -537,7 +545,7 @@ class AirControlService:
             if self.voice and (not self._voice_task or self._voice_task.done()):self._voice_task=asyncio.create_task(self.voice.dictate(explicit=True))
         elif action=='recenter':
             face=self.frame.get('face') or {}
-            if face:self.profile['calibration']['head_neutral']=[number(face.get('yaw')),number(face.get('pitch'))];self.engine.profile['calibration']=copy.deepcopy(self.profile['calibration'])
+            if face:self.profile['calibration']['head_neutral']=self._head_neutral(face);self.engine.profile['calibration']=copy.deepcopy(self.profile['calibration'])
             self.pause('Recentered. Resume when ready.')
         elif action in ('play_pause','next_track','previous_track'):self.input.media_action({'play_pause':'playpause','next_track':'nexttrack','previous_track':'prevtrack'}[action])
         elif action in ('next_slide','previous_slide'):self.input.key_tap('right' if action=='next_slide' else 'left')

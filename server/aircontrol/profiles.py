@@ -17,7 +17,7 @@ GESTURE_LABELS={'pinch_index':'Thumb + index pinch','pinch_middle':'Thumb + midd
     'wink_left':'Left wink','wink_right':'Right wink','brows_up':'Raised eyebrows'}
 LIMITS={'sensitivity':(.3,3),'smoothing':(0, .9),'pinch_close':(.08,.5),
     'pinch_open':(.2,.9),'dwell_ms':(400,2500),'hold_ms':(200,1800),
-    'cooldown_ms':(250,2500),'head_range':(8,35),'head_stability':(0,12),'hand_stability':(0,16),'dwell_radius':(12,40)}
+    'cooldown_ms':(250,2500),'head_range':(8,35),'head_stability':(0,20),'hand_stability':(0,16),'dwell_radius':(12,40)}
 
 def default_profile(name='everyday',mode='head'):
     bindings={'pinch_index':'left_drag','pinch_middle':'right_click','two_fingers':'scroll',
@@ -28,7 +28,7 @@ def default_profile(name='everyday',mode='head'):
     return dict(version=1,name=name,mode=mode,hand='auto',camera_id='0',monitor_id='',mirror=True,
         landmarks=True,auto_dictation=True,sensitivity=1.,smoothing=.6 if mode=='head' else .45,pinch_close=.25,
         pinch_open=.4,dwell_ms=900,hold_ms=400,cooldown_ms=700,head_range=18,
-        dwell=True,head_stability=4.,hand_stability=6.,dwell_radius=22.,expressions_calibrated=False,calibrated_expressions=[],expression_thresholds={},bindings=bindings,
+        dwell=True,head_stability=8.,hand_stability=6.,dwell_radius=22.,expressions_calibrated=False,calibrated_expressions=[],expression_thresholds={},bindings=bindings,
         calibration={'hand_bounds':[.15,.15,.85,.85],'head_neutral':[0.,0.]})
 
 def validate_profile(profile):

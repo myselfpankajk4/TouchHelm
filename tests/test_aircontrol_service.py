@@ -187,6 +187,22 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
         await self.service.command('recenter')
         self.assertEqual(self.service.state,'practicing');self.assertFalse(self.service.owns_input)
 
+    async def test_head_recenter_averages_recent_pose_instead_of_one_noisy_frame(self):
+        import time,random
+        from test_aircontrol_head_actions import face
+        s=self.service;s.profile=default_profile(mode='head');s.engine=GestureEngine(s.profile)
+        s.worker=self.worker;s.calibrated=True;s.state='practicing'
+        random.seed(3);start=time.monotonic()-1.4
+        for i in range(15):
+            frame=face(start+i*.09,yaw=4+random.gauss(0,.4),pitch=-2+random.gauss(0,.4));frame['seq']=i
+            s.observe(frame,now=frame['timestamp'])
+        s.last_frame=time.monotonic()
+        await s.command('recenter')
+        yaw,pitch=s.profile['calibration']['head_neutral']
+        self.assertAlmostEqual(yaw,4,delta=.4);self.assertAlmostEqual(pitch,-2,delta=.4)
+        self.assertNotEqual(yaw,s.frame['face']['yaw'])
+        self.assertEqual(s.engine.profile['calibration']['head_neutral'],[yaw,pitch])
+
     async def test_pause_pose_in_practice_does_not_satisfy_click_requirement(self):
         self.service.state='practicing'
         for i in range(25):

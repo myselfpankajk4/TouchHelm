@@ -23,7 +23,7 @@
     const bindings={pinch_index:'left_drag',pinch_middle:'right_click',two_fingers:'scroll',closed_fist:'pause',open_palm:'resume',thumb_up:'none',thumb_down:'none',smile:'none',wink_left:'none',wink_right:'none',brows_up:'none'};
     if(name==='presenter')Object.assign(bindings,{thumb_up:'next_slide',thumb_down:'previous_slide'});
     if(name==='media')Object.assign(bindings,{thumb_up:'play_pause',thumb_down:'next_track'});
-    return {version:1,name,mode,hand:'auto',camera_id:'0',monitor_id:'',mirror:true,landmarks:true,auto_dictation:true,sensitivity:1,smoothing:mode==='head'?.6:.45,pinch_close:.25,pinch_open:.4,dwell_ms:900,hold_ms:400,cooldown_ms:700,head_range:18,head_stability:4,hand_stability:6,dwell_radius:22,dwell:true,expressions_calibrated:false,calibrated_expressions:[],expression_thresholds:{},bindings,calibration:{hand_bounds:[.15,.15,.85,.85],head_neutral:[0,0]}};
+    return {version:1,name,mode,hand:'auto',camera_id:'0',monitor_id:'',mirror:true,landmarks:true,auto_dictation:true,sensitivity:1,smoothing:mode==='head'?.6:.45,pinch_close:.25,pinch_open:.4,dwell_ms:900,hold_ms:400,cooldown_ms:700,head_range:18,head_stability:8,hand_stability:6,dwell_radius:22,dwell:true,expressions_calibrated:false,calibrated_expressions:[],expression_thresholds:{},bindings,calibration:{hand_bounds:[.15,.15,.85,.85],head_neutral:[0,0]}};
   }
   class AirPanel {
     constructor(){
@@ -191,7 +191,7 @@
       this.profile=structuredClone(profile);this.loadMode(profile.mode);$('airProfile').value=profile.name;
       const fields={hand:'airHand',camera_id:'airCamera',monitor_id:'airMonitor',sensitivity:'airSensitivity',smoothing:'airSmoothing',dwell_ms:'airDwellMs',hold_ms:'airHoldMs',cooldown_ms:'airCooldownMs',pinch_close:'airPinchClose',pinch_open:'airPinchOpen',head_range:'airHeadRange',mirror:'airMirror',landmarks:'airShowLandmarks',dwell:'airDwell',auto_dictation:'airAutoDictation'};
       for(const [key,id]of Object.entries(fields)){if($(id).type==='checkbox')$(id).checked=profile[key];else $(id).value=profile[key];}
-      $('airHeadStability').value=profile.head_stability??4;$('airHandStability').value=profile.hand_stability??6;$('airDwellRadius').value=profile.dwell_radius??22;
+      $('airHeadStability').value=profile.head_stability??8;$('airHandStability').value=profile.hand_stability??6;$('airDwellRadius').value=profile.dwell_radius??22;
       for(const [key,value]of Object.entries(profile.bindings||{})){const node=$('airMap_'+key);if(node)node.value=value;}
       this.rangeLabels();this.dirty=false;
     }
