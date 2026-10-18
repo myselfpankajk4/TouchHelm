@@ -59,6 +59,9 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
         await s.command('practice_start',{'name':'scroll'})
         self.assertTrue(s.engine.head_scroll)
         self.input.scroll.assert_not_called();self.acquire.assert_not_awaited()
+        await s.command('practice_viewport',{'width':320,'height':240,'revision':1})
+        self.assertTrue(s.engine.head_scroll)
+        self.assertEqual(s.practice.misses,0)
 
     async def test_readiness_is_local_and_explains_camera_off(self):
         self.service.worker=None

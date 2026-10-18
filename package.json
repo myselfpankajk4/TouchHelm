@@ -3,11 +3,16 @@
   "version": "2.2.0",
   "private": true,
   "description": "TouchHelm browser client regression tooling",
-  "engines": { "node": ">=20" },
+  "engines": {
+    "node": ">=20"
+  },
   "scripts": {
     "test": "node --test tests/aircontrol_view.test.cjs tests/browser_ux_logic.test.cjs tests/controls_logic.test.cjs tests/web_logic.test.cjs tests/service_worker.test.cjs tests/haptics.test.cjs tests/themes.test.cjs tests/themes-effects.test.cjs tests/media_clock.test.cjs tests/handoff_logic.test.cjs tests/remote_logic.test.cjs",
     "test:browser": "node tests/test_web_client.cjs",
     "test:visual": "node tests/test_web_client.cjs --visual"
   },
-  "devDependencies": { "playwright": "1.62.1" }
+  "devDependencies": {
+    "@axe-core/playwright": "4.14.0",
+    "playwright": "1.62.1"
+  }
 }

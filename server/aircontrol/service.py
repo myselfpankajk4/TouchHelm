@@ -180,7 +180,11 @@ class AirControlService:
                 previous=self.practice.viewport
                 self.practice.set_viewport(data.get('width'),data.get('height'),data.get('revision',0))
                 self.practice_viewport=self.practice.viewport
-                if previous!=self.practice_viewport and self.state=='practicing':self.engine.reset(consume_dwell=True)
+                if previous!=self.practice_viewport and self.state=='practicing':
+                    self.engine.reset(consume_dwell=True)
+                    if self.profile['mode']=='head':
+                        if self.practice.name=='drag':self.engine.select_dwell('drag')
+                        elif self.practice.name=='scroll':self.engine.set_head_scroll(True)
             elif action in ('practice_start','practice_reset','practice_pause','practice_resume'):
                 if not self.worker or not self.calibrated:raise ValueError('Calibrate before starting a practice exercise.')
                 if action=='practice_start':

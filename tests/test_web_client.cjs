@@ -1605,6 +1605,31 @@ test('AirControl theme and desktop scaling visual matrix',async(page,context)=>{
   await desktop.close();assert.deepEqual(issues,[]);
 },true);
 
+test('AirControl accessibility covers session states and all theme appearances',async(page,context)=>{
+  const AxeBuilder=require('@axe-core/playwright').default;
+  const desktop=await context.newPage();await desktop.setViewportSize({width:1120,height:800});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>TouchHelmDesktop.showPanel('aircontrol'));
+  const issues=[],reports=[];
+  async function scan(label){
+    const result=await new AxeBuilder({page:desktop}).include('[data-page=aircontrol]').analyze();
+    reports.push({label,violations:result.violations});
+    for(const issue of result.violations.filter(x=>['critical','serious'].includes(x.impact))){
+      issues.push({label,id:issue.id,impact:issue.impact,targets:issue.nodes.map(n=>n.target)});
+    }
+  }
+  for(const state of ['ready','calibrating','practicing','active','paused','tracking_lost','unavailable']){
+    await desktop.evaluate(state=>{TouchHelmAir.setPreview(state);TouchHelmAir.tab('controls');},state);await scan(state);
+  }
+  await desktop.evaluate(()=>{TouchHelmAir.setPreview('active');TouchHelmAir.render({...TouchHelmAir.state,head_scroll:true});});await scan('scrolling');
+  for(const theme of ['bloom','companion','resonance','clay','glass','soft','ink'])for(const appearance of ['light','dark']){
+    await desktop.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off'},false);await TouchHelmThemes.ready;TouchHelmAir.setPreview('practicing');TouchHelmAir.tab('practice');},{theme,appearance});
+    await scan(theme+'/'+appearance);
+  }
+  fs.mkdirSync(artifactDir,{recursive:true});fs.writeFileSync(path.join(artifactDir,'aircontrol-accessibility.json'),JSON.stringify(reports,null,2));
+  await desktop.close();assert.deepEqual(issues,[]);
+},true);
+
 (async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   origin = `http://127.0.0.1:${server.address().port}`;
