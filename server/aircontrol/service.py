@@ -15,6 +15,7 @@ from .expressions import levels,measure,learn
 from .hud import HEAD_ACTIONS,HEAD_SCROLL_ACTIONS,regions,practice_regions
 from .practice import PracticeSession
 from .metrics import SessionMetrics,bounded
+from .glide import CursorGlide
 
 class AirControlService:
     def __init__(self,input_controller,displays,*,folder,setup=None,worker_factory=CameraWorker,
@@ -31,7 +32,8 @@ class AirControlService:
         self.overlay=overlay;self.voice=voice;self.worker=None;self.task=None;self.lock=asyncio.Lock()
         self.state='ready' if self.setup.snapshot().get('ready') else 'setup_required'
         self.message='Choose Start camera. Calibration and practice do not control the PC.'
-        self.preview='';self.frame={};self.last_frame=0.;self.last_sequence=-1;self.last_point=None
+        self.preview='';self.frame={};self.last_frame=0.;self.last_sequence=-1
+        self.glide=CursorGlide(lambda x,y:self.input.set_physical_cursor_pos(x,y),probe=lambda:self.input.get_physical_cursor_pos())
         self.owns_input=False;self.calibrated=False;self.practice_frames=0;self.practice_actions=0
         self.native_down=False
         self.press_point=None;self.press_at=0.
@@ -47,6 +49,16 @@ class AirControlService:
         self.stable_since=None;self.stable_frames=0
         self.observations=0;self.rejected_observations=0;self.observation_age=None;self.last_error=''
         self.practice=PracticeSession();self.practice_viewport=(640,480)
+
+    @property
+    def last_point(self):
+        """Where AirControl last put the Windows cursor (it trails the engine point while gliding)."""
+        return self.glide.last
+
+    @last_point.setter
+    def last_point(self,point):
+        if point is None:self.glide.halt()
+        else:self.glide.set_last(point)
 
     def snapshot(self,*,frame=False):
         setup=self.setup.snapshot()
@@ -152,7 +164,7 @@ class AirControlService:
 
     async def _stop(self):
         self.metrics.stop(time.monotonic())
-        self._release_buttons()
+        self._release_buttons();self.glide.close()
         if self._voice_task and not self._voice_task.done():self._voice_task.cancel()
         if self.task and self.task is not asyncio.current_task():
             self.task.cancel()
@@ -293,8 +305,7 @@ class AirControlService:
                 elif self.state=='active':
                     if time.monotonic()-self.last_frame>.25 or not self.display or not self.input.monitor_matches(self.display):
                         self.pause('Tracking or monitor changed. Resume when ready.','tracking_lost');raise ValueError(self.message)
-                    actual=self.input.get_physical_cursor_pos()
-                    if self.last_point is not None and math.dist(actual,self.last_point)>12:
+                    if self.glide.diverged(12):
                         self.pause('Physical mouse took over. Resume when ready.');raise ValueError(self.message)
                     self.input.scroll(0,2 if action=='scroll_up' else -2,scroll_speed=1,invert=False)
                 elif action in ('scroll_up','scroll_down'):
@@ -503,19 +514,17 @@ class AirControlService:
                 self.geometry_checked=now
                 if not self.input.monitor_matches(self.display):
                     self.pause('Monitor layout changed. Stop the camera and recalibrate.','tracking_lost');self.display=None;return
-            if self.last_point is not None:
-                actual=self.input.get_physical_cursor_pos()
-                if math.hypot(actual[0]-self.last_point[0],actual[1]-self.last_point[1])>12:
-                    self.pause('Physical mouse took over. Resume when ready.');return
+            if self.glide.diverged(12):
+                self.pause('Physical mouse took over. Resume when ready.');return
             for event in events:
                 if self.state!='active':break
                 kind=event['kind']
                 if self.engine.head_scroll and kind not in ('scroll','hud_action'):continue
                 if kind=='pointer':
-                    self.last_point=physical_point(self.display['rect'],event['x'],event['y'])
-                    self.input.set_physical_cursor_pos(*self.last_point)
+                    self.glide.retarget(physical_point(self.display['rect'],event['x'],event['y']))
                     self.metrics.record_latency((time.monotonic()-stamp)*1000)
                 elif kind=='button':
+                    self.glide.settle()
                     if event['action']=='down':
                         self.input.mouse_down(event['button']);self.native_down=True
                         self.press_point=self.last_point;self.press_at=now
@@ -524,7 +533,7 @@ class AirControlService:
                         if (self.press_point and self.last_point and now-self.press_at<=.5
                                 and math.dist(self.press_point,self.last_point)<12 and not self.engine.gesture):self._auto_dictate()
                 elif kind=='scroll':self.input.scroll(0,max(-2,min(2,event['dy'])),scroll_speed=1,invert=False)
-                elif kind=='action':self._action(event['action'])
+                elif kind=='action':self.glide.settle();self._action(event['action'])
                 elif kind=='hud_action' and self.overlay:self.overlay.callback(event['action'])
         except Exception as error:
             self.last_error=type(error).__name__+': '+str(error)[:180]
@@ -553,8 +562,17 @@ class AirControlService:
             keys={'copy':('ctrl','c'),'paste':('ctrl','v'),'undo':('ctrl','z'),'switch_app':('alt','tab'),'keyboard':('win','ctrl','o')}.get(action)
             if keys:self.input.hotkey(*keys)
 
+    def _check_glide(self):
+        error,self.glide.error=self.glide.error,None
+        if error:
+            self.last_error=type(error).__name__+': '+str(error)[:180]
+            self.pause('Windows input is unavailable on this desktop. Resume in a normal signed-in session.','tracking_lost')
+        elif self.glide.taken_over and self.state=='active':
+            self.pause('Physical mouse took over. Resume when ready.')
+
     async def _loop(self):
         try:
+            self.glide.start()
             while self.worker:
                 if not self._desktop_ready():
                     self.metrics.mark_lost()
@@ -567,7 +585,7 @@ class AirControlService:
                         message=item.get('message','Camera unavailable');await self._stop();self.state='unavailable';self.message=message;return
                 if not self.last_frame and time.monotonic()-self.started>25:
                     await self._stop();self.state='unavailable';self.message='No camera observations arrived. Check the selected camera and privacy permissions.';return
-                self.watchdog()
+                self._check_glide();self.watchdog()
                 if self.state!='active' and self.native_down:self._release_buttons()
                 if self.overlay:self.overlay.update(self.snapshot())
                 await asyncio.sleep(.016)

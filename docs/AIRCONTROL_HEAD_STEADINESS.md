@@ -89,8 +89,47 @@ design, followed rather than held, which is why the sway row stays highest.
   drawn speed continuous (about 80 ms of extra display lag during steady motion).
   This only affects the practice cursor in the window; Windows input is unchanged.
 
-Not changed: with PC control on, the real Windows cursor still moves once per camera
-frame with no in-between steps. Smoothing that is a separate piece of work.
+## Fourth pass (same day): the real Windows cursor glides
+
+With PC control on, the Windows cursor was moved once per camera frame (10–15 Hz)
+with nothing in between, so it stepped even when the pointer math was smooth.
+`server/aircontrol/glide.py` (`CursorGlide`) now eases it, for Hand, Head & Face and
+Combined alike.
+
+- **How.** Each engine pointer point is a target. A thread (about 100 Hz, started
+  with the camera loop) moves the cursor at constant speed from where it is to the
+  newest target over about one frame interval: the measured gap between frames,
+  clamped to 30–160 ms. Constant speed, rather than an exponential ease, avoids the
+  speed-up-then-stall after every frame that the practice cursor had. It never
+  extrapolates or overshoots; after reaching the target it holds.
+- **Latency.** The cursor trails the engine by one frame interval. Synthetic 90%
+  step response (1000 px step, frames at the given rate): 150 ms at 6 fps, 90 ms at
+  10 fps, 60 ms at 15 fps, 30 ms at 30 fps; always under the 250 ms budget (the
+  clamp caps it at 144 ms). In a steady 1000 px/s sweep at 10 fps the cursor moves
+  10 px every 10 ms instead of 100 px every 100 ms, trailing by 100 px (100 ms).
+  The "latency" metric still records frame-to-command time, so it does not include
+  this glide delay.
+- **Clicks and drags land on the engine point.** Before any button press, release or
+  action (click, double click, hotkeys) the cursor is snapped to the engine's latest
+  point, so a dwell click or drop is where the engine settled, not where the glide
+  had reached. A drag moves with the button held and drops at the engine point.
+- **Stops at once.** Pause, tracking loss, Stop, a locked desktop and any write error
+  halt the glide under a lock; no write happens after that returns. A button held
+  at that moment is released in place. The first point after a pause still jumps
+  straight to the engine point, as before.
+- **Does not fight the physical mouse.** The glide thread compares the cursor with
+  its last write before each step. If you moved the mouse, it stops writing and the
+  camera loop pauses AirControl ("Physical mouse took over") within one 16 ms tick.
+  The 12 px takeover check on camera frames compares against the glide's last write,
+  not the trailing target, so fast sweeps do not trip it.
+- **Without the thread** (unit tests, camera stopped) every point is written
+  immediately, as before.
+
+Tests: `tests/test_aircontrol_glide.py` (easing, step response, no overshoot,
+settle/halt/takeover, a real thread, and the service wiring: click and drag order,
+pause/stop, loop cleanup).
+
+Not changed: the practice cursor drawing (third pass).
 
 ## Evidence (synthetic, not a camera)
 
@@ -114,6 +153,15 @@ Regressions are in `tests/test_aircontrol_head_steadiness.py` and
 (`tests/aircontrol_replay.py --baseline-ref HEAD`) passes its comparison.
 
 ## Not verified
+
+The native cursor glide was tested only with a fake clock, a real thread writing to a
+mock, and a mocked input controller. It has not been run against `SetPhysicalCursorPos`
+on real hardware: actual thread timing under load (Windows timer granularity, the cost
+of attaching to the input desktop on every write at 100 Hz), how it looks and feels on
+a real display, whether the 12 px takeover check misfires in real sweeps, and
+interaction with games or remote-desktop windows that read the cursor differently are
+all unverified. The native check scripts in `tests/native_aircontrol_*_check.py` need a
+camera and were not run.
 
 The drawing smoothness of the practice cursor was reasoned from the frame timing and checked in the page's behavior tests only for its on-screen text; it was not measured on a live camera.
 No physical face or camera was used; the numbers come from simulated noise
