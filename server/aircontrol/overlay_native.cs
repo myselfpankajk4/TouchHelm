@@ -74,7 +74,8 @@ public class TouchHelmAirHud : Form {
                 bool dragging=state.ContainsKey("dragging") && Convert.ToBoolean(state["dragging"]);
                 string selection=state.ContainsKey("dwell_action")?Convert.ToString(state["dwell_action"]):"left_click";
                 bool head=state.ContainsKey("mode") && Convert.ToString(state["mode"])=="head";
-                detail.Text=active?(dragging?"Drag held · move, then settle to drop":head?"Settle to "+selection.Replace("_"," "):(string)state["gesture_label"]):"Aim at Resume / Recenter, or use hotkey";
+                bool scrolling=state.ContainsKey("head_scroll") && Convert.ToBoolean(state["head_scroll"]);
+                detail.Text=active?(scrolling?"Dwell on Up / Down. Done returns to pointing.":dragging?"Drag held · move, then settle to drop":head?"Settle to "+selection.Replace("_"," "):(string)state["gesture_label"]):"Aim at Resume / Recenter, or use hotkey";
                 var spec=state["layout"] as Dictionary<string,object>;
                 if(spec==null)return;
                 window.ClientSize=new Size(Integer(spec,"width"),Integer(spec,"height"));

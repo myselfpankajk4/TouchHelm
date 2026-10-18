@@ -12,7 +12,7 @@ from .profiles import ProfileStore,default_profile,validate_profile,ACTION_LABEL
 from .process import CameraWorker
 from .setup import AirControlSetup
 from .expressions import levels,measure,learn
-from .hud import HEAD_ACTIONS,regions
+from .hud import HEAD_ACTIONS,HEAD_SCROLL_ACTIONS,regions,practice_regions
 
 class AirControlService:
     def __init__(self,input_controller,displays,*,folder,setup=None,worker_factory=CameraWorker,
@@ -65,7 +65,8 @@ class AirControlService:
             'tracking_details':{'hand':self.frame.get('hand_status',''),'face':self.frame.get('face_status',''),
                 'processing_delayed':self.observation_age is not None and self.observation_age>.25,'last_error':self.last_error},
             'point':self.engine.point,'tracking':not self.engine.lost and fresh,'display':self.display,
-            'dwell_action':self.engine.dwell_action,'dragging':self.engine.held,
+            'dwell_action':self.engine.dwell_action,'dragging':self.engine.held,'head_scroll':self.engine.head_scroll,
+            'scroll_regions':practice_regions(getattr(self,'practice_viewport',(640,480)),scrolling=self.engine.head_scroll) if self.state=='practicing' else [],
             'actions':list(self.actions),'action_catalog':ACTION_LABELS,'gesture_catalog':GESTURE_LABELS,
             'metrics':{'fps':round((len(self.times)-1)/(self.times[-1]-self.times[0]),1) if fresh and len(self.times)>1 and self.times[-1]>self.times[0] else None,
                 'median_latency_ms':round(statistics.median(self.latencies),1) if self.latencies else None,
@@ -195,6 +196,27 @@ class AirControlService:
                 self.profiles[self.profile['name']]=copy.deepcopy(self.profile)
             elif action=='pause':
                 if self.worker:self.pause()
+            elif action in HEAD_SCROLL_ACTIONS:
+                if not self.worker or not self.calibrated or self.profile['mode']!='head' or self.state not in ('active','practicing'):
+                    raise ValueError('Calibrate Head & Face, then use Scroll in practice or active control.')
+                if self.state=='active' and not self._desktop_ready():
+                    self.pause('Unlock Windows before using head scrolling.','tracking_lost')
+                    raise ValueError(self.message)
+                if action=='head_scroll':
+                    if not self.engine.head_scroll:
+                        self._release_buttons(consume_dwell=True);self.engine.set_head_scroll(True)
+                        if self.state=='active':self.last_point=self.input.get_physical_cursor_pos()
+                    self.message='Head scroll: dwell on Up or Down. Done returns to pointing.'
+                elif not self.engine.head_scroll:raise ValueError('Choose Scroll before scrolling or returning to pointing.')
+                elif action=='scroll_done':
+                    self.engine.set_head_scroll(False);self.message='Pointing restored. Move away before dwelling to click.'
+                elif self.state=='active':
+                    if time.monotonic()-self.last_frame>.25 or not self.display or not self.input.monitor_matches(self.display):
+                        self.pause('Tracking or monitor changed. Resume when ready.','tracking_lost');raise ValueError(self.message)
+                    actual=self.input.get_physical_cursor_pos()
+                    if self.last_point is not None and math.dist(actual,self.last_point)>12:
+                        self.pause('Physical mouse took over. Resume when ready.');raise ValueError(self.message)
+                    self.input.scroll(0,2 if action=='scroll_up' else -2,scroll_speed=1,invert=False)
             elif action in HEAD_ACTIONS:
                 if not self.worker or not self.calibrated or self.profile['mode']!='head' or self.state not in ('active','practicing'):
                     raise ValueError('Calibrate Head & Face, then use its practice or active action dock.')
@@ -337,7 +359,9 @@ class AirControlService:
         self.samples.append(self.frame)
         if face and tracked(face) and face.get('count')==1:self.face_samples.append(self.frame)
         else:self.face_samples.clear()
-        self.engine.hud_regions=regions(self.display,active=self.state=='active') if self.owns_input and self.profile['mode']=='head' else []
+        self.engine.hud_regions=(regions(self.display,active=self.state=='active',scrolling=self.engine.head_scroll)
+            if self.owns_input and self.profile['mode']=='head' else
+            practice_regions(getattr(self,'practice_viewport',(640,480)),scrolling=self.engine.head_scroll) if self.state=='practicing' else [])
         events=self.engine.step(frame,paused=self.state in ('paused','tracking_lost'))
         if self.engine.lost:
             self.stable_since=None;self.stable_frames=0;self.samples.clear();self.times.clear()
@@ -366,7 +390,11 @@ class AirControlService:
                     try:self.resume()
                     except ValueError:pass
                 elif event['kind']=='hud_dwell' and self.overlay:self.overlay.dwell(event.get('x',0),event.get('y',0),self.display)
-                elif event['kind']=='hud_action' and self.overlay:self.overlay.callback(event['action'])
+                elif event['kind']=='hud_action':
+                    if not self.owns_input and event['action']=='scroll_done':self.engine.set_head_scroll(False)
+                    elif not self.owns_input and event['action']=='pause':self.engine.reset(consume_dwell=True)
+                    elif not self.owns_input and event['action']=='stop':asyncio.create_task(self.command('stop'))
+                    elif self.owns_input and self.overlay:self.overlay.callback(event['action'])
             return
         try:
             if not self._desktop_ready():
@@ -383,6 +411,7 @@ class AirControlService:
             for event in events:
                 if self.state!='active':break
                 kind=event['kind']
+                if self.engine.head_scroll and kind not in ('scroll','hud_action'):continue
                 if kind=='pointer':
                     self.last_point=physical_point(self.display['rect'],event['x'],event['y'])
                     self.input.set_physical_cursor_pos(*self.last_point)

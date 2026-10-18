@@ -7,7 +7,7 @@ import subprocess
 import sys
 import threading
 import time
-from .hud import HEAD_ACTIONS,layout,regions
+from .hud import HEAD_ACTIONS,HEAD_SCROLL_ACTIONS,layout,regions
 
 class AirOverlay:
     def __init__(self,callback):
@@ -22,7 +22,7 @@ class AirOverlay:
             for line in process.stdout:
                 try:value=json.loads(line)
                 except ValueError:continue
-                if value.get('action') in ('pause','resume','stop','recenter',*HEAD_ACTIONS):self.callback(value['action'])
+                if value.get('action') in ('pause','resume','stop','recenter',*HEAD_ACTIONS,*HEAD_SCROLL_ACTIONS):self.callback(value['action'])
         def write():
             while self.process is process and process.poll() is None:
                 try:value=self.pending.get(timeout=.2)
@@ -58,8 +58,8 @@ class AirOverlay:
             try:self._start()
             except OSError:self.hotkey_status='HUD unavailable. Use the desktop or tray to stop.';return
         value={k:state.get(k) for k in ('state','message','gesture_label','progress','point','display')}
-        value.update(mode=state.get('profile',{}).get('mode'),dwell_action=state.get('dwell_action'),dragging=state.get('dragging',False))
-        if state.get('display'):value['layout']=layout(state['display'],active=state.get('state')=='active',head=value['mode']=='head',dragging=value['dragging'])
+        value.update(mode=state.get('profile',{}).get('mode'),dwell_action=state.get('dwell_action'),dragging=state.get('dragging',False),head_scroll=state.get('head_scroll',False))
+        if state.get('display'):value['layout']=layout(state['display'],active=state.get('state')=='active',head=value['mode']=='head',dragging=value['dragging'],scrolling=value['head_scroll'])
         try:self.pending.put_nowait(value)
         except queue.Full:
             try:self.pending.get_nowait()
