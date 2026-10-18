@@ -64,7 +64,10 @@ def baseline_engine(ref,folder):
         (package/name).write_bytes(result.stdout)
     spec=importlib.util.spec_from_file_location('aircontrol_baseline',package/'__init__.py',submodule_search_locations=[str(package)])
     module=importlib.util.module_from_spec(spec);sys.modules['aircontrol_baseline']=module;spec.loader.exec_module(module)
-    return importlib.import_module('aircontrol_baseline.engine').GestureEngine
+    engine_class=importlib.import_module('aircontrol_baseline.engine').GestureEngine
+    known=set(importlib.import_module('aircontrol_baseline.profiles').default_profile(mode='head'))
+    # A baseline from before a profile field existed rejects that field.
+    return lambda profile:engine_class({key:value for key,value in profile.items() if key in known})
 
 
 def main():

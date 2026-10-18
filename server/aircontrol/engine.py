@@ -17,6 +17,11 @@ def tracked(source):
     # Older synthetic/provider observations remain compatible during migration.
     return number(source.get('confidence'))>=.65
 
+# Hand landmarks are noisy at 10-15 camera frames per second. A low resting
+# cutoff steadies a held finger; beta opens the filter quickly for deliberate
+# movement so tracking does not feel dragged behind the finger.
+HAND_BETA=9.
+
 class GestureEngine:
     def __init__(self,profile):
         self.profile=validate_profile(profile);self.held=False;self.lost=True
@@ -32,7 +37,18 @@ class GestureEngine:
         self.head_scroll=False;self.scroll_target='';self.scroll_since=0.;self.scroll_last=None
         self.scroll_expression_blocked=False
         smoothing=self.profile['smoothing'];head=self.profile['mode']!='hand'
-        self.filters=[OneEuro((.3 if head else 1.)+(1-smoothing)*(1.4 if head else 2.),6.) for _ in range(2)]
+        self.filters=[OneEuro(self._cutoff(1.),HAND_BETA if not head else 6.) for _ in range(2)]
+
+    def _hand_gain(self,axis):
+        # A smaller calibrated hand range (or higher sensitivity) magnifies
+        # landmark noise on screen, so steady it in proportion.
+        bounds=self.profile['calibration']['hand_bounds'];span=(bounds[2]-bounds[0],bounds[3]-bounds[1])[axis]
+        return max(1.,self.profile['sensitivity']*.7/max(span,.05))
+
+    def _cutoff(self,resolution,axis=0):
+        smoothing=self.profile['smoothing']
+        if self.profile['mode']=='hand':return (.15+(1-smoothing)*.65)/self._hand_gain(axis)
+        return (.3+(1-smoothing)*1.4)/resolution
 
     def reset(self,*,consume_dwell=False):
         point=self.point if consume_dwell else None
@@ -127,10 +143,11 @@ class GestureEngine:
             yaw,pitch=self.profile['calibration']['head_neutral'];span=self.profile['head_range']*2
             raw=(clamp(.5+(number(face.get('yaw'))-yaw)/span),clamp(.5+(number(face.get('pitch'))-pitch)/span))
         raw=tuple(clamp(.5+(v-.5)*self.profile['sensitivity']) for v in raw)
-        if mode!='hand':
-            width,height=self.profile.get('_monitor_scale',(1920,1080))
-            resolution=max(1.,width/1920,height/1080)
-            for filter in self.filters:filter.minimum=(.3+(1-self.profile['smoothing'])*1.4)/resolution
+        width,height=self.profile.get('_monitor_scale',(1920,1080))
+        resolution=1. if mode=='hand' else max(1.,width/1920,height/1080)
+        for axis,filter in enumerate(self.filters):
+            filter.minimum=self._cutoff(resolution,axis)
+            if mode=='hand':filter.beta=HAND_BETA/self._hand_gain(axis)
         previous_point=self.point
         filtered=raw if not self.profile['smoothing'] else tuple(filter.step(value,t) for filter,value in zip(self.filters,raw))
         if mode=='hand' and self.hand_rebase is not None:
@@ -147,8 +164,9 @@ class GestureEngine:
                 # edge can be reached again, without a stationary-pointer jump.
                 if a in (0.,1.) and v!=a:origins[i]=v;targets[i]=clamp(mapped)
             self.hand_rebase=(tuple(origins),tuple(targets));filtered=tuple(anchored)
-        if mode!='hand':
-            scale=self.profile.get('_monitor_scale',(1920,1080));radius=self.profile['head_stability']
+        hand_hold=mode=='hand' and self.profile['smoothing'] and self.profile['hand_stability']
+        if mode!='hand' or hand_hold:
+            scale=self.profile.get('_monitor_scale',(1920,1080));radius=self.profile['hand_stability']*(self._hand_gain(0)+self._hand_gain(1))/2 if mode=='hand' else self.profile['head_stability']
             if self.steady_point is None:self.steady_point=filtered
             dx,dy=((filtered[i]-self.steady_point[i])*scale[i] for i in range(2))
             distance=math.hypot(dx,dy)
@@ -171,7 +189,7 @@ class GestureEngine:
         # ordinary pointing in active control or the practice simulator.
         if gesture=='open_palm' and not paused:gesture=''
         if gesture!='conflict' and self.profile['bindings'].get(gesture,'none')=='none':gesture=''
-        target_gesture=(mode=='hand' and gesture.startswith('pinch_') or mode=='head' and gesture in ('smile','wink_left','wink_right','brows_up') and self.profile['bindings'].get(gesture) in ('left_click','right_click','double_click','left_drag'))
+        target_gesture=(mode in ('hand','combined') and gesture.startswith('pinch_') or mode=='head' and gesture in ('smile','wink_left','wink_right','brows_up') and self.profile['bindings'].get(gesture) in ('left_click','right_click','double_click','left_drag'))
         if target_gesture:
             if self.pinch_anchor is None or self.gesture!=gesture:
                 self.pinch_anchor=previous_point or filtered;self.pinch_origin=filtered
@@ -181,7 +199,7 @@ class GestureEngine:
             self.pinch_anchor=None;self.pinch_origin=None
             if previous_point is not None:
                 self.point=previous_point
-                if mode=='hand':self.hand_rebase=(raw,previous_point)
+                if mode=='hand':self.hand_rebase=(raw,previous_point);self.steady_point=previous_point
                 for filter,value in zip(self.filters,raw if mode=='hand' else previous_point):filter.reset();filter.step(value,t)
         if self.lock=='conflict' and gesture:
             self.progress=0.;return events

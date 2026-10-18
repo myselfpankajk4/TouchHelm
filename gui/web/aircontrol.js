@@ -23,7 +23,7 @@
     const bindings={pinch_index:'left_drag',pinch_middle:'right_click',two_fingers:'scroll',closed_fist:'pause',open_palm:'resume',thumb_up:'none',thumb_down:'none',smile:'none',wink_left:'none',wink_right:'none',brows_up:'none'};
     if(name==='presenter')Object.assign(bindings,{thumb_up:'next_slide',thumb_down:'previous_slide'});
     if(name==='media')Object.assign(bindings,{thumb_up:'play_pause',thumb_down:'next_track'});
-    return {version:1,name,mode,hand:'auto',camera_id:'0',monitor_id:'',mirror:true,landmarks:true,auto_dictation:true,sensitivity:1,smoothing:mode==='head'?.6:.45,pinch_close:.25,pinch_open:.4,dwell_ms:900,hold_ms:400,cooldown_ms:700,head_range:18,head_stability:4,dwell_radius:22,dwell:true,expressions_calibrated:false,calibrated_expressions:[],expression_thresholds:{},bindings,calibration:{hand_bounds:[.15,.15,.85,.85],head_neutral:[0,0]}};
+    return {version:1,name,mode,hand:'auto',camera_id:'0',monitor_id:'',mirror:true,landmarks:true,auto_dictation:true,sensitivity:1,smoothing:mode==='head'?.6:.45,pinch_close:.25,pinch_open:.4,dwell_ms:900,hold_ms:400,cooldown_ms:700,head_range:18,head_stability:4,hand_stability:6,dwell_radius:22,dwell:true,expressions_calibrated:false,calibrated_expressions:[],expression_thresholds:{},bindings,calibration:{hand_bounds:[.15,.15,.85,.85],head_neutral:[0,0]}};
   }
   class AirPanel {
     constructor(){
@@ -191,7 +191,7 @@
       this.profile=structuredClone(profile);this.loadMode(profile.mode);$('airProfile').value=profile.name;
       const fields={hand:'airHand',camera_id:'airCamera',monitor_id:'airMonitor',sensitivity:'airSensitivity',smoothing:'airSmoothing',dwell_ms:'airDwellMs',hold_ms:'airHoldMs',cooldown_ms:'airCooldownMs',pinch_close:'airPinchClose',pinch_open:'airPinchOpen',head_range:'airHeadRange',mirror:'airMirror',landmarks:'airShowLandmarks',dwell:'airDwell',auto_dictation:'airAutoDictation'};
       for(const [key,id]of Object.entries(fields)){if($(id).type==='checkbox')$(id).checked=profile[key];else $(id).value=profile[key];}
-      $('airHeadStability').value=profile.head_stability??4;$('airDwellRadius').value=profile.dwell_radius??22;
+      $('airHeadStability').value=profile.head_stability??4;$('airHandStability').value=profile.hand_stability??6;$('airDwellRadius').value=profile.dwell_radius??22;
       for(const [key,value]of Object.entries(profile.bindings||{})){const node=$('airMap_'+key);if(node)node.value=value;}
       this.rangeLabels();this.dirty=false;
     }
@@ -201,7 +201,7 @@
       for(const [key,id]of Object.entries({sensitivity:'airSensitivity',smoothing:'airSmoothing',dwell_ms:'airDwellMs',hold_ms:'airHoldMs',cooldown_ms:'airCooldownMs',pinch_close:'airPinchClose',pinch_open:'airPinchOpen',head_range:'airHeadRange'}))profile[key]=Number($(id).value);
       for(const [key,id]of Object.entries({mirror:'airMirror',landmarks:'airShowLandmarks',dwell:'airDwell',auto_dictation:'airAutoDictation'}))profile[key]=$(id).checked;
       for(const key of Object.keys(gestures))profile.bindings[key]=$('airMap_'+key).value;
-      profile.head_stability=Number($('airHeadStability').value);profile.dwell_radius=Number($('airDwellRadius').value);
+      profile.head_stability=Number($('airHeadStability').value);profile.hand_stability=Number($('airHandStability').value);profile.dwell_radius=Number($('airDwellRadius').value);
       return profile;
     }
     validate(profile){
@@ -340,7 +340,7 @@
       const target=$('airCalibrationTarget');target.hidden=!active||s.state!=='calibrating';
       const position={center:[50,50],top_left:[22,22],top_right:[78,22],bottom_left:[22,78],bottom_right:[78,78]}[next];target.style.left=position[0]+'%';target.style.top=position[1]+'%';
       $('airPracticeResult').textContent=`${s.practice_frames>=15?'Pointer tracking ready':'Keep your hand or face steadily visible'} · ${s.practice_actions?'Practice click recognized':'Test a pinch click, or a head dwell click'}. ${s.practice_ready?'Ready: Enable PC control above.':'Windows input is off.'}`;
-      if(s.point){$('airPracticePointer').style.left=s.point[0]*100+'%';$('airPracticePointer').style.top=s.point[1]*100+'%';}
+      if(s.point)this.glidePointer(s.point);else this.glide=null;
       $('airPracticePointer').hidden=!active||!s.point;
       $('airPracticePointer').dataset.dragging=String(!!s.dragging);
       $('airPracticePointer').style.setProperty('--dwell-progress',Math.round((s.progress||0)*360)+'deg');
@@ -430,6 +430,22 @@
         link.href=url;link.download='touchhelm-aircontrol-report.json';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
       }catch(error){this.error='Report could not export: '+error.message;setText('airMessage',this.error);}
       finally{this.busy=false;this.render(this.state);}
+    }
+    glidePointer(point){
+      // Camera frames arrive at 10-15 Hz; ease the drawn cursor between them so a steady pointer does not visibly step.
+      const node=$('airPracticePointer'),g=this.glide||(this.glide={x:point[0],y:point[1],tx:point[0],ty:point[1],last:0,raf:0});
+      const jump=Math.hypot(point[0]-g.tx,point[1]-g.ty)>.35,still=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
+      g.tx=point[0];g.ty=point[1];
+      const place=()=>{node.style.left=g.x*100+'%';node.style.top=g.y*100+'%';};
+      if(jump||still||typeof requestAnimationFrame!=='function'||node.hidden){g.x=g.tx;g.y=g.ty;place();return;}
+      if(g.raf)return;
+      const tick=now=>{
+        const dt=Math.min(.1,Math.max(0,(now-(g.last||now))/1000));g.last=now;
+        const k=1-Math.exp(-dt/.045);g.x+=(g.tx-g.x)*k;g.y+=(g.ty-g.y)*k;
+        const settled=Math.hypot(g.tx-g.x,g.ty-g.y)<.0002;if(settled){g.x=g.tx;g.y=g.ty;}
+        place();g.raf=settled?0:requestAnimationFrame(tick);if(settled)g.last=0;
+      };
+      g.raf=requestAnimationFrame(tick);
     }
     async pollFrame(){
       if(this.frameBusy||document.hidden||!this.state.camera_active||document.querySelector('[data-page=aircontrol]').hidden||desktop.preview)return;
