@@ -44,7 +44,7 @@ class GestureEngine:
         self.pinch_anchor=None;self.pinch_origin=None
         self.hand_rebase=None
         self.dwell_action='left_click';self.drag_latched=False;self.hud_regions=[];self.dwell_target=None
-        self.steady_point=None;self.pose_accepted=None;self.pose_suspect=None;self.jitter=0.;self.jitter_from=None;self.jitter_time=None
+        self.steady_point=None;self.pose_accepted=None;self.pose_suspect=None;self.pose_speed=(0.,0.);self.jitter=0.;self.jitter_from=None;self.jitter_time=None
         self.hud_blocked=False
         self.head_scroll=False;self.scroll_target='';self.scroll_since=0.;self.scroll_last=None
         self.scroll_expression_blocked=False
@@ -70,15 +70,26 @@ class GestureEngine:
         # delayed frame is replayed so the filter ends up exactly where it would have.
         # Returns (pose to use, delayed pose to replay first, hold the filters this frame).
         accepted,suspect=self.pose_accepted,self.pose_suspect
-        far=lambda a,b:math.hypot(a[0]-b[0],a[1]-b[1])>HEAD_SPIKE
+        def far(a,b,at):
+            # A fast sweep keeps moving, so judge a jump against where the last real
+            # step was heading, not against where the head used to be.
+            lead=at-b[2];px,py=b[0]+self.pose_speed[0]*lead,b[1]+self.pose_speed[1]*lead
+            return math.hypot(a[0]-px,a[1]-py)>HEAD_SPIKE
         if accepted is None or t-accepted[2]>.25:
-            self.pose_accepted=(*pose,t);self.pose_suspect=None;return pose,None,False
+            self.pose_accepted=(*pose,t);self.pose_suspect=None;self.pose_speed=(0.,0.);return pose,None,False
         if suspect is None:
-            if not far(pose,accepted):self.pose_accepted=(*pose,t);return pose,None,False
+            if not far(pose,accepted,t):self.pose_accepted=self._advance(pose,t,accepted);return pose,None,False
             self.pose_suspect=(*pose,t);return accepted[:2],None,True
-        self.pose_suspect=None;self.pose_accepted=(*pose,t)
-        if t-suspect[2]>.25 or not far(pose,accepted):return pose,None,False
-        return pose,suspect,False
+        self.pose_suspect=None
+        if t-suspect[2]>.25 or not far(pose,accepted,t):
+            self.pose_accepted=self._advance(pose,t,accepted);return pose,None,False
+        self.pose_speed=(0.,0.);self.pose_accepted=self._advance(pose,t,suspect);return pose,suspect,False
+
+    def _advance(self,pose,t,before):
+        # Remember the speed only for a clearly deliberate step; small steps are tracking noise.
+        step=(pose[0]-before[0],pose[1]-before[1]);elapsed=t-before[2]
+        self.pose_speed=(step[0]/elapsed,step[1]/elapsed) if elapsed>0 and math.hypot(*step)>HEAD_SPIKE else (0.,0.)
+        return (*pose,t)
 
     def _noisy_radius(self,filtered,scale,radius,t,dwell_cap):
         # How far the filtered pose moves between frames is the noise a hold must absorb
@@ -100,7 +111,7 @@ class GestureEngine:
         self.held=False;self.gesture='';self.fired=False;self.lock='';self.scroll_y=None
         self.dwell_anchor=None;self.dwell_fired=False;self.dwell_exit=None;self.point=None;self.progress=0.
         self.pinch_anchor=None;self.pinch_origin=None
-        self.dwell_action='left_click';self.drag_latched=False;self.dwell_target=None;self.steady_point=None;self.pose_accepted=None;self.pose_suspect=None;self.jitter=0.;self.jitter_from=None;self.jitter_time=None
+        self.dwell_action='left_click';self.drag_latched=False;self.dwell_target=None;self.steady_point=None;self.pose_accepted=None;self.pose_suspect=None;self.pose_speed=(0.,0.);self.jitter=0.;self.jitter_from=None;self.jitter_time=None
         self.hand_rebase=None
         self.head_scroll=False;self.scroll_target='';self.scroll_last=None
         # Interruption must not turn an uninterrupted expression into a new

@@ -72,6 +72,26 @@ Two glitched frames in a row are still treated as a real move, so peaks of about
 60–100 px remain possible in that case. A genuine slow sway of the head is, by
 design, followed rather than held, which is why the sway row stays highest.
 
+## Third pass (same day): "holding is better but movement is not smooth"
+
+- **Fast, continuous moves no longer stall every other frame.** The glitch gate
+  compared each frame with the last accepted pose, so a sweep of more than 1.5° per
+  frame (20°/s at 10 fps, 30°/s at 15 fps) looked like a glitch on every frame: the
+  cursor held, then jumped, then held. At 10 fps and 20°/s the per-frame cursor
+  step alternated 0 px and 217 px. The gate now judges a jump against where the
+  last deliberate step was heading. Only a step larger than 1.5° sets that
+  heading, so a held pose with tracking noise is gated exactly as before. After the
+  change the same sweep moves 107 px every frame (spread under 1 px) at 10 fps, and
+  the single-frame glitch tests, including one in the middle of a sweep, still pass.
+- **The practice cursor drawing is smoother.** The page receives a frame about every
+  100 ms and eased the drawn cursor toward it with one stage, which speeds up after
+  each frame and then slows to a stop before the next. Two easing stages keep the
+  drawn speed continuous (about 80 ms of extra display lag during steady motion).
+  This only affects the practice cursor in the window; Windows input is unchanged.
+
+Not changed: with PC control on, the real Windows cursor still moves once per camera
+frame with no in-between steps. Smoothing that is a separate piece of work.
+
 ## Evidence (synthetic, not a camera)
 
 Held head with Gaussian yaw/pitch noise σ = 0.3°, 1080p, default profile. Raw
@@ -95,6 +115,7 @@ Regressions are in `tests/test_aircontrol_head_steadiness.py` and
 
 ## Not verified
 
+The drawing smoothness of the practice cursor was reasoned from the frame timing and checked in the page's behavior tests only for its on-screen text; it was not measured on a live camera.
 No physical face or camera was used; the numbers come from simulated noise
 (white noise, a correlated sway, and isolated one-frame glitches). Whether real
 glitches are one frame long, and whether the 1.5° gate and the 14 px widened hold

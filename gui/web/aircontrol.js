@@ -57,7 +57,7 @@
       scroll.innerHTML='<button id="airScroll" class="secondary-button">Scroll</button><button id="airScrollUp" class="secondary-button" hidden>Scroll up</button><button id="airScrollDown" class="secondary-button" hidden>Scroll down</button><button id="airScrollDone" class="secondary-button" hidden>Return to pointer</button>';
       $('airHeadActions').append(scroll);
       const exercises=document.createElement('div');exercises.id='airExerciseControls';exercises.className='air-exercise-controls';
-      exercises.innerHTML='<h2>Practice a task</h2><label for="airExercise">Exercise</label><select id="airExercise"><option value="click">Click three targets</option><option value="drag">Drag to a destination</option><option value="scroll">Scroll to a marker</option><option value="free">Free practice</option></select><button id="airExerciseStart" class="secondary-button">Start exercise</button><div class="button-row"><button id="airExerciseReset" class="quiet-button">Reset exercise</button><button id="airExercisePause" class="quiet-button">Pause exercise</button></div><p id="airExerciseResult" role="status"></p><span id="airExerciseTime" class="muted" aria-live="off"></span>';
+      exercises.innerHTML='<h2>Practice a task</h2><label for="airExercise">Exercise</label><select id="airExercise"><option value="click">Click three targets</option><option value="drag">Drag to a destination</option><option value="scroll">Scroll to the Destination</option><option value="free">Free practice</option></select><button id="airExerciseStart" class="secondary-button">Start exercise</button><div class="button-row"><button id="airExerciseReset" class="quiet-button">Reset exercise</button><button id="airExercisePause" class="quiet-button">Pause exercise</button></div><p id="airExerciseResult" role="status"></p><span id="airExerciseTime" class="muted" aria-live="off"></span>';
       coach.insertBefore(exercises,$('airHeadActions'));
       $('airStage').append($('airPracticeScreen'));
       const settings=panel.querySelector('[data-air-content=settings]');settings.prepend(panel.querySelector('.air-expression-setup'));
@@ -394,19 +394,41 @@
       }
       $('airPracticeScreen').hidden=this.currentTab!=='practice';$('airExerciseControls').hidden=this.currentTab!=='practice';
       $('airPracticeDocument').hidden=p.name!=='scroll';$('airPracticeDocument').style.setProperty('--document-position',p.document_position||0);
-      $('airTaskPrompt').textContent=!viewportReady?'Updating the practice area. Exercises wait for matching geometry.':p.status==='complete'?'Exercise complete. Reset to try again.':p.status==='paused'?'Exercise paused. Resume when ready.':p.name==='click'?'Settle on the highlighted target, then click.':p.name==='drag'?'Hold the source, move to the destination, then release.':p.name==='scroll'?'Scroll down until you reach the destination.':'Move freely. Settle to click, or use a pinch.';
+      const hot=this.hotRegion(s);
+      $('airTaskPrompt').textContent=!viewportReady?'Updating the practice area. Exercises wait for matching geometry.':p.status==='complete'?'Exercise complete. Reset to try again.':p.status==='paused'?'Exercise paused. Resume when ready.':p.name==='click'?'Settle on the highlighted target, then click.':p.name==='drag'?'Hold the source, move to the destination, then release.':p.name==='scroll'?this.scrollPrompt(s,hot):'Move freely. Settle to click, or use a pinch.';
+      if(p.name==='scroll'){
+        setText('airScrollHelp',s.profile?.mode==='head'?'Rest the pointer on a button at the bottom and wait for it to fill. The page scrolls while you stay on Down, and Up brings it back.':'Raise your index and middle fingers together, hold a moment, then move your hand down. Lower your fingers to stop.');
+        $('airPracticeDocument').style.setProperty('--scroll-progress',Math.min(1,(p.document_position||0)/(p.goal||.75)));
+      }
       setText('airExerciseResult',p.name==='free'?'Free practice. Windows input stays off until Enable.':`${p.successes||0} completed, ${p.misses||0} missed. ${p.status==='complete'?'Exercise complete.':''}`);
       $('airExerciseTime').textContent=p.name==='free'?'':'Elapsed '+Math.round((p.elapsed_ms||0)/1000)+' seconds';
       $('airExerciseStart').disabled=this.busy||!s.camera_active||!s.calibrated||!viewportReady;
       $('airExerciseReset').disabled=this.busy||s.state!=='practicing'||p.name==='free'||!viewportReady;
       $('airExercisePause').disabled=this.busy||s.state!=='practicing'||!['running','paused'].includes(p.status)||(p.status==='paused'&&!viewportReady);
       $('airExercisePause').textContent=p.status==='paused'?'Resume exercise':'Pause exercise';
-      const regions=s.scroll_regions||[],dockKey=JSON.stringify(regions);
-      if(dockKey!==this.dockKey){this.dockKey=dockKey;$('airPracticeDock').replaceChildren();for(const r of regions){
-        const button=document.createElement('button');button.type='button';button.textContent=r.label;button.dataset.action=r.action;
+      const regions=s.scroll_regions||[],dockKey=JSON.stringify(regions),names={scroll_up:'▲ Scroll up',scroll_down:'▼ Scroll down',scroll_done:'Done scrolling'};
+      if(dockKey!==this.dockKey){this.dockKey=dockKey;this.dockButtons=new Map();$('airPracticeDock').replaceChildren();for(const r of regions){
+        const button=document.createElement('button');button.type='button';button.textContent=names[r.action]||r.label;button.dataset.action=r.action;
         button.style.cssText=`left:${r.rect[0]*100}%;top:${r.rect[1]*100}%;width:${(r.rect[2]-r.rect[0])*100}%;height:${(r.rect[3]-r.rect[1])*100}%;`;
-        button.addEventListener('click',()=>this.call(r.action==='pause'?'practice_pause':r.action));$('airPracticeDock').append(button);
+        button.addEventListener('click',()=>this.call(r.action==='pause'?'practice_pause':r.action));$('airPracticeDock').append(button);this.dockButtons.set(r.action,button);
       }}
+      for(const [action,button]of this.dockButtons||[]){
+        const on=hot?.action===action,fill=on?Math.min(1,s.progress||0):0;
+        button.classList.toggle('is-hot',on);button.style.setProperty('--fill',fill);button.dataset.active=String(on&&fill>=1);
+      }
+    }
+    hotRegion(s){
+      // The dock button the pointer is resting on, if any.
+      const point=s.point;if(!point)return null;
+      return (s.scroll_regions||[]).find(r=>point[0]>=r.rect[0]&&point[0]<=r.rect[2]&&point[1]>=r.rect[1]&&point[1]<=r.rect[3])||null;
+    }
+    scrollPrompt(s,hot){
+      if(s.profile?.mode!=='head')return 'Raise your index and middle fingers, hold briefly, then move your hand down to scroll the page.';
+      if(!hot)return 'Move the pointer onto the Scroll down button at the bottom and rest it there.';
+      const direction={scroll_down:'down',scroll_up:'up'}[hot.action],full=(s.progress||0)>=1;
+      if(direction)return full?`Scrolling ${direction}. Slide the pointer off the button to stop.`:`Keep resting on Scroll ${direction}. The page moves when the button is full.`;
+      const outcome={scroll_done:'leave scrolling',pause:'pause the exercise',stop:'stop practice'}[hot.action]||'run';
+      return `Resting here will ${outcome}. Slide off to cancel, or move up to Scroll down.`;
     }
     renderDiagnostics(metrics){
       const fields=[['capture_fps','Camera delivery','fps'],['observation_fps','Accepted observations','fps'],['inference_ms','Inference','ms'],
@@ -432,17 +454,19 @@
       finally{this.busy=false;this.render(this.state);}
     }
     glidePointer(point){
-      // Camera frames arrive at 10-15 Hz; ease the drawn cursor between them so a steady pointer does not visibly step.
-      const node=$('airPracticePointer'),g=this.glide||(this.glide={x:point[0],y:point[1],tx:point[0],ty:point[1],last:0,raf:0});
+      // Frames reach the page at 10 Hz or less. One easing stage stops and restarts after every frame;
+      // two stages in a row keep the drawn cursor's speed continuous so a steady move looks steady.
+      const node=$('airPracticePointer'),g=this.glide||(this.glide={x:point[0],y:point[1],mx:point[0],my:point[1],tx:point[0],ty:point[1],last:0,raf:0});
       const jump=Math.hypot(point[0]-g.tx,point[1]-g.ty)>.35,still=window.matchMedia?.('(prefers-reduced-motion: reduce)').matches;
       g.tx=point[0];g.ty=point[1];
       const place=()=>{node.style.left=g.x*100+'%';node.style.top=g.y*100+'%';};
-      if(jump||still||typeof requestAnimationFrame!=='function'||node.hidden){g.x=g.tx;g.y=g.ty;place();return;}
+      if(jump||still||typeof requestAnimationFrame!=='function'||node.hidden){g.x=g.mx=g.tx;g.y=g.my=g.ty;place();return;}
       if(g.raf)return;
       const tick=now=>{
-        const dt=Math.min(.1,Math.max(0,(now-(g.last||now))/1000));g.last=now;
-        const k=1-Math.exp(-dt/.045);g.x+=(g.tx-g.x)*k;g.y+=(g.ty-g.y)*k;
-        const settled=Math.hypot(g.tx-g.x,g.ty-g.y)<.0002;if(settled){g.x=g.tx;g.y=g.ty;}
+        const dt=Math.min(.1,Math.max(0,(now-(g.last||now))/1000)),k=1-Math.exp(-dt/.04);g.last=now;
+        g.mx+=(g.tx-g.mx)*k;g.my+=(g.ty-g.my)*k;g.x+=(g.mx-g.x)*k;g.y+=(g.my-g.y)*k;
+        const settled=Math.hypot(g.tx-g.x,g.ty-g.y)<.0002&&Math.hypot(g.tx-g.mx,g.ty-g.my)<.0002;
+        if(settled){g.x=g.mx=g.tx;g.y=g.my=g.ty;}
         place();g.raf=settled?0:requestAnimationFrame(tick);if(settled)g.last=0;
       };
       g.raf=requestAnimationFrame(tick);

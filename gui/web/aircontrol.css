@@ -99,7 +99,12 @@ body:not(.air-panel-hidden) .desktop-content{padding:12px 20px 28px}
 #airExerciseResult{font-size:12px;line-height:1.5;margin:0;color:var(--th-muted)}
 .air-practice-dock{position:absolute;inset:0;pointer-events:none;z-index:6}
 .air-practice-dock button{position:absolute;pointer-events:auto;min-width:44px;min-height:44px;border:1px solid var(--th-border);border-radius:var(--th-key-radius,8px);color:var(--th-text);background:var(--th-panel);font-size:13px}
-.air-practice-document{position:absolute;inset:48px 16px 36px;overflow:hidden;padding:16px;border:1px solid var(--th-border);border-radius:8px;color:var(--th-text);background:var(--th-panel)}
+.air-practice-dock button[data-action=scroll_up],.air-practice-dock button[data-action=scroll_down]{border-color:var(--th-accent);font-weight:650}
+.air-practice-dock button.is-hot{border-color:var(--th-accent);box-shadow:0 0 0 2px var(--th-accent);background:linear-gradient(to right,color-mix(in srgb,var(--th-accent) 45%,var(--th-panel)) calc(var(--fill,0) * 100%),var(--th-panel) calc(var(--fill,0) * 100%))}
+.air-practice-dock button.is-hot[data-active=true]{background:color-mix(in srgb,var(--th-accent) 55%,var(--th-panel))}
+.air-scroll-meter{height:6px;margin-top:8px;border-radius:3px;background:var(--th-border);overflow:hidden}
+.air-scroll-meter i{display:block;height:100%;width:calc(var(--scroll-progress,0) * 100%);background:var(--th-accent)}
+.air-practice-document{position:absolute;inset:64px 16px 36px;overflow:hidden;padding:16px;border:1px solid var(--th-border);border-radius:8px;color:var(--th-text);background:var(--th-panel)}
 .air-practice-document h3{font-size:16px;margin:0 0 8px}
 .air-practice-document p{font-size:13px}
 .air-document-lines{height:500px;transform:translateY(calc(var(--document-position,0) * -260px));background:repeating-linear-gradient(to bottom,var(--th-border) 0 2px,transparent 2px 28px);margin:24px 0}

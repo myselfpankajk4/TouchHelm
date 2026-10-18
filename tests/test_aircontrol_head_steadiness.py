@@ -135,6 +135,33 @@ class HeadGlitchTests(unittest.TestCase):
         self.assertLess(widened,22.)
         self.assertEqual(e._noisy_radius((.5,.5),SIZE,0.,2.,dwell_cap=22.),0.,'a zero hold stays off')
 
+
+class HeadSweepSmoothnessTests(unittest.TestCase):
+    def sweep_steps(self,fps,speed):
+        e=engine();xs=[]
+        for i in range(fps*5):
+            t=i/fps;yaw=-16. if t<2 else -16+speed*(t-2) if t<2+30/speed else 14.
+            e.step(face(t,yaw));xs.append(e.point[0]*SIZE[0])
+        steps=[b-a for a,b in zip(xs,xs[1:])]
+        return steps[int(fps*2.4):max(int(fps*(2+30/speed-.2)),int(fps*2.4)+3)]
+
+    def test_a_fast_continuous_sweep_moves_every_frame_instead_of_stopping_and_jumping(self):
+        # Over 1.5 degrees per frame used to be judged a glitch every frame: hold, replay, hold...
+        for fps,speed in ((10,20),(10,30),(15,30),(15,20),(30,30)):
+            steps=self.sweep_steps(fps,speed)
+            self.assertGreater(min(steps),.5*statistics.mean(steps),f'{fps} fps at {speed} deg/s stalls')
+            self.assertLess(max(steps),1.5*statistics.mean(steps),f'{fps} fps at {speed} deg/s lurches')
+
+    def test_a_glitch_in_the_middle_of_a_fast_sweep_is_still_rejected(self):
+        e=engine();xs=[]
+        for i in range(14):
+            t=i/10;yaw=-16+20*t
+            if i==8:yaw+=6.
+            e.step(face(t,yaw));xs.append(e.point[0]*SIZE[0])
+        steps=[b-a for a,b in zip(xs,xs[1:])][3:]
+        self.assertLess(max(steps),2.2*statistics.median(steps),'the wrong frame must not throw the cursor ahead')
+
+
 class SavedProfileMigrationTests(unittest.TestCase):
     def write(self,folder,data):
         path=Path(folder)/'profile.json';path.write_text(json.dumps(data),encoding='utf-8');return ProfileStore(path)

@@ -1354,6 +1354,34 @@ test('AirControl exercise controls and head scrolling stay explicit',async(page,
   await desktop.close();
 });
 
+test('AirControl scroll practice says what to do and shows the button filling',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:1120,height:800});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('active');});
+  await desktop.locator('[data-air-tab=practice]').click();
+  await desktop.locator('#airExercise').selectOption('scroll');await desktop.locator('#airExerciseStart').click();
+  const show=(point,progress)=>desktop.evaluate(([point,progress])=>{
+    const air=TouchHelmAir,s=air.state,w=640,h=480,top=h-148;
+    const rect=(x,y,width)=>[x/w,y/h,(x+width)/w,(y+44)/h];
+    air.state={...s,point,progress,head_scroll:true,profile:{...s.profile,mode:'head'},
+      scroll_regions:[{action:'scroll_up',label:'Up',rect:rect(8,top,(w-20)/2)},{action:'scroll_down',label:'Down',rect:rect((w+4)/2,top,(w-20)/2)},
+        {action:'scroll_done',label:'Done',rect:rect(8,top+48,w-16)}]};
+    air.renderPractice(air.state);
+    return {prompt:document.getElementById('airTaskPrompt').textContent,help:document.getElementById('airScrollHelp').textContent,
+      hot:[...document.querySelectorAll('#airPracticeDock button.is-hot')].map(b=>b.dataset.action),
+      fill:document.querySelector('#airPracticeDock button[data-action=scroll_down]').style.getPropertyValue('--fill'),
+      labels:[...document.querySelectorAll('#airPracticeDock button')].map(b=>b.textContent)};
+  },[point,progress]);
+  const away=await show([.5,.3],0);
+  assert.match(away.prompt,/Move the pointer onto the Scroll down button/);assert.deepEqual(away.hot,[]);
+  assert.match(away.help,/wait for it to fill/);assert.deepEqual(away.labels,['▲ Scroll up','▼ Scroll down','Done scrolling']);
+  const filling=await show([.75,.73],.5);
+  assert.deepEqual(filling.hot,['scroll_down']);assert.equal(filling.fill,'0.5');assert.match(filling.prompt,/Keep resting on Scroll down/);
+  const scrolling=await show([.75,.73],1);assert.match(scrolling.prompt,/Scrolling down. Slide the pointer off/);
+  const leaving=await show([.5,.84],.4);assert.deepEqual(leaving.hot,['scroll_done']);assert.match(leaving.prompt,/Resting here will leave scrolling/);
+  await screenshot(desktop,'aircontrol-scroll-practice');await desktop.close();
+});
+
 test('AirControl keyboard tabs and 200 percent equivalent reflow retain escape controls',async(page,context)=>{
   const desktop=await context.newPage();await desktop.setViewportSize({width:410,height:620});
   await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);

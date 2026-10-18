@@ -53,7 +53,7 @@ the current session before exposing camera, monitor and mode choices; select
 Use **Session** for the camera and ordinary action dock. **Practice** lets you
 inspect exercises while a session is active; **Start exercise** deliberately
 returns to non-injecting practice. Choose Click three targets, Drag to a
-destination, Scroll to a marker, or Free practice. A successful exercise click
+destination, Scroll to the Destination, or Free practice. A successful exercise click
 can satisfy activation practice; completing all exercises is optional. Resize
 pauses the current attempt without counting a miss. Wait for the practice area
 to update, then choose **Resume exercise**. Drag and Scroll restore their
@@ -63,7 +63,17 @@ returning to the source. Pause/Resume exercise does not enable PC control.
 ![Simulated target-based practice](images/aircontrol-daily-practice.png)
 
 Head drag/scroll exercises select their simulated action. Hand/Combined scroll
-practice uses the two-finger gesture. Personal expression calibration is under
+practice uses the two-finger gesture.
+
+**How to practice scrolling in Head & Face mode:** choose *Scroll to the
+Destination* and select Start exercise. Move the pointer onto the **Scroll down**
+button at the bottom of the practice area and rest it there. The button fills
+while you hold still; when it is full the page scrolls and the prompt at the top
+says so. Slide the pointer off the button to stop. **Scroll up** brings the page
+back. Resting on **Done scrolling**, **Pause** or **Stop** does what its name says,
+and the prompt warns you when the pointer is on one of them. The exercise is done
+when the progress bar under the heading is full. In Hand and Combined modes the
+prompt instead describes the two-finger gesture. Personal expression calibration is under
 **Personal settings**, while the session remains in practice. Ordinary free
 practice remains available after calibration.
 
