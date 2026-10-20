@@ -47,3 +47,17 @@
 
 .remote-cursor{position:absolute;width:24px;height:34px;pointer-events:none;z-index:4;filter:drop-shadow(0 1px 2px #0009)}
 .pc-audio-panel{padding:12px;border:1px solid var(--th-border);border-radius:var(--th-radius,12px);background:var(--th-panel);margin-bottom:12px}.pc-audio-choice{display:flex;gap:10px;align-items:center;min-height:44px;font-weight:600}.pc-audio-panel p{font-size:12px;color:var(--th-muted);line-height:1.5;margin:6px 0;overflow-wrap:anywhere}.pc-audio-panel button{min-height:44px}.remote-fullscreen-tools{display:none;position:absolute;left:12px;right:12px;bottom:max(12px,env(safe-area-inset-bottom));z-index:5;gap:8px;align-items:center;justify-content:flex-end;pointer-events:auto}.remote-stage:fullscreen .remote-fullscreen-tools{display:flex}.remote-fullscreen-tools button{min-height:44px;padding:8px 12px;border:1px solid var(--th-border);border-radius:8px;color:var(--th-text);background:var(--th-panel)}#remoteFullscreenHint{color:var(--th-text);font-size:12px;background:var(--th-panel);border-radius:6px;padding:4px 8px;max-width:45%}#remoteFullscreenHint:empty{display:none}
+
+.remote-shell { gap:16px; }
+.remote-heading { padding-bottom:12px; border-bottom:1px solid var(--border-color); }
+.remote-mode-card { grid-template-columns:40px 1fr; padding:18px 16px; gap:16px; }
+.remote-mode-card svg { width:36px; height:36px; }
+.remote-mode-card:hover { border-color:var(--primary); background:var(--bg-surface); }
+.remote-mode-card strong { font-size:17px; }
+.remote-mode-card small { max-width:48ch; }
+.remote-status { max-width:65ch; }
+@media(min-width:700px) {
+  .remote-shell { padding:22px; }
+  .remote-modes { grid-template-columns:repeat(3,minmax(0,1fr)); }
+  .remote-mode-card { grid-template-columns:1fr; align-content:start; gap:18px; min-height:190px; }
+}

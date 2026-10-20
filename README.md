@@ -11,6 +11,20 @@ Turn your phone into a Windows trackpad, keyboard, presentation remote, media co
 
 *Previews use synthetic QA device data and illustrate the interface rather than an active connection.*
 
+## Portable Windows test version
+
+[Download the test prerelease](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.1)
+and open `TouchHelm-2.2.0-test-win-x64.exe` on Windows 10/11 x64. It bundles Python,
+screen/audio providers, the isolated camera runtime/models, WebView2 and the classic
+desktop fallback. No developer tools or separate package installation are needed.
+First launch extracts per-user files; settings survive later versions.
+
+This EXE is unsigned: Windows publisher, SmartScreen, firewall and camera prompts
+may still appear. See [portable testing and limitations](docs/PORTABLE_TESTING.md).
+Private GitHub releases require repository access; the EXE can also be shared
+directly with testers. The source-development requirements below apply when
+running from the checkout.
+
 ## Features
 
 **AirControl:** choose **Control via phone** or **AirControl** at desktop startup.
@@ -25,8 +39,10 @@ runtime. Phone viewing/audio stay connected when AirControl takes input ownershi
 [Verification and physical-test limits](docs/AIRCONTROL_VERIFICATION.md).
 
 **Focused PC text and pairing guides:** Trackpad now reads and edits supported
-focused Windows fields in both directions. Conflicts keep the phone draft for
-review; password and read-only fields are excluded. A host PIN is required. See
+focused Windows fields in both directions. Sync recovers automatically; overlapping
+edits follow the PC. Selecting a supported PC field opens the phone typing dock,
+and Clear clears that linked field. Password and read-only fields are excluded.
+A host PIN is required. See
 the [mobile certificate and Tailscale guide](docs/PAIRING.md) for setup and limits.
 Selecting an HTTPS mode on the PC reveals its instructions beside the QR.
 

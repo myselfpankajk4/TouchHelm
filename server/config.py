@@ -13,7 +13,9 @@ import secrets
 def random_password():
     return f'{secrets.randbelow(10000):04d}'
 
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+from .portable import bundle_root, config_path
+
+CONFIG_FILE = str(config_path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 DEFAULT_CONFIG = {
     "server_name": socket.gethostname(),
@@ -40,6 +42,8 @@ class ConfigManager:
         self.file_path = file_path
         self._lock = threading.RLock()
         self.data = DEFAULT_CONFIG.copy()
+        if bundle_root() is not None:
+            self.data['require_pin'] = True
         self.data['pin_code'] = random_password()
         self.load()
         if not os.path.exists(self.file_path):self.save()

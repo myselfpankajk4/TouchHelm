@@ -42,6 +42,9 @@ class TrustedPairingSetup:
             from .remote_media import capabilities
             caps=capabilities()
             if not caps.get('video') or not caps.get('audio'):
+                from .portable import bundle_root
+                if bundle_root() is not None:
+                    raise RuntimeError('The bundled screen/audio providers are unavailable. Download a fresh TouchHelm test EXE and retry.')
                 self._set('installing','Installing the PC screen/audio providers. First-time setup may take a few minutes…')
                 result=self.run([sys.executable,'-m','pip','install','-r',str(Path(__file__).resolve().parents[1]/'requirements-remote.txt')],capture_output=True,text=True,timeout=600,creationflags=0x08000000 if os.name=='nt' else 0)
                 import importlib

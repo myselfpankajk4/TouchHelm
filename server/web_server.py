@@ -38,6 +38,8 @@ class ConnectedClient:
         self.held_keys = set()
         self.text_field_id = ''
         self.text_revision = ''
+        self.text_write_id = 0
+        self.text_write_field_id = ''
 
 
 class TouchHelmServer:
@@ -139,6 +141,12 @@ class TouchHelmServer:
             state={'available':False,'message':'Enable a host PIN in desktop Settings to sync focused PC text.'}
         elif self.remote.blocks_input(client):
             state={'available':False,'message':'Another phone owns Remote control. PC text sync is paused.'}
+        if (data['action']=='write' and state.get('available')
+                and state.get('field_id')==data.get('field_id') and state.get('text')==data.get('text')):
+            client.text_write_id=data.get('request_id',0)
+            client.text_write_field_id=state['field_id']
+        if state.get('available') and state.get('field_id')==client.text_write_field_id:
+            state={**state,'acknowledged_write':client.text_write_id}
         client.text_field_id=state.get('field_id','') if state.get('available') else ''
         client.text_revision=state.get('revision','') if state.get('available') else ''
         with suppress(ConnectionError,RuntimeError):
@@ -148,6 +156,7 @@ class TouchHelmServer:
         task=self._text_tasks.pop(client.ws,None)
         if task and not task.done():task.cancel()
         client.text_field_id=client.text_revision=''
+        client.text_write_id=0;client.text_write_field_id=''
 
     def _remote_state_changed(self, state):
         owner = self.remote.owner

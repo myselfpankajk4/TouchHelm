@@ -34,6 +34,11 @@ class AirControlSetup:
         self.folder=self.folder.resolve()
         self.python=self.folder/'runtime'/'Scripts'/'python.exe'
         self.models=self.folder/'models'
+        from server.portable import bundle_root
+        self.bundle=bundle_root()
+        if self.bundle is not None:
+            self.python=self.bundle/'camera'/'python.exe'
+            self.models=self.bundle/'app'/'assets'/'aircontrol'
 
     def _signature(self):
         try:return hashlib.sha256(REQUIREMENTS.read_bytes()+(MODELS/'manifest.json').read_bytes()).hexdigest()
@@ -41,8 +46,11 @@ class AirControlSetup:
 
     def _ready(self):
         try:
-            if not self.python.is_file() or (self.folder/'ready').read_text()!=self._signature():return False
-            return all(checked_model(self.models/name,item['sha256']) for name,item in json.loads((MODELS/'manifest.json').read_text()).items())
+            if not self.python.is_file():return False
+            if self.bundle is None and (self.folder/'ready').read_text()!=self._signature():return False
+            manifest=self.models/'manifest.json' if self.bundle is not None else MODELS/'manifest.json'
+            entries=json.loads(manifest.read_text())
+            return bool(entries) and all(Path(name).name==name and checked_model(self.models/name,item['sha256']) for name,item in entries.items())
         except (OSError,ValueError):return False
 
     def snapshot(self):
@@ -53,6 +61,12 @@ class AirControlSetup:
 
     def start(self):
         with self.lock:
+            if self.bundle is not None:
+                ready=self._ready()
+                self._set('ready' if ready else 'unavailable',
+                    'AirControl is ready. Select a camera and start practice.' if ready else
+                    'The portable camera files are missing or damaged. Download a fresh TouchHelm test EXE and retry.',100 if ready else None)
+                return self.snapshot()
             if self.thread and self.thread.is_alive():return self.snapshot()
             self.cancelled.clear();self._set('installing','Preparing an isolated camera runtime…')
             self.thread=threading.Thread(target=self._install,daemon=True,name='TouchHelm AirControl setup');self.thread.start()

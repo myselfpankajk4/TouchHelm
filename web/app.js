@@ -771,7 +771,11 @@ class TouchHelmClient {
     if (data.type === 'text' && data.text?.includes('\n') && this.newlineMode === 'shift_enter') data = {...data,newline_mode:'shift_enter'};
     if (data.type === 'laser' && (this.presentationDisplay||this.autoPresentationDisplay)) data = {...data,display_id:this.presentationDisplay||this.autoPresentationDisplay};
     data = this.remote?.wrap(data) || data;
-    try { this.ws.send(JSON.stringify(data)); return true; } catch (e) { return false; }
+    try {
+      this.ws.send(JSON.stringify(data));
+      if(data.type==='click'||data.type==='dblclick')this.textSync?.pointerAction?.();
+      return true;
+    } catch (e) { return false; }
   }
 
   // --------------------------------------------------------------------------
@@ -963,7 +967,7 @@ class TouchHelmClient {
       if (this.leftBtnDown) {
         this.leftBtnDown = false;
         this.vibrate(8);
-        this.send({ type: "mouseup", button: "left" });
+        if(this.send({ type: "mouseup", button: "left" })&&e.type!=='touchcancel')this.textSync?.pointerAction?.();
       }
     };
     if (this.btnLeftClick) {
@@ -972,6 +976,9 @@ class TouchHelmClient {
       this.btnLeftClick.addEventListener("touchcancel", onLeftUp, { passive: false });
       this.btnLeftClick.addEventListener("mousedown", onLeftDown);
       this.btnLeftClick.addEventListener("mouseup", onLeftUp);
+      this.btnLeftClick.addEventListener('click',event=>{
+        if(event.detail===0)this.send({type:'click',button:'left'});
+      });
       window.addEventListener("mouseup", onLeftUp);
     }
 
@@ -1070,6 +1077,17 @@ class TouchHelmClient {
   // TRACKPAD GESTURES (TOUCH ENGINE)
   // --------------------------------------------------------------------------
   bindTrackpadGestures() {
+    this.touchSurface.addEventListener('keydown', (event) => {
+      if(event.ctrlKey||event.altKey||event.metaKey)return;
+      const step=event.shiftKey?36:12;
+      const movement={ArrowLeft:[-step,0],ArrowRight:[step,0],ArrowUp:[0,-step],ArrowDown:[0,step]}[event.key];
+      if(movement){event.preventDefault();this.send({type:'move',dx:movement[0],dy:movement[1]});}
+      else if(event.key==='PageUp'||event.key==='PageDown'){
+        event.preventDefault();this.send({type:'scroll',dx:0,dy:event.key==='PageUp'?3:-3});
+      }else if((event.key==='Enter'||event.key===' ')&&!event.repeat){
+        event.preventDefault();this.send({type:'click',button:'left'});
+      }
+    });
     let lastScrollY = 0;
     let lastScrollX = 0;
     let movedTotal = 0;
@@ -1936,9 +1954,9 @@ class TouchHelmClient {
 
     if (this.btnClearText) {
       this.onTap(this.btnClearText, () => {
-        this.textSync?.clear();
+        const linked=this.textSync?.clear()===true;
         if (this.typeInput) this.typeInput.value = "";
-        this.liveTextValue = "";
+        if(!linked)this.liveTextValue = "";
         this.liveTypingPaused = false;
         this.updateTypingUi();
         this.clearFeedback("typing");
@@ -2211,6 +2229,9 @@ class TouchHelmClient {
         .then(registration => registration.update()).catch(() => {});
     }
     this.checkServerVersion();
+    this.versionTimer=setInterval(()=>{
+      if(!document.hidden&&!this.isComposing&&this.textSync?.pending?.action!=='write')this.checkServerVersion();
+    },15000);
     window.addEventListener("pageshow", () => this.checkServerVersion());
     window.addEventListener("focus", () => this.checkServerVersion());
     document.addEventListener("visibilitychange", () => {

@@ -29,8 +29,12 @@ LAN trust cannot be installed silently. Manual local CA remains an explicit opti
 Trackpad's device-local Two-way PC text setting follows supported focused editable
 Windows controls through an isolated, bounded UI Automation helper. It requires a
 host PIN and active Trackpad/Live typing. Password and read-only fields are
-excluded. Edits revalidate field identity and revision, retain conflicting drafts,
-and never broadcast field contents. Selecting an HTTPS mode on the desktop reveals
+excluded. Editable PC focus automatically expands and focuses the typing dock;
+ordinary snapshots do not reopen a dismissed dock. Edits revalidate field identity
+and revision, automatically merge independent edits, and follow PC text for
+overlapping changes or a new field. No manual relink button is required. Lost
+write acknowledgements are reconciled using the requesting client's committed
+write ID. Field contents are never broadcast. Selecting an HTTPS mode on the desktop reveals
 its setup guide beside the QR. See docs/PAIRING.md for installation and limits.
 
 AirControl adds a desktop Phone/AirControl chooser and explicit webcam start.

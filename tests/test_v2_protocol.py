@@ -58,6 +58,24 @@ class V2ProtocolTests(unittest.IsolatedAsyncioTestCase):
                 {'action':'write','text':'x'*10001}, {'action':'read','request_id':True}):
             self.assertFalse(self.server._valid_packet({'type':'text_sync',**packet}))
 
+    async def test_reads_identify_a_previously_committed_write_without_replaying_it(self):
+        socket=Mock(closed=False);socket.send_json=AsyncMock()
+        client=ConnectedClient(socket,'127.0.0.1');client.authenticated=True
+        client.text_field_id='field';client.text_revision='r1'
+        self.server.clients[socket]=client
+        self.server.text_service=Mock(request=AsyncMock(return_value={
+            'available':True,'field_id':'field','revision':'r2','text':'a'}))
+        await self.server._text_request(client,{'action':'write','field_id':'field',
+            'revision':'r1','text':'a','request_id':10})
+        self.server.text_service.request.return_value={
+            'available':True,'field_id':'field','revision':'r3','text':'a PC'}
+        await self.server._text_request(client,{'action':'read','request_id':11})
+        self.assertEqual(socket.send_json.call_args.args[0].get('acknowledged_write'),10)
+        self.server.text_service.request.return_value={
+            'available':True,'field_id':'other','revision':'r4','text':'other'}
+        await self.server._text_request(client,{'action':'read','request_id':12})
+        self.assertNotIn('acknowledged_write',socket.send_json.call_args.args[0])
+
     async def test_text_state_is_private_to_the_requesting_authenticated_socket(self):
         self.server.text_service=Mock(request=AsyncMock(return_value={'available':True,
             'field_id':'opaque','revision':'r1','text':'scratch text','editable':True}))

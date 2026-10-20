@@ -1209,8 +1209,9 @@ test('Wireless Display setup shows real progress, approval and completion states
   await desktop.close();
 });
 
-test('Focused PC text updates the phone without echo and protects concurrent drafts',async page=>{
+test('Focused PC text updates the phone without echo and follows PC changes automatically',async page=>{
   await page.evaluate(()=>{
+    clearInterval(touchhelm.textSync.timer);
     touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'Typed on PC',editable:true});
   });
   assert.equal(await page.locator('#typeInput').inputValue(),'Typed on PC');
@@ -1220,12 +1221,12 @@ test('Focused PC text updates the phone without echo and protects concurrent dra
   await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:false,message:'PC text changed. Review the PC text.'}));
   assert.equal(await page.locator('#typeInput').inputValue(),'Phone edit');
   await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r2',text:'Concurrent PC edit',editable:true}));
-  assert.equal(await page.locator('#typeInput').inputValue(),'Phone edit');
-  await page.locator('#usePCText').click();
   assert.equal(await page.locator('#typeInput').inputValue(),'Concurrent PC edit');
+  assert.equal(await page.locator('#usePCText').count(),0);
 });
 
 test('Two-way typing coalesces edits, waits for acknowledgement and preserves IME',async page=>{
+  await page.evaluate(()=>clearInterval(touchhelm.textSync.timer));
   await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'',editable:true}));
   await page.locator('#typeInput').fill('a');await page.locator('#typeInput').fill('abc');
   assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').length),1);
@@ -1255,7 +1256,7 @@ test('PC text snapshots cannot erase typing that happened during a read',async p
   await page.locator('#typeInput').fill('New phone edit');
   await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',request_id:touchhelm.textSync.pending.request_id,available:true,field_id:'field',revision:'before',text:'',editable:true}));
   assert.equal(await page.locator('#typeInput').inputValue(),'New phone edit');
-  assert.equal(await page.evaluate(()=>touchhelm.textSync.field),null);
+  assert.equal(await page.evaluate(()=>touchhelm.textSync.conflict),false);
 });
 
 test('Buffered edits to a linked PC field send only after explicit Send',async page=>{
@@ -1289,9 +1290,113 @@ test('Buffered Send waiting on a read preserves its draft if the PC field change
   await page.locator('#chkRealtimeTyping').uncheck();await page.locator('#typeInput').fill('Keep this phone draft');
   await page.locator('#btnSendText').click();
   await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',request_id:touchhelm.textSync.pending.request_id,available:true,field_id:'other-field',revision:'r2',text:'Different PC text',editable:true}));
-  assert.equal(await page.locator('#typeInput').inputValue(),'Keep this phone draft');
+  assert.equal(await page.locator('#typeInput').inputValue(),'Different PC text');
   assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write'||p.type==='text'||p.type==='key').length),0);
-  assert.equal(await page.evaluate(()=>touchhelm.textSync.conflict),true);
+  assert.equal(await page.evaluate(()=>touchhelm.textSync.conflict),false);
+});
+
+test('Text recovery follows PC changes without a relink button',async page=>{
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;clearInterval(sync.timer);sync.reset();
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'PC original'});
+    sync.receive({type:'text_state',available:false,message:'PC focus moved'});
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r2',text:'PC revised'});
+  });
+  assert.equal(await page.locator('#typeInput').inputValue(),'PC revised');
+  assert.equal(await page.evaluate(()=>touchhelm.textSync.conflict),false);
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:false,message:'PC focus moved'}));
+  await page.locator('#typeInput').fill('Keep phone draft');
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r3',text:'PC changed again'}));
+  assert.equal(await page.locator('#typeInput').inputValue(),'PC changed again');
+  assert.equal(await page.locator('#usePCText').count(),0);
+});
+
+test('Text recovery accepts an acknowledgement during phone composition',async page=>{
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;clearInterval(sync.timer);sync.reset();
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:''});
+  });
+  await page.locator('#typeInput').fill('a');
+  await page.locator('#typeInput').evaluate(el=>{
+    el.dispatchEvent(new CompositionEvent('compositionstart'));el.value='a日本';
+    el.dispatchEvent(new InputEvent('input',{isComposing:true}));
+    const sync=touchhelm.textSync;
+    sync.receive({type:'text_state',request_id:sync.pending.request_id,available:true,field_id:'field',revision:'r2',text:'a'});
+    el.dispatchEvent(new CompositionEvent('compositionend'));
+  });
+  assert.equal(await page.locator('#typeInput').inputValue(),'a日本');
+  const last=await page.evaluate(()=>__packets.filter(packet=>packet.action==='write').at(-1));
+  assert.equal(last.revision,'r2');assert.equal(last.text,'a日本');
+});
+
+test('Text recovery Send resumes a saved linked draft without submitting the PC field',async page=>{
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;clearInterval(sync.timer);sync.reset();
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'PC original'});
+    touchhelm.typeInput.value='Saved phone edit';touchhelm.liveTypingPaused=true;touchhelm.updateTypingUi();
+  });
+  await page.locator('#typeInput').focus();await page.locator('#btnSendText').click();
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;
+    sync.receive({type:'text_state',request_id:sync.pending.request_id,available:true,field_id:'field',revision:'r2',text:'Saved phone edit'});
+  });
+  assert.equal(await page.evaluate(()=>touchhelm.liveTypingPaused),false);
+  assert.equal(await page.locator('#typeInput').inputValue(),'');
+  assert.equal(await page.evaluate(()=>__packets.filter(packet=>packet.type==='key'&&packet.key==='enter').length),0);
+});
+
+test('PC focus opens the typing dock automatically and a later PC click reopens it',async page=>{
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;clearInterval(sync.timer);sync.reset();
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'PC text'});
+  });
+  assert.equal(await page.locator('#typingDock').evaluate(el=>el.classList.contains('expanded')),true);
+  assert.equal(await page.locator('#typeInput').evaluate(el=>el===document.activeElement),true);
+  await page.locator('#btnTypingDone').click();
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r2',text:'PC updated'}));
+  assert.equal(await page.locator('#typingDock').evaluate(el=>el.classList.contains('expanded')),false);
+  await page.locator('#btnLeftClick').click();
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r2',text:'PC updated'}));
+  assert.equal(await page.locator('#typingDock').evaluate(el=>el.classList.contains('expanded')),true);
+  assert.equal(await page.locator('#usePCText').count(),0);
+});
+
+test('Text recovery never duplicates a committed phone edit after a lost acknowledgement',async page=>{
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;clearInterval(sync.timer);sync.reset();
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:''});
+  });
+  await page.locator('#typeInput').fill('a');await page.locator('#typeInput').fill('ab');
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync,request=sync.pending.request_id;
+    sync.suspend();sync.poll();
+    sync.receive({type:'text_state',request_id:sync.pending.request_id,available:true,field_id:'field',revision:'r2',text:'a PC',acknowledged_write:request});
+  });
+  assert.equal(await page.locator('#typeInput').inputValue(),'a PCb');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').at(-1).text),'a PCb');
+});
+
+test('Clear clears the linked PC field without the next snapshot restoring its text',async page=>{
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;clearInterval(sync.timer);sync.reset();
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'PC text to clear'});
+    __packets.length=0;
+  });
+  await page.locator('#btnClearText').click();
+  assert.equal(await page.locator('#typeInput').inputValue(),'');
+  const write=await page.evaluate(()=>__packets.filter(p=>p.action==='write').at(-1));
+  assert.equal(write.text,'');assert.equal(write.revision,'r1');
+  assert.equal(await page.evaluate(()=>touchhelm.liveTextValue),'PC text to clear');
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;
+    sync.receive({type:'text_state',request_id:sync.pending.request_id,available:true,field_id:'field',revision:'r2',text:''});
+    sync.poll();
+    sync.receive({type:'text_state',request_id:sync.pending.request_id,available:true,field_id:'field',revision:'r2',text:''});
+  });
+  assert.equal(await page.locator('#typeInput').inputValue(),'');
+  assert.equal(await page.locator('#typeInput').evaluate(el=>document.activeElement===el),true);
+  await page.locator('#typeInput').fill('Next text');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').at(-1).text),'Next text');
 });
 
 test('Text sync and pairing guides visual inspection',async(page,context)=>{

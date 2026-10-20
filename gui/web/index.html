@@ -15,6 +15,7 @@
   <script defer src="__DESKTOP_ASSET_BASE__aircontrol.js"></script>
 </head>
 <body data-surface="desktop">
+<a class="skip-link" href="#desktopMain">Skip to controls</a>
 <div class="desktop-shell">
   <header class="desktop-header">
     <div class="desktop-brand"><img src="__DESKTOP_ASSET_BASE__icons/icon.svg" alt="" width="48" height="48"><div><strong>TouchHelm</strong><span>Windows host</span></div></div>
@@ -33,13 +34,13 @@
       <button type="button" data-panel="diagnostics"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg>Diagnostics</button>
       <p class="nav-note">Your phone, connected to your PC. Choose local Wi-Fi or your private tailnet.</p>
     </nav>
-    <main class="desktop-content">
+    <main class="desktop-content" id="desktopMain" tabindex="-1">
       <section class="desktop-panel control-home" data-page="home">
         <h1>How would you like to control?</h1>
         <p class="lead">Reach for your phone. Or use the space around you.</p>
         <div class="control-mode-cards">
-          <button id="choosePhone" class="control-mode-card"><span class="mode-art mode-phone" aria-hidden="true"><svg viewBox="0 0 180 150"><rect x="58" y="12" width="65" height="125" rx="15"/><path d="M78 24h26M84 125h13"/><rect class="phone-pad-art" x="70" y="42" width="41" height="61" rx="8"/><circle class="phone-touch-art" cx="91" cy="70" r="6"/></svg></span><span class="mode-name">Control via phone <span aria-hidden="true">↗</span></span><span class="mode-description">Trackpad, typing, presentations, media and your live desktop. Scan to pair.</span><span class="mode-footnote">Your familiar TouchHelm controls</span></button>
-          <button id="chooseAir" class="control-mode-card"><span class="mode-art mode-air" aria-hidden="true"><svg viewBox="0 0 180 150"><path class="air-hand-art" d="M59 89V47a7 7 0 0 1 14 0v30-49a7 7 0 0 1 14 0v45-50a7 7 0 0 1 14 0v50-39a7 7 0 0 1 14 0v54l10-12a8 8 0 0 1 12 10l-24 35c-7 10-15 16-29 16-18 0-29-13-32-29l-6-18a7 7 0 0 1 13-6z"/><circle class="air-hand-point" cx="80" cy="96" r="5"/><path class="air-orbit-art" d="M24 74a65 65 0 0 1 132 0M32 113l-7-9-9 7M149 38l7 9 9-7"/></svg></span><span class="mode-name">AirControl <span aria-hidden="true">↗</span></span><span class="mode-description">Point, pinch or move your head. Your webcam becomes a hands-free controller.</span><span class="mode-footnote">PC webcam · Local recognition · Guided setup</span></button>
+          <button id="choosePhone" class="control-mode-card"><span class="mode-art mode-phone" aria-hidden="true"><svg viewBox="0 0 180 150"><rect x="58" y="12" width="65" height="125" rx="15"/><path d="M78 24h26M84 125h13"/><rect class="phone-pad-art" x="70" y="42" width="41" height="61" rx="8"/><circle class="phone-touch-art" cx="91" cy="70" r="6"/></svg></span><span class="mode-name">Control via phone</span><span class="mode-description">Trackpad, typing, presentations, media and your live desktop. Scan to pair.</span><span class="mode-footnote">Your familiar TouchHelm controls</span></button>
+          <button id="chooseAir" class="control-mode-card"><span class="mode-art mode-air" aria-hidden="true"><svg viewBox="0 0 180 150"><path class="air-hand-art" d="M59 89V47a7 7 0 0 1 14 0v30-49a7 7 0 0 1 14 0v45-50a7 7 0 0 1 14 0v50-39a7 7 0 0 1 14 0v54l10-12a8 8 0 0 1 12 10l-24 35c-7 10-15 16-29 16-18 0-29-13-32-29l-6-18a7 7 0 0 1 13-6z"/><circle class="air-hand-point" cx="80" cy="96" r="5"/><path class="air-orbit-art" d="M24 74a65 65 0 0 1 132 0M32 113l-7-9-9 7M149 38l7 9 9-7"/></svg></span><span class="mode-name">AirControl</span><span class="mode-description">Point, pinch or move your head. Your webcam becomes a hands-free controller.</span><span class="mode-footnote">PC webcam · Local recognition · Guided setup</span></button>
         </div><p id="homeAirStatus" class="muted" role="status">The camera stays off until you choose Start camera.</p>
       </section>
       <section class="desktop-panel air-panel" data-page="aircontrol" hidden>
@@ -84,10 +85,11 @@
         <h1>Connect your phone</h1><p class="lead" id="pairingLead">Use the same Wi-Fi as this PC, then scan the code with your phone camera.</p>
         <div class="connection-choice"><label for="connectionMode">Connection mode</label><select id="connectionMode"><option value="http">Local Wi-Fi · HTTP</option><option value="local_ca">Local Wi-Fi · manual certificate HTTPS</option><option value="tailscale">Private Tailscale · trusted HTTPS</option></select></div>
         <div class="desktop-pairing">
-          <div class="surface pairing-panel"><div class="qr-wrap"><img id="pairingQR" alt="QR code containing this PC’s connection address" width="224" height="224"></div>
+          <div class="surface pairing-panel"><div class="pairing-code"><h2>Scan to connect</h2><div class="qr-wrap"><img id="pairingQR" alt="QR code containing this PC’s connection address" width="224" height="224"></div><p class="muted">Open your phone camera and scan this code.</p></div>
+            <div class="pairing-address">
             <label for="phoneURL">Phone address</label><input id="phoneURL" readonly spellcheck="false">
             <div class="button-row"><button id="copyURL" class="primary-button">Copy address</button><button id="openURL" class="secondary-button">Open in browser</button></div>
-            <p id="pairingMode" class="muted">Local connection</p>            <div class="pairing-security"><h2>Connection security</h2><p id="pinStatus"></p><p id="pinCode" class="pin-code" hidden></p><p class="muted">Enter this PIN on your phone once. Refreshes keep pairing in the same browser tab. Generate a new PIN in Settings when needed.</p></div>
+            <p id="pairingMode" class="muted">Local connection</p></div><div class="pairing-security"><h2>Connection security</h2><p id="pinStatus"></p><p id="pinCode" class="pin-code" hidden></p><p class="muted">Enter this PIN on your phone once. Refreshes keep pairing in the same browser tab. Generate a new PIN in Settings when needed.</p></div>
           </div>
           <div class="pairing-information"><section id="connectionSetupGuide" class="connection-setup-guide" aria-label="Selected connection setup" data-mode="http" hidden>            <div class="surface secure-pairing" id="localCASetup" hidden><h2>Local certificate HTTPS</h2><p>HTTPS gives Android Chrome a secure connection for supported phone capabilities.</p>
               <p id="secureStatus" class="muted">Optional. Certificate trust is never installed automatically.</p>
