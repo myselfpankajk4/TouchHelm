@@ -23,7 +23,7 @@ Tasks and evidence:
 - [x] Build EXE, verify payload, run embedded dependency/model/renderer smoke tests.
 - [x] Run application regression suites and review the final changes.
 - [x] Report artifact size, tested scope, and unsigned limitations before push.
-- [ ] Commit and push a test branch; publish a GitHub prerelease with EXE/checksums.
+- [x] Commit and push a test branch; publish a GitHub prerelease with EXE/checksums.
 
 Verification limits: this host is not a clean Windows VM or a physical Android
 phone. Report simulations and unattended browser/native checks precisely. The
@@ -47,3 +47,7 @@ AppData redirection and use a 16-character cache-directory prefix; the complete
 SHA-256 still verifies the archive and ready marker. This avoids native import
 failure when physical redirection expands a module path past the legacy limit.
 The regression was observed failing before the correction and passing afterward.
+
+Published [v2.2.0-test.1](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.1)
+with five assets. GitHub's computed EXE digest and size match the tested local
+artifact. Code is on `codex/portable-test-release` with draft PR #1 targeting main.

@@ -43,3 +43,10 @@ that Chrome permits the system keyboard to appear after asynchronous focus.
 The native browser/UIA foreground probe skipped when Windows denied foreground
 activation. No full camera tracking/capture or remote network session was exercised
 by the portable smoke check. Windows security/permission prompts remain possible.
+
+Published as [v2.2.0-test.1](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.1),
+from source commit `8092f69`. GitHub's uploaded EXE digest and byte count were
+checked against the local build manifest and match exactly. The five release
+assets include the executable, checksum, test guide, build manifest and verification
+JSON. [Draft PR #1](https://github.com/myselfpankajk4/TouchHelm/pull/1) keeps the
+test changes available for review without merging the default branch.
