@@ -13,13 +13,23 @@ using System.Threading;
 using System.Windows.Forms;
 using System.Reflection;
 using System.Web.Script.Serialization;
+#if INSTALLED
+[assembly: AssemblyTitle("TouchHelm")]
+#else
 [assembly: AssemblyTitle("TouchHelm Portable Test")]
+#endif
 [assembly: AssemblyProduct("TouchHelm")]
+#if INSTALLED
+[assembly: AssemblyVersion("2.2.0.3")]
+#else
 [assembly: AssemblyVersion("2.2.0.0")]
+#endif
 
 class PortableLauncher {
+#if !INSTALLED
     const string PayloadHash = "@@PAYLOAD_HASH@@";
     const long PayloadLength = @@PAYLOAD_LENGTH@@L;
+#endif
     static Form preparation;
     static ProgressBar progress;
     static bool cancelled;
@@ -28,11 +38,22 @@ class PortableLauncher {
     static int Main(string[] args) {
         Application.EnableVisualStyles();
         Application.SetCompatibleTextRenderingDefault(false);
+        Mutex appMutex = null;
         try {
             if (!Environment.Is64BitOperatingSystem)
                 throw new InvalidOperationException("This test build needs 64-bit Windows 10 or Windows 11.");
             string local = Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData);
             if (String.IsNullOrEmpty(local)) throw new IOException("Windows LocalAppData is unavailable.");
+#if INSTALLED
+            string destination = Application.StartupPath;
+            if (!File.Exists(Path.Combine(destination,"installed.json")) ||
+                !File.Exists(Path.Combine(destination,"runtime","pythonw.exe")))
+                throw new IOException("TouchHelm files are missing. Run TouchHelm Setup again to repair the installation.");
+            // Guard the entire ordinary launch, including browser preparation.
+            // Installer-owned preparation must remain exempt from its own guard.
+            if (!args.Contains("--prepare-only"))
+                appMutex = new Mutex(false, @"Local\TouchHelm.Desktop");
+#else
             string packages = Path.Combine(local, "TouchHelm", "packages");
             Directory.CreateDirectory(packages);
             // Restrict extracted executables to this user and Windows SYSTEM.
@@ -60,22 +81,33 @@ class PortableLauncher {
                 } finally { if (held) mutex.ReleaseMutex(); }
             }
             if (args.Contains("--extract-only")) return 0;
-            if (File.Exists(Path.Combine(destination,"compact.json"))) PrepareComponents(destination);
+#endif
+            if (File.Exists(Path.Combine(destination,"compact.json")) ||
+                File.Exists(Path.Combine(destination,"installed.json"))) PrepareComponents(destination);
+            if (args.Contains("--prepare-only")) return 0;
             bool test = args.Contains("--self-test");
             string executable = Path.Combine(destination, "runtime", test ? "python.exe" : "pythonw.exe");
             var start = new ProcessStartInfo(executable) {
                 WorkingDirectory = Path.Combine(destination, "app"),
-                Arguments = Quote(Path.Combine(destination, "app", "portable_bootstrap.py")) +
+                Arguments = "-B " + Quote(Path.Combine(destination, "app", "portable_bootstrap.py")) +
                     (args.Length == 0 ? "" : " " + String.Join(" ", args.Select(Quote))),
                 UseShellExecute = false, CreateNoWindow = true
             };
             start.EnvironmentVariables["TOUCHHELM_PORTABLE_ROOT"] = destination;
             start.EnvironmentVariables.Remove("PYTHONHOME");
             start.EnvironmentVariables.Remove("PYTHONPATH");
+#if INSTALLED
+            // Inno checks this handle before setup and uninstall. Keep it alive
+            // with the host, including while its window is hidden in the tray.
+            using (var child = Process.Start(start)) {
+                child.WaitForExit(); return child.ExitCode;
+            }
+#else
             using (var child = Process.Start(start)) {
                 if (test) { child.WaitForExit(); return child.ExitCode; }
             }
             return 0;
+#endif
         } catch (OperationCanceledException) { return 2; }
         catch (Exception error) {
             if (preparation != null) preparation.Dispose();
@@ -84,7 +116,9 @@ class PortableLauncher {
                 "TouchHelm", MessageBoxButtons.OK, MessageBoxIcon.Error);
             return 1;
         }
+        finally { if (appMutex != null) appMutex.Dispose(); }
     }
+#if !INSTALLED
     static bool Ready(string path) {
         string marker = Path.Combine(path, "package.ready");
         return File.Exists(marker) && File.ReadAllText(marker) == PayloadHash &&
@@ -93,14 +127,18 @@ class PortableLauncher {
             (File.Exists(Path.Combine(path, "compact.json")) ||
              File.Exists(Path.Combine(path, "webview2", "msedgewebview2.exe")));
     }
+#endif
     static void PrepareComponents(string destination) {
         string suffix=Guid.NewGuid().ToString("N");
-        string status=Path.Combine(destination,"setup-status-"+suffix+".json");
-        string cancel=Path.Combine(destination,"setup-cancel-"+suffix);
+        string data=Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),"TouchHelm");
+        Directory.CreateDirectory(data);
+        string status=Path.Combine(data,"setup-status-"+suffix+".json");
+        string cancel=Path.Combine(data,"setup-cancel-"+suffix);
+        bool installed=File.Exists(Path.Combine(destination,"installed.json"));
         string message="Preparing TouchHelm for this PC…";
         var start=new ProcessStartInfo(Path.Combine(destination,"runtime","python.exe")) {
             WorkingDirectory=Path.Combine(destination,"app"),UseShellExecute=false,CreateNoWindow=true,
-            Arguments=Quote(Path.Combine(destination,"app","portable_setup.py"))+" --progress "+Quote(status)+" --cancel "+Quote(cancel)
+            Arguments="-B "+Quote(Path.Combine(destination,"app","portable_setup.py"))+" --progress "+Quote(status)+" --cancel "+Quote(cancel)+(installed?" --browser-only":"")
         };
         start.EnvironmentVariables.Remove("PYTHONHOME");start.EnvironmentVariables.Remove("PYTHONPATH");
         start.EnvironmentVariables["TOUCHHELM_PORTABLE_ROOT"]=destination;
@@ -115,7 +153,9 @@ class PortableLauncher {
                             FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,
                             StartPosition=FormStartPosition.CenterScreen,Font=new Font("Segoe UI",10)};
                         preparation.Controls.Add(new Label {Name="setupMessage",Text=message,Left=24,Top=24,Width=460,Height=50});
-                        preparation.Controls.Add(new Label {Text="First launch downloads missing components automatically.\nKeep this PC connected to the internet.",Left=24,Top=94,Width=460,Height=45,ForeColor=SystemColors.GrayText});
+                        preparation.Controls.Add(new Label {Text=installed?
+                            "Checking the Windows browser runtime.\nAny missing Microsoft component is prepared automatically.":
+                            "First launch downloads missing components automatically.\nKeep this PC connected to the internet.",Left=24,Top=94,Width=460,Height=45,ForeColor=SystemColors.GrayText});
                         progress=new ProgressBar {Left=24,Top=76,Width=450,Height=8,Style=ProgressBarStyle.Marquee};
                         preparation.Controls.Add(progress);
                         preparation.FormClosing+=(s,e)=>{cancelled=true;};preparation.Show();
@@ -154,6 +194,7 @@ class PortableLauncher {
                 PropagationFlags.None, AccessControlType.Allow));
         Directory.SetAccessControl(runtime,acl);
     }
+#if !INSTALLED
     static void Tick(int value) {
         progress.Value = Math.Max(0, Math.Min(100, value));
         Application.DoEvents();
@@ -230,6 +271,7 @@ class PortableLauncher {
             if (preparation!=null) {preparation.Dispose(); preparation=null;}
         }
     }
+#endif
     static string Quote(string value) {
         var result = new StringBuilder("\""); int slashes=0;
         foreach (char c in value) {

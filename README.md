@@ -11,7 +11,26 @@ Turn your phone into a Windows trackpad, keyboard, presentation remote, media co
 
 *Previews use synthetic QA device data and illustrate the interface rather than an active connection.*
 
-## Portable Windows test version
+## Windows test installer
+
+[Download Test 3 setup](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.3)
+and run `TouchHelm-2.2.0-test3-setup-win-x64.exe` on Windows 10/11 x64.
+The setup download is **160.4 MiB** (about 618 MiB installed), approximately 70%
+smaller than Test 1's offline portable download.
+This is the normal installation: a Windows Installed apps entry, Start Menu
+shortcut, desktop shortcut selected by default, and an uninstaller. Python,
+screen/audio libraries, the isolated camera runtime and models are included.
+**No Python installation, PATH change, pip command, or feature download is needed.**
+Setup reuses Windows' WebView2 and prepares it automatically if missing; only
+that Microsoft runtime may need internet. See [installer details](docs/WINDOWS_INSTALLER.md)
+and [verification](docs/WINDOWS_INSTALLER_VERIFICATION.md).
+
+This test installer is unsigned, so SmartScreen can still warn or block it.
+Changing the compiler or adding shortcuts does not establish publisher trust.
+Private GitHub releases require repository access; the setup EXE can also be
+shared directly with testers.
+
+### Earlier portable builds
 
 [Download compact Test 2](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.2)
 and open `TouchHelm-2.2.0-test2-compact-win-x64.exe` on Windows 10/11 x64.
@@ -95,7 +114,10 @@ Optional **private Tailscale HTTPS** pairs Windows and Android without installin
 
 Open **`/preview.html`** on the running host for an interactive preview board with all tabs, desktop panels, themes and simulated states. Preview transport cannot send PC input. [Implementation and acceptance record](docs/TOUCHHELM_V2.md) · [Desktop and HTTPS guide](docs/desktop-v2.md).
 
-## Requirements
+## Source-development requirements
+
+These apply when running from the checkout. The Windows installer includes its
+own Python and application libraries; testers do not need the setup below.
 
 - **Host:** Windows 10/11, Python, Windows PowerShell, WebView2 Runtime and .NET Framework 4.6.2 or later. Python 3.13 is used in this workspace. Tkinter remains available for the classic rollback UI.
 - **Phone:** a modern browser on the same reachable local network as the PC. The UI supports phone, landscape, and desktop browser sizes.
@@ -103,7 +125,7 @@ Open **`/preview.html`** on the running host for an interactive preview board wi
 
 Node.js is needed only for development tests, not normal app use.
 
-## Quick start
+## Run from source
 
 This repository is private. Clone it with a GitHub account that has access:
 

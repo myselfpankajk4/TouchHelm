@@ -13,7 +13,8 @@ def prepare():
         raise RuntimeError('Launch the portable TouchHelm EXE to use this entrypoint.')
     os.environ['TOUCHHELM_PORTABLE_ROOT'] = str(root)
     compact=(root/'compact.json').is_file()
-    if compact:os.environ.pop('WEBVIEW2_BROWSER_EXECUTABLE_FOLDER',None)
+    system_browser=compact or (root/'installed.json').is_file()
+    if system_browser:os.environ.pop('WEBVIEW2_BROWSER_EXECUTABLE_FOLDER',None)
     else:os.environ['WEBVIEW2_BROWSER_EXECUTABLE_FOLDER'] = str(root/'webview2')
     os.environ['PYTHONUTF8'] = '1'
     os.environ.pop('PYTHONHOME', None)
@@ -32,7 +33,7 @@ def prepare():
     import webview
     # pywebview's Windows backend detection checks this setting before it ever
     # creates WebView2; the Microsoft environment variable alone is insufficient.
-    webview.settings['WEBVIEW2_RUNTIME_PATH'] = None if compact else str(root/'webview2')
+    webview.settings['WEBVIEW2_RUNTIME_PATH'] = None if system_browser else str(root/'webview2')
     from server.secure_pairing import protect_user_path
     protect_user_path(data)
     return root, data
@@ -73,8 +74,8 @@ def self_test(root, data):
             if 'edgeupdate' in str(sub_key).lower():
                 raise FileNotFoundError('Installed WebView2 deliberately hidden for portable verification')
             return real_open(key, sub_key, *args, **kwargs)
-        compact=(root/'compact.json').is_file()
-        if not compact:winreg.OpenKey = without_installed_webview
+        system_browser=(root/'compact.json').is_file() or (root/'installed.json').is_file()
+        if not system_browser:winreg.OpenKey = without_installed_webview
         window = webview.create_window('TouchHelm portable verification',
             html='<html><body>TouchHelm runtime check</body></html>', hidden=True)
         def probe():
@@ -86,7 +87,7 @@ def self_test(root, data):
                 window.destroy()
         webview.start(probe, gui='edgechromium', private_mode=True)
         from webview.platforms import winforms
-        if compact:
+        if system_browser:
             report['checks']['system_webview2'] = bool(winforms.is_chromium and not webview.settings['WEBVIEW2_RUNTIME_PATH'])
         else:
             report['checks']['fixed_runtime_without_installed_webview'] = bool(

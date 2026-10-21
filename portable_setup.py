@@ -31,7 +31,8 @@ def component_directory(root, data):
 class ComponentSetup:
     def __init__(self, root, data, *, progress_file=None, cancel_file=None, protector=None):
         self.root=Path(root).absolute(); self.data=Path(data).absolute()
-        self.manifest=json.loads((self.root/'compact.json').read_text(encoding='utf-8'))
+        manifest=self.root/('installed.json' if (self.root/'installed.json').is_file() else 'compact.json')
+        self.manifest=json.loads(manifest.read_text(encoding='utf-8'))
         if self.manifest.get('schema') != 1: raise ValueError('Unsupported compact setup manifest')
         self.remote_lock=self.root/'app/requirements-remote-portable.txt'
         self.camera_lock=self.root/'app/requirements-aircontrol.txt'
@@ -266,17 +267,28 @@ class ComponentSetup:
             (self.component/'ready').write_text(self.identity)
             self.status('TouchHelm is ready.')
 
+    def ensure_browser(self):
+        """Installed builds already contain every Python/native feature and model."""
+        self.check_cancel()
+        with self.locked():
+            self.ensure_webview()
+            self.status('TouchHelm is ready.')
+
 
 def main():
     parser=argparse.ArgumentParser()
     parser.add_argument('--progress',required=True)
     parser.add_argument('--cancel',required=True)
+    parser.add_argument('--browser-only',action='store_true')
     args=parser.parse_args()
     root=Path(__file__).absolute().parent.parent
     data=Path(os.environ['LOCALAPPDATA'])/'TouchHelm'
     os.environ.pop('WEBVIEW2_BROWSER_EXECUTABLE_FOLDER',None)
     setup=ComponentSetup(root,data,progress_file=args.progress,cancel_file=args.cancel)
-    try:setup.ensure();return 0
+    try:
+        if args.browser_only or (root/'installed.json').is_file():setup.ensure_browser()
+        else:setup.ensure()
+        return 0
     except SetupCancelled:setup.status('Setup cancelled. Open TouchHelm again to continue.');return 2
     except Exception as error:
         reason=re.sub(r'https?://\S+','[download source]',str(error))
