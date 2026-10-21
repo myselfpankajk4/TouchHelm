@@ -18,8 +18,8 @@ Observed on the build host:
 - All 495 Python regression tests pass. The three new installed-mode tests cover
   system-browser selection, isolation from external Python settings, and ensuring
   installed setup never enters the Python-package/model download path.
-- The final installer successfully installs for the current user, registers the
-  Installed apps entry and uninstaller, and creates desktop and Start Menu shortcuts
+- The final installer successfully installs for the current user, writes uninstall
+  registration metadata, and creates desktop and Start Menu shortcuts
   with the correct targets. User and machine PATH remain unchanged. Windows Start
   discovers `TouchHelm.Desktop`.
 - The exact final installed launcher passes all 20 native checks with PATH reduced
@@ -41,13 +41,34 @@ Observed on the build host:
   both refuse changes while the guard exists and preserve the app entry/files.
 - A preliminary installer uninstalled successfully, removed its app entry and
   shortcuts, and preserved existing user settings. The final guarded build is
-  installed and running on the PC.
+  installed on the PC.
 - Opening the final Start Menu shortcut with no Python in PATH opens a responsive
   native TouchHelm window from the installed runtime. The normal host serves its
   API, requires its PIN, and authenticates a WebSocket client without transmitting
   PC input. Reports contain booleans/counts, no pairing PIN or IPC credentials.
 - Review found and resolved lifecycle protection gaps; re-review found no concrete
   remaining blocker. Whitespace verification passes.
+
+## Installed apps visibility follow-up
+
+The initial installation was launched from the packaged coding app. A registry
+query from that same process context found TouchHelm, but Windows Settings and
+Programs and Features did not show it. A read-only probe launched by the existing
+desktop Explorer process confirmed that its HKCU uninstall view did not contain
+TouchHelm. Matching user identity, registry view and key permissions were not
+sufficient to catch this context difference.
+
+The exact released Test 3 EXE was then run through the existing desktop shell,
+outside the coding app's context. Setup logged a successful repair with no reboot.
+A new desktop-context probe found TouchHelm's registration and uninstaller.
+Windows Settings > Apps > Installed apps then showed TouchHelm 2.2.0.3, 622 MB,
+and an available Uninstall command in its three-dot menu. Uninstall was not
+invoked. No installer source or released EXE change was needed for this repair.
+
+For future installer verification, launch setup from the normal desktop, verify
+registration from that desktop context, and check the actual Installed apps UI
+and Uninstall menu. A registry or Shell COM inventory query inside the build
+process alone does not prove that Windows Settings can see the installation.
 
 Clean Windows VM, physical Android Chrome, missing-system-WebView2 installation,
 full screen/audio streaming and real camera-control sessions were not exercised
