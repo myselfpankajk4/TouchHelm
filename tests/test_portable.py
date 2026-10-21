@@ -9,6 +9,15 @@ from unittest.mock import patch
 
 
 class PortableTests(unittest.TestCase):
+    def test_compact_camera_uses_prepared_user_components(self):
+        from server.aircontrol.setup import AirControlSetup
+        with tempfile.TemporaryDirectory() as folder:
+            root=Path(folder); component=root/'components'
+            with patch.dict(os.environ,{'TOUCHHELM_PORTABLE_ROOT':str(root),'TOUCHHELM_COMPONENT_ROOT':str(component)}):
+                setup=AirControlSetup(root/'user-data')
+                self.assertEqual(setup.python,component/'camera/python.exe')
+                self.assertEqual(setup.models,component/'models')
+
     def test_bundle_keeps_logical_path_under_windows_appdata_redirection(self):
         from server.portable import bundle_root
         with tempfile.TemporaryDirectory() as folder:

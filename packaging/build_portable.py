@@ -40,9 +40,10 @@ def copytree(source, target):
         ignore=shutil.ignore_patterns('__pycache__', '*.pyc', '.DS_Store', 'review'))
 
 
-def download():
+def download(names=None):
     CACHE.mkdir(parents=True, exist_ok=True)
     for name, url in SOURCES.items():
+        if names is not None and name not in names:continue
         target = CACHE/name
         if not target.is_file():
             partial = target.with_suffix('.download')
@@ -145,7 +146,7 @@ def build():
     run([compiler, '/nologo', '/target:winexe', '/platform:x64', '/optimize+', '/out:'+str(exe),
         '/win32icon:'+str(ROOT/'assets/touchhelm.ico'), '/win32manifest:'+str(ROOT/'packaging/portable.manifest'),
         '/r:System.IO.Compression.dll', '/r:System.IO.Compression.FileSystem.dll',
-        '/r:System.Windows.Forms.dll', '/r:System.Drawing.dll', compiled])
+        '/r:System.Windows.Forms.dll', '/r:System.Drawing.dll', '/r:System.Web.Extensions.dll', compiled])
     with exe.open('ab') as output, payload.open('rb') as data: shutil.copyfileobj(data, output, 1024*1024)
     (DIST/'SHA256SUMS.txt').write_text(sha(exe)+'  '+exe.name+'\n')
     manifest = {'file': exe.name, 'bytes': exe.stat().st_size, 'sha256': sha(exe),

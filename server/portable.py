@@ -19,3 +19,8 @@ def config_path(source_root):
     folder = Path(local)/'TouchHelm'
     folder.mkdir(parents=True, exist_ok=True)
     return folder/'config.json'
+
+
+def component_root():
+    value=os.environ.get('TOUCHHELM_COMPONENT_ROOT')
+    return Path(value).absolute() if value else None

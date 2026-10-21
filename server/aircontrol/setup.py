@@ -39,6 +39,11 @@ class AirControlSetup:
         if self.bundle is not None:
             self.python=self.bundle/'camera'/'python.exe'
             self.models=self.bundle/'app'/'assets'/'aircontrol'
+            from server.portable import component_root
+            component=component_root()
+            if component is not None:
+                self.python=component/'camera/python.exe'
+                self.models=component/'models'
 
     def _signature(self):
         try:return hashlib.sha256(REQUIREMENTS.read_bytes()+(MODELS/'manifest.json').read_bytes()).hexdigest()

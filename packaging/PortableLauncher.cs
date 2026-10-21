@@ -12,6 +12,7 @@ using System.Text;
 using System.Threading;
 using System.Windows.Forms;
 using System.Reflection;
+using System.Web.Script.Serialization;
 [assembly: AssemblyTitle("TouchHelm Portable Test")]
 [assembly: AssemblyProduct("TouchHelm")]
 [assembly: AssemblyVersion("2.2.0.0")]
@@ -54,10 +55,12 @@ class PortableLauncher {
                     catch (AbandonedMutexException) { held = true; }
                     if (!held) throw new IOException("Another TouchHelm copy is preparing its files. Try again shortly.");
                     if (!Ready(destination)) Extract(destination, packages);
-                    GrantRendererReadAccess(Path.Combine(destination,"webview2"));
+                    if (Directory.Exists(Path.Combine(destination,"webview2")))
+                        GrantRendererReadAccess(Path.Combine(destination,"webview2"));
                 } finally { if (held) mutex.ReleaseMutex(); }
             }
             if (args.Contains("--extract-only")) return 0;
+            if (File.Exists(Path.Combine(destination,"compact.json"))) PrepareComponents(destination);
             bool test = args.Contains("--self-test");
             string executable = Path.Combine(destination, "runtime", test ? "python.exe" : "pythonw.exe");
             var start = new ProcessStartInfo(executable) {
@@ -87,7 +90,59 @@ class PortableLauncher {
         return File.Exists(marker) && File.ReadAllText(marker) == PayloadHash &&
             File.Exists(Path.Combine(path, "runtime", "pythonw.exe")) &&
             File.Exists(Path.Combine(path, "app", "portable_bootstrap.py")) &&
-            File.Exists(Path.Combine(path, "webview2", "msedgewebview2.exe"));
+            (File.Exists(Path.Combine(path, "compact.json")) ||
+             File.Exists(Path.Combine(path, "webview2", "msedgewebview2.exe")));
+    }
+    static void PrepareComponents(string destination) {
+        string suffix=Guid.NewGuid().ToString("N");
+        string status=Path.Combine(destination,"setup-status-"+suffix+".json");
+        string cancel=Path.Combine(destination,"setup-cancel-"+suffix);
+        string message="Preparing TouchHelm for this PC…";
+        var start=new ProcessStartInfo(Path.Combine(destination,"runtime","python.exe")) {
+            WorkingDirectory=Path.Combine(destination,"app"),UseShellExecute=false,CreateNoWindow=true,
+            Arguments=Quote(Path.Combine(destination,"app","portable_setup.py"))+" --progress "+Quote(status)+" --cancel "+Quote(cancel)
+        };
+        start.EnvironmentVariables.Remove("PYTHONHOME");start.EnvironmentVariables.Remove("PYTHONPATH");
+        start.EnvironmentVariables["TOUCHHELM_PORTABLE_ROOT"]=destination;
+        start.EnvironmentVariables["PYTHONUTF8"]="1";
+        var clock=Stopwatch.StartNew(); DateTime? cancelledAt=null;
+        try {
+            using(var process=Process.Start(start)) {
+                while(!process.WaitForExit(100)) {
+                    ReadSetupMessage(status,ref message);
+                    if(preparation==null && clock.ElapsedMilliseconds>1200) {
+                        preparation=new Form {Text="Preparing TouchHelm",Width=520,Height=210,
+                            FormBorderStyle=FormBorderStyle.FixedDialog,MaximizeBox=false,MinimizeBox=false,
+                            StartPosition=FormStartPosition.CenterScreen,Font=new Font("Segoe UI",10)};
+                        preparation.Controls.Add(new Label {Name="setupMessage",Text=message,Left=24,Top=24,Width=460,Height=50});
+                        preparation.Controls.Add(new Label {Text="First launch downloads missing components automatically.\nKeep this PC connected to the internet.",Left=24,Top=94,Width=460,Height=45,ForeColor=SystemColors.GrayText});
+                        progress=new ProgressBar {Left=24,Top=76,Width=450,Height=8,Style=ProgressBarStyle.Marquee};
+                        preparation.Controls.Add(progress);
+                        preparation.FormClosing+=(s,e)=>{cancelled=true;};preparation.Show();
+                    }
+                    if(preparation!=null && !preparation.IsDisposed)
+                        preparation.Controls["setupMessage"].Text=message;
+                    Application.DoEvents();
+                    if(cancelled && cancelledAt==null) {File.WriteAllText(cancel,"");cancelledAt=DateTime.UtcNow;}
+                    if(cancelledAt!=null && (DateTime.UtcNow-cancelledAt.Value).TotalSeconds>35) {
+                        process.Kill();process.WaitForExit();throw new OperationCanceledException();
+                    }
+                }
+                ReadSetupMessage(status,ref message);
+                if(cancelled || process.ExitCode==2)throw new OperationCanceledException();
+                if(process.ExitCode!=0)throw new IOException(message+"\n\nOpen the same EXE again to retry. Your settings are preserved.");
+            }
+        } finally {
+            if(preparation!=null){preparation.Dispose();preparation=null;}
+            if(File.Exists(status))File.Delete(status);if(File.Exists(cancel))File.Delete(cancel);
+        }
+    }
+    static void ReadSetupMessage(string path,ref string message) {
+        try {
+            if(!File.Exists(path))return;
+            var data=new JavaScriptSerializer().DeserializeObject(File.ReadAllText(path)) as System.Collections.Generic.Dictionary<string,object>;
+            if(data!=null && data.ContainsKey("message"))message=Convert.ToString(data["message"]);
+        } catch(IOException) {} catch(ArgumentException) {}
     }
     static void GrantRendererReadAccess(string runtime) {
         // Microsoft requires these read/execute grants for Fixed Version >=120

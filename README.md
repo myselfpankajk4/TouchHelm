@@ -13,14 +13,23 @@ Turn your phone into a Windows trackpad, keyboard, presentation remote, media co
 
 ## Portable Windows test version
 
-[Download the test prerelease](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.1)
-and open `TouchHelm-2.2.0-test-win-x64.exe` on Windows 10/11 x64. It bundles Python,
-screen/audio providers, the isolated camera runtime/models, WebView2 and the classic
-desktop fallback. No developer tools or separate package installation are needed.
-First launch extracts per-user files; settings survive later versions.
+[Download compact Test 2](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.2)
+and open `TouchHelm-2.2.0-test2-compact-win-x64.exe` on Windows 10/11 x64.
+The download is **29.5 MiB**, reduced from 533.2 MiB. Python and the core app are
+included; first launch automatically prepares screen/audio and isolated camera
+components, and installs WebView2 only if missing. **Internet is needed for that
+first preparation.** No developer tools or manual requirements installation are
+needed. Prepared components and settings are reused on later launches.
+
+The desktop now groups QR, phone address and PIN together, with compact navigation,
+native task rows, grouped settings and disclosed advanced setup. See
+[compact setup and testing](docs/COMPACT_TESTING.md) and
+[verification](docs/COMPACT_VERIFICATION.md). The larger
+[offline Test 1](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.1)
+remains available.
 
 This EXE is unsigned: Windows publisher, SmartScreen, firewall and camera prompts
-may still appear. See [portable testing and limitations](docs/PORTABLE_TESTING.md).
+may still appear. See [compact testing and limitations](docs/COMPACT_TESTING.md).
 Private GitHub releases require repository access; the EXE can also be shared
 directly with testers. The source-development requirements below apply when
 running from the checkout.
