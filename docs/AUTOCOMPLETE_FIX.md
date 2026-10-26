@@ -47,3 +47,21 @@ not driven in this pass. Confirm the original scenario with the new build: type
 several prefixes from the phone, continue typing while a suffix is highlighted,
 accept a suggestion on the PC, and check that Clear and ordinary PC edits still
 sync. No unrelated user field or browser history is used by these probes.
+
+## Installed Test 4 build
+
+The installer is 168,192,121 bytes (160.4 MiB), with SHA-256:
+
+```
+b2e8606bcd0d5390982a8e5376e1c4be2355924b9e57ed20886decb18714f244
+```
+
+At the owner's request, the old installation was checked before replacement;
+its uninstaller was already absent. Test 4 was installed through the normal
+desktop shell context. That context verified version 2.2.0.4 registration,
+uninstaller, desktop and Start shortcuts, both fixed source hashes and preserved
+settings. The installed launcher passed all 20 native runtime checks with only
+Windows directories in PATH and invalid external Python environment settings.
+The normal application window then opened and responded. Its source identity,
+API, required PIN and authenticated WebSocket were checked without transmitting
+PC input. The test installer remains unsigned.
