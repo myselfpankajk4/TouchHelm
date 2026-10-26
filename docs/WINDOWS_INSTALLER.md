@@ -1,6 +1,6 @@
-# TouchHelm Windows installer — Test 3
+# TouchHelm Windows installer — Test 4
 
-Use `TouchHelm-2.2.0-test3-setup-win-x64.exe` for a normal installation on Windows
+Use `TouchHelm-2.2.0-test4-setup-win-x64.exe` for a normal installation on Windows
 10/11 x64. Run setup and choose Install. It installs for the current Windows user,
 creates Start Menu and desktop shortcuts (desktop selected by default), and adds
 TouchHelm to Settings → Apps → Installed apps with an uninstaller. The application
@@ -13,6 +13,12 @@ PATH/environment-variable change. The launcher uses the private runtime beside
 the app. A separately installed Python is neither used nor required. Upgrades
 use the same app entry and preserve settings under LocalAppData\TouchHelm.
 Uninstall removes application files and shortcuts; settings are retained.
+Test 4 prevents a selected inline autocomplete suffix from replacing an ongoing
+phone edit. For example, Chrome can suggest `google.com` after the phone sends
+`g`, while the phone keeps `g`. Accepting that suggestion on the PC syncs the
+full address. Other PC edits continue to sync automatically. No Chrome setting
+or extra recovery button is needed. Fields without accessible selection metadata
+retain the existing synchronization behavior.
 If TouchHelm is running, choose Exit from its tray menu before updating or
 uninstalling. Windows setup checks the running-app guard to prevent removing
 files while the host is active.
@@ -33,6 +39,11 @@ MSIX distribution is a separate route that uses Microsoft's signing. Newly signe
 direct downloads may still need reputation. See Microsoft's official guidance:
 https://learn.microsoft.com/windows/apps/package-and-deploy/code-signing-options
 
+The [Windows trust research](WINDOWS_TRUST_RESEARCH.md) compares MSI, direct
+signing and Store MSIX distribution, with TouchHelm-specific migration and
+verification requirements. Renaming or repackaging the unsigned installer as an
+MSI does not establish publisher trust.
+
 ## Build
 
 Prepare `build/portable-stage` using the existing offline builder, then run:
@@ -46,7 +57,7 @@ runtimes into a fresh stage, checks models and private-file exclusions, compiles
 the installed launcher, then uses Inno Setup's solid LZMA2 compression. It excludes
 the private browser and package installers; all native dependency licenses remain
 with their distributions. The file size and SHA-256 are in
-`dist/installer-build-manifest.json` and `dist/SHA256SUMS-test3.txt`.
+`dist/installer-build-manifest.json` and `dist/SHA256SUMS-test4.txt`.
 
 ## Verification
 

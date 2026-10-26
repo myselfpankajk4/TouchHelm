@@ -16,8 +16,8 @@ from windows_redist import ensure_openmp
 
 ROOT = base.ROOT
 DIST = ROOT/'dist'
-VERSION = '2.2.0-test.3'
-OUTPUT = 'TouchHelm-2.2.0-test3-setup-win-x64'
+VERSION = '2.2.0-test.4'
+OUTPUT = 'TouchHelm-2.2.0-test4-setup-win-x64'
 
 
 def validate_files(stage):
@@ -108,7 +108,7 @@ def build(compiler, source):
         'webview': 'system-evergreen-auto-bootstrap-if-missing', 'target': 'Windows 10/11 x64',
         'stage': str(stage.relative_to(ROOT)), 'dependencies': json.loads((stage/'dependencies.json').read_text())}
     (DIST/'installer-build-manifest.json').write_text(json.dumps(manifest, indent=2))
-    (DIST/'SHA256SUMS-test3.txt').write_text(manifest['sha256']+'  '+exe.name+'\n')
+    (DIST/'SHA256SUMS-test4.txt').write_text(manifest['sha256']+'  '+exe.name+'\n')
     shutil.copy2(ROOT/'docs/WINDOWS_INSTALLER.md', DIST/'WINDOWS_INSTALLER.md')
     print(json.dumps({k: v for k, v in manifest.items() if k != 'dependencies'}, indent=2))
 

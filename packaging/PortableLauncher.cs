@@ -20,7 +20,7 @@ using System.Web.Script.Serialization;
 #endif
 [assembly: AssemblyProduct("TouchHelm")]
 #if INSTALLED
-[assembly: AssemblyVersion("2.2.0.3")]
+[assembly: AssemblyVersion("2.2.0.4")]
 #else
 [assembly: AssemblyVersion("2.2.0.0")]
 #endif

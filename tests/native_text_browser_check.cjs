@@ -53,6 +53,21 @@ const path=require('node:path');
     await page.waitForFunction(()=>typeInput.value==='PC changed outside phone'&&!touchhelm.textSync.needsRead);
     await page.locator('#typeInput').fill('PC changed outside phone!');
     await page.waitForFunction(()=>touchhelm.liveTextValue==='PC changed outside phone!'&&!touchhelm.textSync.pending);
+    await page.locator('#typeInput').fill('g');
+    await page.waitForFunction(()=>touchhelm.liveTextValue==='g'&&!touchhelm.textSync.pending);
+    for(const [commandName,prefix] of [['complete-g','g'],['complete-gi','gi']]){
+      if(prefix==='gi'){
+        await page.locator('#typeInput').fill(prefix);
+        await page.waitForFunction(()=>touchhelm.liveTextValue==='gi'&&!touchhelm.textSync.pending);
+      }
+      const prior=await page.evaluate(()=>touchhelm.textSync.field.revision);
+      await command(commandName);await page.evaluate(()=>touchhelm.textSync.poll());
+      await page.waitForFunction(({prior,prefix})=>!touchhelm.textSync.pending&&
+        touchhelm.textSync.field.revision!==prior&&touchhelm.liveTextValue===prefix,{prior,prefix});
+      assert.equal(await page.locator('#typeInput').inputValue(),prefix,'unaccepted completion changed phone text');
+    }
+    await command('accept-completion');await page.evaluate(()=>touchhelm.textSync.poll());
+    await page.waitForFunction(()=>typeInput.value==='github.com'&&!touchhelm.textSync.pending);
     await page.locator('#btnTypingDone').click();
     await page.evaluate(()=>touchhelm.textSync.poll());
     await page.waitForFunction(()=>!touchhelm.textSync.pending);
@@ -62,7 +77,7 @@ const path=require('node:path');
     await command('normal');await page.evaluate(()=>touchhelm.textSync.poll());
     await page.waitForFunction(()=>typingDock.classList.contains('expanded'));
     assert.deepEqual(errors,[]);
-    console.log('PASS real native/browser text: auto-open, PC-to-phone, phone-to-PC, stale-write recovery, no relink button, focus re-entry');
+    console.log('PASS real native/browser text: auto-open, PC-to-phone, phone-to-PC, stale-write recovery, selected autocomplete, accepted suggestions, no relink button, focus re-entry');
   }catch(error){
     if(page&&origin){
       const diagnostic=await (await page.request.post(origin+'/probe/diagnostics')).json();

@@ -101,7 +101,7 @@ public static class ProbeFocus {
                         'form':json.loads((directory/'focus.json').read_text())})
                 if value == 'shutdown':
                     done.set()
-                elif value in ('normal','edit','password','readonly'):
+                elif value in ('normal','edit','password','readonly','complete-g','complete-gi','accept-completion'):
                     await command(value)
                 else:
                     return web.Response(status=400)

@@ -13,8 +13,8 @@ Turn your phone into a Windows trackpad, keyboard, presentation remote, media co
 
 ## Windows test installer
 
-[Download Test 3 setup](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.3)
-and run `TouchHelm-2.2.0-test3-setup-win-x64.exe` on Windows 10/11 x64.
+[Download Test 4 setup](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.4)
+and run `TouchHelm-2.2.0-test4-setup-win-x64.exe` on Windows 10/11 x64.
 The setup download is **160.4 MiB** (about 618 MiB installed), approximately 70%
 smaller than Test 1's offline portable download.
 This is the normal installation: a Windows Installed apps entry, Start Menu
@@ -23,14 +23,19 @@ screen/audio libraries, the isolated camera runtime and models are included.
 **No Python installation, PATH change, pip command, or feature download is needed.**
 Setup reuses Windows' WebView2 and prepares it automatically if missing; only
 that Microsoft runtime may need internet. See [installer details](docs/WINDOWS_INSTALLER.md)
-and [verification](docs/WINDOWS_INSTALLER_VERIFICATION.md).
+and [autocomplete fix and verification](docs/AUTOCOMPLETE_FIX.md).
+Test 4 keeps a highlighted PC autocomplete suffix out of ongoing phone edits;
+accepting the suggestion on the PC still syncs its complete value.
 
 This test installer is unsigned, so SmartScreen can still warn or block it.
 Changing the compiler or adding shortcuts does not establish publisher trust.
 Private GitHub releases require repository access; the setup EXE can also be
 shared directly with testers.
 
-### Earlier portable builds
+### Earlier test builds
+
+[Test 3 installer](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.3)
+and its [runtime verification](docs/WINDOWS_INSTALLER_VERIFICATION.md) remain available.
 
 [Download compact Test 2](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.2)
 and open `TouchHelm-2.2.0-test2-compact-win-x64.exe` on Windows 10/11 x64.
