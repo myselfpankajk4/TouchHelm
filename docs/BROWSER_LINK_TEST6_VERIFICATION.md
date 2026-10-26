@@ -36,3 +36,14 @@ Physical Android permissions, complete live screen/audio sessions, banking apps
 and clean-machine installation still need user/device testing. Keep the already
 loaded phone page open; refresh/reconnect requires a new QR after the temporary
 origin has closed.
+
+Normal Windows desktop upgrade to 2.2.0.6 also passed: uninstall registration,
+desktop/Start shortcuts, preserved settings, matching updated server sources,
+responsive window, 20 bundled-runtime/model/UI checks with system Python absent
+and invalid Python environment variables, and the running host's source identity,
+local API and required-PIN authentication. No live-PC public link was opened by
+these smoke checks.
+
+Installer: `TouchHelm-2.2.0-test6-setup-win-x64.exe`, 181,698,959 bytes (173.3 MiB).
+GitHub's uploaded digest matches local SHA-256:
+`53024fd5128180c521fd1c96d1954510b7ad3b88b931a86f9d830391de7e75a7`.

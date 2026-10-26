@@ -27,16 +27,16 @@ trusted; it does not claim immunity to a compromised device or hosting provider.
 **Tech stack:** Existing aiohttp, aiortc 1.15.0/aioice, browser WebRTC/WebCrypto.
 The small version-bound selected-ICE-pair adapter must fail closed if unavailable.
 
-- [ ] RED: deny all former public control/API routes; authenticate bound SDP,
+- [x] RED: deny all former public control/API routes; authenticate bound SDP,
   reject tampered proofs/fingerprints/nonlocal peers and cap buffers.
-- [ ] Implement server/local_link.py and bounded data-channel socket adapter;
+- [x] Implement server/local_link.py and bounded data-channel socket adapter;
   share the existing client command loop without bypassing its PIN/capability gates.
-- [ ] Replace public gateway with static/challenge/offer/answer only; automatically
+- [x] Replace public gateway with static/challenge/offer/answer only; automatically
   stop the helper after local connection, preserving direct session cleanup.
-- [ ] Implement phone handshake/socket/RPC, preload theme assets, remove HTTP/API
+- [x] Implement phone handshake/socket/RPC, preload theme assets, remove HTTP/API
   and public WebSocket fallback. Update desktop local/paired/recovery status.
-- [ ] Verify real Chrome/direct aiortc with a synthetic native host: kill the
+- [x] Verify real Chrome/direct aiortc with a synthetic native host: kill the
   public helper, prove PIN/ping/settings/artwork/typed packets remain local;
   negative tests must reject remote routes, wrong proofs and nonlocal pairs.
-- [ ] Run affected/full regressions; review, build once from final sources,
+- [x] Run affected/full regressions; review, build once from final sources,
   update installed copy preserving settings, publish the private test build.
