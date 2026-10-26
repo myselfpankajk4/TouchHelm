@@ -33,4 +33,17 @@ the user's test. Existing local WebRTC transport/capture code is unchanged.
 UI evidence below uses a synthetic address, PIN and illustrative QR fixture;
 it is not a working pairing code or a screenshot of private PC data.
 
+The normal Windows desktop copy was upgraded in place to 2.2.0.5. Its Installed
+apps/uninstall registration, uninstaller, desktop and Start shortcuts, unchanged
+settings, new server sources and responsive window passed. All 20 installed
+runtime checks passed with system Python unavailable, exit code 0. The running
+host's installed source identity, local API, required PIN and authenticated
+WebSocket passed without PC input. No public browser link was started on the
+live PC during this verification.
+
+Installer: `TouchHelm-2.2.0-test5-setup-win-x64.exe`, 181,696,078 bytes
+(173.3 MiB). SHA-256:
+`cdef05f125520739d470a229fff8f60ed097e165d4a9a53cb1fda7523f33b323`.
+The installer is unsigned; its SmartScreen behavior is unchanged.
+
 ![Desktop browser pairing, synthetic fixture](images/browser-link-desktop.png)
