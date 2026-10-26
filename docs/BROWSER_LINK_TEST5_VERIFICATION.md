@@ -1,5 +1,8 @@
 # Test 5 verification — 26 October 2026
 
+Historical relay-mode evidence. Test 6 replaces the ongoing public control path
+with direct local encrypted control. See [current transport](BROWSER_LINK.md).
+
 Browser link is an optional test transport. See [setup and limits](BROWSER_LINK.md).
 No live PC was exposed during the public network test: the origin served only a
 synthetic phone page/API/PIN socket, with no native input or screen capture.

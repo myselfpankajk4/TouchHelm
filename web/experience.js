@@ -42,7 +42,7 @@
       const generation=this.assetGeneration;
       try{
         let url=this.assetUrls.get(assetId);
-        if(!url){let request=this.assetRequests.get(assetId);if(!request){request=(async()=>{const response=await fetch(this.api(`/api/assets/${encodeURIComponent(assetId)}`),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});if(!response.ok)throw Error('Artwork unavailable');const blob=await response.blob();if(blob.size>4*1024*1024||!blob.type.startsWith('image/')||generation!==this.assetGeneration)throw Error('Invalid artwork');const value=URL.createObjectURL(blob);if(this.assetUrls.size>=160){const [key,old]=this.assetUrls.entries().next().value;URL.revokeObjectURL(old);this.assetUrls.delete(key);}this.assetUrls.set(assetId,value);return value;})();this.assetRequests.set(assetId,request);}url=await request;}
+        if(!url){let request=this.assetRequests.get(assetId);if(!request){request=(async()=>{const response=await this.client.apiFetch(this.api(`/api/assets/${encodeURIComponent(assetId)}`),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});if(!response.ok)throw Error('Artwork unavailable');const blob=await response.blob();if(blob.size>4*1024*1024||!blob.type.startsWith('image/')||generation!==this.assetGeneration)throw Error('Invalid artwork');const value=URL.createObjectURL(blob);if(this.assetUrls.size>=160){const [key,old]=this.assetUrls.entries().next().value;URL.revokeObjectURL(old);this.assetUrls.delete(key);}this.assetUrls.set(assetId,value);return value;})();this.assetRequests.set(assetId,request);}url=await request;}
         if(generation===this.assetGeneration&&element.dataset.assetId===assetId){
           element.src=url;await element.decode();
           if(generation!==this.assetGeneration||element.dataset.assetId!==assetId)return false;
@@ -58,7 +58,7 @@
       const token=new URLSearchParams(location.hash.slice(1)).get('handoff');if(!token)return;
       this.handoffInFlight=true;
       try{
-        const response=await fetch(this.api('/api/pairing/handoff?token='+encodeURIComponent(token)),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});
+        const response=await this.client.apiFetch(this.api('/api/pairing/handoff?token='+encodeURIComponent(token)),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});
         if(!response.ok)throw Error('Secure transfer could not be restored. Reconnect and retry within 60 seconds, or return to the previous connection.');
         const data=await response.json(),p=data.preferences||{};
         if(typeof data.draft==='string')this.client.typeInput.value=data.draft;
@@ -223,12 +223,13 @@
     }
     async secureSetup(){
       const guide=id('securePairingGuide');guide.hidden=false;guide.replaceChildren();
+      if(window.TouchHelmBrowserLink?.local){guide.textContent='Control, typing, settings, artwork and media signaling use your encrypted local Wi-Fi connection. The public pairing tunnel closes after connecting. Keep this tab open; reload or reconnect by scanning a fresh PC QR.';return;}
       try{
-        const response=await fetch(this.api('/api/pairing'),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});
+        const response=await this.client.apiFetch(this.api('/api/pairing'),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});
         if(!response.ok)throw Error('Pairing setup is unavailable. Reconnect and retry.');
         const info=await response.json(),privateState=info.tailscale||{},privateText=document.createElement('p');
         const browser=document.createElement('p');
-        browser.textContent=info.browser_link===true?'Secure browser link is active. No phone app or certificate is needed. Keep internet on: controls and typing pass through Cloudflare; screen/audio stay on the same Wi-Fi.':'On your PC, open Pair your phone → Browser link → Start browser link, then scan the new QR. No phone app or certificate is needed. Internet is required throughout; control and typing pass through Cloudflare.';
+        browser.textContent=info.browser_link===true?'Secure browser link is active. No phone app or certificate is needed. Keep internet on: controls and typing pass through Cloudflare; screen/audio stay on the same Wi-Fi.':'On your PC, open Pair your phone → Browser link → Start browser link, then scan the new QR. No phone app or certificate is needed. Internet is used only for pairing; control and typing stay encrypted on local Wi-Fi.';
         guide.append(browser);
         if(info.browser_link===true)return;
         const advanced=document.createElement('details'),summary=document.createElement('summary');
@@ -256,7 +257,7 @@
           advanced.append(references);
           const download=document.createElement('button');download.textContent='Download local public certificate';
           download.addEventListener('click',async()=>{download.disabled=true;try{
-            const certificate=await fetch(this.api('/api/pairing/certificate'),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});
+            const certificate=await this.client.apiFetch(this.api('/api/pairing/certificate'),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});
             if(!certificate.ok)throw Error('Certificate download failed. Reconnect and retry.');
             const url=URL.createObjectURL(await certificate.blob()),a=document.createElement('a');a.href=url;a.download='touchhelm-ca.crt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
           }catch(error){p.textContent=error.message;}finally{download.disabled=false;}});advanced.append(download);
@@ -270,7 +271,7 @@
         if(typeof destination!=='string'){target.protocol='https:';target.port=String(destination);}
         if(target.protocol!=='https:'||target.username||target.password)throw Error('Choose a trusted HTTPS pairing address from your PC.');
         target.pathname='/';target.search='';target.hash='';
-        const response=await fetch(this.api('/api/pairing/handoff'),{method:'POST',headers:{'Content-Type':'application/json','X-TouchHelm-Pin':this.client.authPin||''},body:JSON.stringify({target_origin:target.origin,draft:this.client.typeInput.value,live_baseline:this.client.liveTextValue||'',preferences:{theme:this.client.currentTheme,...window.TouchHelmThemes?.state,newline_mode:this.client.newlineMode,haptics:this.client.hapticsEnabled,live_typing:!!this.client.chkRealtimeTyping?.checked,pc_text_sync:!!id('pcTextSync').checked}})});
+        const response=await this.client.apiFetch(this.api('/api/pairing/handoff'),{method:'POST',headers:{'Content-Type':'application/json','X-TouchHelm-Pin':this.client.authPin||''},body:JSON.stringify({target_origin:target.origin,draft:this.client.typeInput.value,live_baseline:this.client.liveTextValue||'',preferences:{theme:this.client.currentTheme,...window.TouchHelmThemes?.state,newline_mode:this.client.newlineMode,haptics:this.client.hapticsEnabled,live_typing:!!this.client.chkRealtimeTyping?.checked,pc_text_sync:!!id('pcTextSync').checked}})});
         if(!response.ok)throw Error('Could not transfer your draft. Keep this page open and check the desktop pairing status and PIN.');
         const data=await response.json();if(typeof data.token!=='string'||data.target_origin&&data.target_origin!==target.origin)throw Error('The pairing destination changed. Keep this page open and retry.');
         target.hash='handoff='+encodeURIComponent(data.token);location.assign(target.href);

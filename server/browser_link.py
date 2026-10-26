@@ -182,6 +182,10 @@ class BrowserLinkManager:
             self._ticket_deadline = min(self.clock()+TICKET_TTL, self._deadline)
         return self.snapshot()
 
+    def pairing_secret(self):
+        """Internal proof key; never return it from a public HTTP response."""
+        return self._ticket if self._ready() and self.clock()<self._ticket_deadline else None
+
     def exchange(self, token):
         if (not self._ready() or not isinstance(token, str) or not _SECRET.fullmatch(token)
                 or not self._ticket or self.clock() >= self._ticket_deadline

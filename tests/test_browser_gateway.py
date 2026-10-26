@@ -31,7 +31,8 @@ class BrowserGatewayTests(unittest.IsolatedAsyncioTestCase):
             handle_info=AsyncMock(return_value=web.json_response({'service':'touchhelm'})),
             handle_version=AsyncMock(return_value=web.json_response({'build':'test'})),
             handle_config=AsyncMock(return_value=web.json_response({'saved':True})),
-            handle_asset=AsyncMock(return_value=web.Response(body=b'image')))
+            handle_asset=AsyncMock(return_value=web.Response(body=b'image')),
+            local_link=SimpleNamespace(nonce='synthetic-nonce'))
         self.gateway=BrowserLinkGateway(self.owner,self.manager)
         self.base=await self.gateway.start()
         self.client=ClientSession()
@@ -45,21 +46,20 @@ class BrowserGatewayTests(unittest.IsolatedAsyncioTestCase):
             self.assertIn('touchhelm-browser-link',await response.text())
             self.assertEqual(response.headers['Referrer-Policy'],'no-referrer')
         async with self.client.get(self.base+'/api/info',headers={**self.headers,'X-TouchHelm-Pin':'5678'}) as response:
-            self.assertEqual(response.status,401)
+            self.assertEqual(response.status,404)
         self.owner.handle_info.assert_not_awaited()
 
-    async def test_pairing_requires_exact_origin_and_consumes_a_single_use_ticket(self):
+    async def test_legacy_pairing_cookie_route_remains_inaccessible(self):
         for origin in ('http://fixture.trycloudflare.com','https://other.trycloudflare.com',None):
             headers={**self.headers,**({'Origin':origin} if origin else {})}
             async with self.client.post(self.base+'/api/browser-link/pair',headers=headers,json={'token':'t'*43}) as response:self.assertEqual(response.status,403)
         headers={**self.headers,'Origin':self.manager.origin}
         async with self.client.post(self.base+'/api/browser-link/pair',headers=headers,json={'token':'t'*43}) as response:
-            self.assertEqual(response.status,200)
-            cookie=response.cookies['th_browser_link']
-            self.assertTrue(cookie['secure']);self.assertTrue(cookie['httponly']);self.assertEqual(cookie['samesite'],'Strict')
+            self.assertEqual(response.status,405)
+            self.assertNotIn('Set-Cookie',response.headers)
             self.assertNotIn('s'*43,await response.text())
-        async with self.client.post(self.base+'/api/browser-link/pair',headers=headers,json={'token':'t'*43}) as response:self.assertEqual(response.status,401)
-        async with self.client.get(self.base+'/api/info',headers=self.authorized()) as response:self.assertEqual(response.status,200)
+        async with self.client.post(self.base+'/api/browser-link/pair',headers=headers,json={'token':'t'*43}) as response:self.assertEqual(response.status,405)
+        async with self.client.get(self.base+'/api/info',headers=self.authorized()) as response:self.assertEqual(response.status,404)
 
     async def test_wrong_host_and_forwarded_headers_never_establish_trust(self):
         self.manager.sessions.add('s'*43)
@@ -72,24 +72,21 @@ class BrowserGatewayTests(unittest.IsolatedAsyncioTestCase):
         for path in ('/api/pairing/certificate','/api/pairing/handoff','/preview/desktop/','/server/text_native.cs','/config.json','/sw.js','/SW.js','/Demo.js'):
             async with self.client.get(self.base+path,headers=self.authorized()) as response:self.assertEqual(response.status,404,path)
         for settings in ({'require_pin':False},{'pin_code':'0000'},{'remote_enabled':True},{'https_enabled':True}):
-            async with self.client.post(self.base+'/api/config',headers={**self.authorized(),'Origin':self.manager.origin},json=settings) as response:self.assertEqual(response.status,400)
+            async with self.client.post(self.base+'/api/config',headers={**self.authorized(),'Origin':self.manager.origin},json=settings) as response:self.assertEqual(response.status,405)
         self.owner.handle_config.assert_not_awaited()
 
-    async def test_websocket_needs_cookie_origin_and_one_socket_per_session(self):
-        for headers,status in ((self.headers,401),({**self.authorized(),'Origin':'https://evil.invalid'},401)):
+    async def test_websocket_stays_unavailable_even_with_a_legacy_session(self):
+        for headers,status in ((self.headers,404),({**self.authorized(),'Origin':'https://evil.invalid'},404)):
             with self.assertRaises(WSServerHandshakeError) as error:await self.client.ws_connect(self.base+'/ws',headers=headers)
             self.assertEqual(error.exception.status,status)
         self.manager.sessions.add('s'*43)
         headers={**self.authorized(),'Origin':self.manager.origin}
-        socket=await self.client.ws_connect(self.base+'/ws',headers=headers)
-        self.assertEqual((await socket.receive_json())['secure_origin'],self.manager.origin)
         with self.assertRaises(WSServerHandshakeError) as error:await self.client.ws_connect(self.base+'/ws',headers=headers)
-        self.assertEqual(error.exception.status,409)
-        await socket.close()
+        self.assertEqual(error.exception.status,404)
 
     async def test_revoked_session_cannot_fetch_private_data(self):
         self.manager.sessions.add('s'*43)
-        async with self.client.get(self.base+'/api/browser-link/status',headers=self.authorized()) as response:self.assertTrue((await response.json())['ready'])
+        async with self.client.get(self.base+'/api/browser-link/status',headers=self.authorized()) as response:self.assertEqual(await response.json(),{'pairing':True,'nonce':'synthetic-nonce'})
         self.manager.sessions.clear()
-        async with self.client.get(self.base+'/api/assets/asset-id',headers=self.authorized()) as response:self.assertEqual(response.status,401)
+        async with self.client.get(self.base+'/api/assets/asset-id',headers=self.authorized()) as response:self.assertEqual(response.status,404)
         self.owner.handle_asset.assert_not_awaited()

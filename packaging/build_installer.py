@@ -18,8 +18,8 @@ from windows_redist import ensure_openmp
 
 ROOT = base.ROOT
 DIST = ROOT/'dist'
-VERSION = '2.2.0-test.5'
-OUTPUT = 'TouchHelm-2.2.0-test5-setup-win-x64'
+VERSION = '2.2.0-test.6'
+OUTPUT = 'TouchHelm-2.2.0-test6-setup-win-x64'
 sys.path.insert(0,str(ROOT))
 from server.browser_link import ensure_helper, HASH as HELPER_HASH, VERSION as HELPER_VERSION, URL as HELPER_URL, LICENSE_URL
 LICENSE_HASH='58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd'
@@ -129,7 +129,7 @@ def build(compiler, source):
         'stage': str(stage.relative_to(ROOT)), 'dependencies': json.loads((stage/'dependencies.json').read_text())}
     manifest['browser_helper']={'version':HELPER_VERSION,'sha256':HELPER_HASH,'bundled':True}
     (DIST/'installer-build-manifest.json').write_text(json.dumps(manifest, indent=2))
-    (DIST/'SHA256SUMS-test5.txt').write_text(manifest['sha256']+'  '+exe.name+'\n')
+    (DIST/'SHA256SUMS-test6.txt').write_text(manifest['sha256']+'  '+exe.name+'\n')
     shutil.copy2(ROOT/'docs/WINDOWS_INSTALLER.md', DIST/'WINDOWS_INSTALLER.md')
     print(json.dumps({k: v for k, v in manifest.items() if k != 'dependencies'}, indent=2))
 

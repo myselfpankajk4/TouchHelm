@@ -296,6 +296,7 @@ class TouchHelmClient {
   // CONFIG SYNC WITH SERVER
   // --------------------------------------------------------------------------
   async fetchServerConfig() {
+    if(window.TouchHelmBrowserLink?.local)return;
     if (window.TouchHelmBrowserLink && !await window.TouchHelmBrowserLink.ready) return;
     const host = this.host;
     try {
@@ -341,7 +342,7 @@ class TouchHelmClient {
     }
     const host = this.host;
     try {
-      const resp = await fetch(`${this.httpBase()}/api/config`, {
+      const resp = await this.apiFetch(`${this.httpBase()}/api/config`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "X-TouchHelm-Pin": this.authPin },
         body: JSON.stringify(delta)
@@ -373,6 +374,8 @@ class TouchHelmClient {
     return `${window.location.protocol === "https:" ? "https:" : "http:"}//${this.host}`;
   }
 
+  apiFetch(url,options){return window.TouchHelmBrowserLink?.local?window.TouchHelmBrowserLink.fetch(url,options):fetch(url,options);}
+
   applyServerConfig(config) {
     const settings = [
       ["mouse_sensitivity", "sensitivity", "sliderSens", "valSens", "touchhelm_sens", 1],
@@ -401,6 +404,7 @@ class TouchHelmClient {
   // --------------------------------------------------------------------------
   connect() {
     const gate=window.TouchHelmBrowserLink;
+    if(gate?.local&&this.ws?.readyState===WebSocket.OPEN)return;
     if(gate&&!gate.settled){
       if(!this.browserLinkPending){this.browserLinkPending=true;gate.ready.then(ok=>{this.browserLinkPending=false;if(ok)this.connect();});}
       return;
@@ -424,7 +428,7 @@ class TouchHelmClient {
     console.log("[TouchHelm] Connecting to WebSocket at", wsUrl);
     this.setStatus("connecting", "Connecting...");
     try {
-      this.ws = new WebSocket(wsUrl);
+      this.ws = gate?.local?gate.socket():new WebSocket(wsUrl);
     } catch (e) {
       console.error("[TouchHelm] WebSocket init failed:", e);
       this.setStatus("disconnected", "Offline");

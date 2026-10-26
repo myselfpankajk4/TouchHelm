@@ -160,7 +160,7 @@ class DesktopAPI:
             try:
                 status=getattr(app.server,'browser_link_status',None)
                 link=status() if callable(status) else {}
-                if settings.get('require_pin') is False and isinstance(link,dict) and link.get('state') in ('preparing','starting','ready'):
+                if settings.get('require_pin') is False and isinstance(link,dict) and link.get('state') in ('preparing','starting','ready','connected'):
                     raise ValueError('Stop the browser link in Pair your phone before disabling its PIN.')
                 if settings.get('remote_enabled'):
                     # Enabling Remote should not require manually making a PIN first.

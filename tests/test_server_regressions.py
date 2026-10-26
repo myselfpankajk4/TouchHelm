@@ -76,9 +76,10 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             return dict(status)
         async def stop(*args):status.update(state='stopped',ready=False,origin=None,pairing_url=None)
         self.server.browser_link=SimpleNamespace(snapshot=lambda:dict(status),start=start,stop=stop)
+        self.server.local_link=SimpleNamespace(snapshot=lambda:{'connected':False},prepare=AsyncMock(),close=AsyncMock(),digest='a'*64)
         entered=asyncio.Event();release=asyncio.Event()
         async def response_enter():entered.set();await release.wait();return response
-        response=AsyncMock();response.status=200;response.json.return_value={'ready':False}
+        response=AsyncMock();response.status=200;response.json.return_value={'pairing':True}
         request=AsyncMock();request.__aenter__.side_effect=response_enter
         probe=Mock();probe.get.return_value=request
         session=AsyncMock();session.__aenter__.return_value=probe
@@ -102,36 +103,28 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(task.done())
             self.assertFalse(self.server.browser_link_status()['ready'])
 
-    async def test_browser_link_stop_revokes_public_input_without_disconnecting_lan(self):
-        from server.browser_gateway import BrowserLinkGateway
-        from tests.test_browser_gateway import Manager
-        from aiohttp import ClientSession
+    async def test_local_control_outlives_bootstrap_but_disconnect_releases_input_and_preserves_lan(self):
+        from server.local_link import ChannelSocket
+        from types import SimpleNamespace
         self.config.update({'require_pin':True,'pin_code':'5678'})
-        manager=Manager();manager.sessions.add('s'*43)
-        self.server.browser_link=manager
-        gateway=BrowserLinkGateway(self.server,manager)
-        self.server.browser_gateway=gateway
-        base=await gateway.start()
-        self.addAsyncCleanup(gateway.close)
-        async with ClientSession() as public:
-            headers={'Host':'fixture.trycloudflare.com','Origin':manager.origin,'Cookie':'th_browser_link='+'s'*43}
-            ws=await public.ws_connect(base+'/ws',headers=headers)
-            self.assertEqual((await ws.receive_json())['type'],'auth_required')
-            await ws.send_json({'type':'auth','pin':'5678'})
-            self.assertTrue((await self.receive_kind(ws,'auth_res'))['success'])
-            client=next(iter(self.server.clients.values()))
-            self.assertTrue(client.remote_secure)
-            client.held_keys.add('ctrl')
-            lan=await self.http.ws_connect('/ws');await lan.receive_json()
-            await lan.send_json({'type':'auth','pin':'5678'})
-            await self.receive_kind(lan,'auth_res')
-            manager.sessions.clear()
-            await self.server._browser_link_stopped()
-            self.assertFalse(client.authenticated)
-            self.assertEqual(client.held_keys,set())
-            self.native.key_up.assert_called_with('ctrl')
-            await self.roundtrip(lan)
-            await lan.close();await ws.close()
+        sent=[];channel=SimpleNamespace(readyState='open',bufferedAmount=0,send=sent.append,close=lambda:None)
+        socket=ChannelSocket(channel)
+        task=asyncio.create_task(self.server._serve_local(socket,'192.168.1.30'))
+        await asyncio.sleep(0)
+        socket.feed(json.dumps({'type':'auth','pin':'5678'}))
+        for _ in range(100):
+            await asyncio.sleep(.01)
+            if any(json.loads(raw).get('success') for raw in sent):break
+        client=self.server.clients[socket]
+        self.assertTrue(client.authenticated);self.assertTrue(client.remote_secure)
+        client.held_keys.add('ctrl')
+        lan=await self.http.ws_connect('/ws');await lan.receive_json()
+        await lan.send_json({'type':'auth','pin':'5678'});await self.receive_kind(lan,'auth_res')
+        await self.server._browser_link_stopped()
+        self.assertTrue(client.authenticated);self.assertFalse(socket.closed)
+        await socket.close();await asyncio.wait_for(task,2)
+        self.assertEqual(client.held_keys,set());self.native.key_up.assert_called_with('ctrl')
+        await self.roundtrip(lan);await lan.close()
 
     async def test_pending_browser_link_cannot_disable_pin_over_lan_api(self):
         self.config.update({'require_pin':True,'pin_code':'5678'})

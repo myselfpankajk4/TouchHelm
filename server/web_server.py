@@ -87,6 +87,8 @@ class TouchHelmServer:
         self.browser_gateway = None
         self._browser_link_task = None
         self._browser_link_error = ''
+        from server.local_link import LocalControlLink
+        self.local_link=LocalControlLink(self._serve_local,self._local_connected,on_ended=self._local_ended)
         from server.aircontrol.service import AirControlService
         from server.aircontrol.overlay import AirOverlay
         from server.aircontrol.voice import VoiceController
@@ -194,10 +196,16 @@ class TouchHelmServer:
 
     def browser_link_status(self):
         status=self.browser_link.snapshot()
+        local=self.local_link.snapshot()
+        if local['connected']:
+            return dict(status,state='connected',ready=False,origin=None,pairing_url=None,local_connected=True,
+                        expires_in=local['expires_in'],message='Encrypted local connection. The public pairing tunnel is closed.')
         if self._browser_link_error:
             return dict(status,state='error',ready=False,origin=None,pairing_url=None,expires_in=0,message=self._browser_link_error)
         if self._browser_link_task and status['state'] in ('stopped','ready'):
             return dict(status,state='preparing',ready=False,origin=None,pairing_url=None,expires_in=0,message='Checking the secure browser link…')
+        if status.get('pairing_url') and self.local_link.digest:
+            status=dict(status,pairing_url=status['pairing_url']+'&fingerprint='+self.local_link.digest)
         return status
 
     async def request_browser_link(self, enabled):
@@ -205,7 +213,7 @@ class TouchHelmServer:
         if enabled:
             if not self.config.get('require_pin'):
                 raise ValueError('Enable a pairing PIN before starting a browser link.')
-            if not self._browser_link_task and not self.browser_link.snapshot()['ready']:
+            if not self.local_link.snapshot()['connected'] and not self._browser_link_task and not self.browser_link.snapshot()['ready']:
                 self._browser_link_error = ''
                 self._browser_link_task = asyncio.create_task(self._start_browser_link())
                 await asyncio.sleep(0)
@@ -215,6 +223,7 @@ class TouchHelmServer:
             if task and task is not asyncio.current_task():
                 task.cancel()
                 await asyncio.gather(task, return_exceptions=True)
+            await self.local_link.close()
             await self.browser_link.stop()
             await self._browser_link_stopped()
         return self.browser_link_status()
@@ -225,6 +234,7 @@ class TouchHelmServer:
         try:
             backend = await gateway.start()
             snapshot=await self.browser_link.start(backend)
+            await self.local_link.prepare()
             # A registered helper can precede public DNS/edge readiness. Show a
             # QR only after the public HTTPS path succeeds with normal TLS checks.
             async with ClientSession(timeout=ClientTimeout(total=5)) as probe:
@@ -232,15 +242,17 @@ class TouchHelmServer:
                     while True:
                         try:
                             async with probe.get(snapshot['origin']+'/api/browser-link/status',allow_redirects=False) as response:
-                                if response.status==200 and await response.json()=={'ready':False}:break
+                                if response.status==200 and (await response.json()).get('pairing') is True:break
                         except (OSError,asyncio.TimeoutError,ValueError):pass
                         await asyncio.sleep(1)
         except asyncio.CancelledError:
+            await self.local_link.close()
             await self.browser_link.stop()
             raise
         except Exception:
             self._browser_link_error='Could not verify the browser link. Check internet access and retry.'
             await self.browser_link.stop(self._browser_link_error)
+            await self.local_link.close()
         finally:
             self._browser_link_task = None
             if not self.browser_link.snapshot()['ready']:
@@ -248,7 +260,18 @@ class TouchHelmServer:
                 await gateway.close()
 
     async def rotate_browser_link(self):
-        return self.browser_link.rotate_ticket()
+        if not self.local_link.snapshot()['connected']:await self.local_link.prepare()
+        self.browser_link.rotate_ticket()
+        return self.browser_link_status()
+
+    async def _local_connected(self):
+        await self.browser_link.stop('Paired locally. The public tunnel has been closed.')
+
+    async def _local_ended(self):
+        await self.browser_link.stop('Local connection ended. Start pairing again on the PC.')
+
+    async def _serve_local(self,socket,address):
+        return await self._serve_client(socket,address,True,local=True)
 
     async def _browser_link_stopped(self):
         public = [client for client in list(self.clients.values()) if client.browser_link_session]
@@ -625,7 +648,7 @@ class TouchHelmServer:
                     raise ValueError("Settings must be an object")
                 if any(key in data for key in ('port','https_port','https_enabled','tailscale_enabled','tailscale_owned_host','remote_enabled')):
                     raise ValueError("Changing the port requires a server restart")
-                if data.get('require_pin') is False and self.browser_link_status()['state'] in ('preparing','starting','ready'):
+                if data.get('require_pin') is False and self.browser_link_status()['state'] in ('preparing','starting','ready','connected'):
                     raise ValueError('Stop the browser link on the desktop before disabling its PIN.')
                 pin_setting_changed = any(k in data and self.config.get(k) != data[k]
                                           for k in ("require_pin", "pin_code"))
@@ -648,9 +671,13 @@ class TouchHelmServer:
         await ws.prepare(request)
 
         remote_ip = request.remote or "unknown"
+        return await self._serve_client(ws,remote_ip,self.request_origin(request).startswith('https://'),session=session)
+
+    async def _serve_client(self,ws,remote_ip,secure,session=None,local=False):
         client = ConnectedClient(ws, remote_ip)
         client.browser_link_session = session
-        client.remote_secure = self.request_origin(request).startswith('https://')
+        client.local_control=local
+        client.remote_secure = secure
         self.clients[ws] = client
         self._notify_client_change()
         self._log_event("Device connected", remote_ip)
@@ -670,6 +697,10 @@ class TouchHelmServer:
                     try:
                         data = json.loads(msg.data)
                     except (ValueError, RecursionError):
+                        continue
+
+                    if isinstance(data,dict) and data.get('type')=='local_rpc' and local:
+                        await self._local_rpc(client,data)
                         continue
 
                     if not self._valid_packet(data):
@@ -967,6 +998,36 @@ class TouchHelmServer:
 
     def _http_authorized(self,request):
         return not self.config.get('require_pin',False) or self._pin_matches(request.headers.get('X-TouchHelm-Pin'))
+
+    async def _local_rpc(self,client,data):
+        """Narrow authenticated API over local DTLS, never through public HTTP."""
+        import base64
+        import re
+        identifier=data.get('id')
+        if type(identifier) is not int or not 1<=identifier<2**31:return
+        result={'type':'local_rpc_result','id':identifier,'status':400,'body':{},'kind':'json'}
+        if not client.authenticated or not self.config.get('require_pin'):
+            result['status']=401
+        else:
+            path,method=data.get('path'),data.get('method','GET')
+            try:
+                if path=='/api/config' and method in ('GET','POST'):
+                    if method=='POST':
+                        settings=data.get('body')
+                        allowed={'theme','mouse_sensitivity','mouse_acceleration','scroll_speed','invert_scroll','haptics_enabled','laser_color'}
+                        if not isinstance(settings,dict) or not set(settings)<=allowed:raise ValueError()
+                        self.config.update(settings)
+                        await self.broadcast({'type':'config_sync','config':self.config.public_data()})
+                    result.update(status=200,body={'success':True,'config':self.config.public_data()})
+                elif isinstance(path,str) and re.fullmatch(r'/api/assets/[A-Za-z0-9_-]{1,128}',path) and method=='GET':
+                    asset=await asyncio.to_thread(self.desktop_services.assets.get,path.rsplit('/',1)[1])
+                    if asset is not None and len(asset)<=4*1024*1024:
+                        result.update(status=200,kind='bytes',body=base64.b64encode(asset).decode('ascii'))
+                    else:result['status']=404
+                else:result['status']=404
+            except (ValueError,TypeError):pass
+        if client.authenticated or result['status']==401:
+            await client.ws.send_json(result)
 
     async def handle_asset(self,request):
         if not self._http_authorized(request):return web.Response(status=401)
