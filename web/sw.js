@@ -7,6 +7,7 @@ const ASSETS = [
   "/ui.css",
   "/ui.css?v=__TOUCHHELM_BUILD__",
   "/app.js",
+  "/browser-link.js?v=__TOUCHHELM_BUILD__",
   "/app.js?v=__TOUCHHELM_BUILD__",
   "/text-sync.js?v=__TOUCHHELM_BUILD__",
   "/remote.js?v=__TOUCHHELM_BUILD__",

@@ -1809,3 +1809,5 @@ html, body {
   from { opacity: 0; transform: scale(0.92); }
   to { opacity: 1; transform: scale(1); }
 }
+
+.browser-link-pending body>*:not(.browser-link-gate){visibility:hidden!important}.browser-link-gate{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;justify-content:center;gap:16px;padding:32px;background:var(--bg-primary,#0b131b);color:var(--text-primary,#eef7fa)}.browser-link-gate h1{font-size:28px;line-height:1.2}.browser-link-gate p{font-size:16px;line-height:1.6;max-width:42ch}

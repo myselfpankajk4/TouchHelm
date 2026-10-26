@@ -227,34 +227,40 @@
         const response=await fetch(this.api('/api/pairing'),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});
         if(!response.ok)throw Error('Pairing setup is unavailable. Reconnect and retry.');
         const info=await response.json(),privateState=info.tailscale||{},privateText=document.createElement('p');
+        const browser=document.createElement('p');
+        browser.textContent=info.browser_link===true?'Secure browser link is active. No phone app or certificate is needed. Keep internet on: controls and typing pass through Cloudflare; screen/audio stay on the same Wi-Fi.':'On your PC, open Pair your phone → Browser link → Start browser link, then scan the new QR. No phone app or certificate is needed. Internet is required throughout; control and typing pass through Cloudflare.';
+        guide.append(browser);
+        if(info.browser_link===true)return;
+        const advanced=document.createElement('details'),summary=document.createElement('summary');
+        summary.textContent='Advanced methods · phone setup required';advanced.append(summary);guide.append(advanced);
         privateText.textContent=privateState.ready?'Private HTTPS is ready. Connect Android to the same Tailscale account/network, then continue.':privateState.message||'Set up private Tailscale HTTPS in the desktop pairing panel. It avoids installing this PC’s certificate on your phone.';
-        guide.append(privateText);
-        if(privateState.ready&&privateState.url){const button=document.createElement('button');button.textContent='Continue with private HTTPS';button.addEventListener('click',()=>this.secureHandoff(privateState.url));guide.append(button);}
-        else{const link=document.createElement('a');link.href='https://tailscale.com/download/android';link.textContent='Get Tailscale for Android';link.target='_blank';link.rel='noopener';guide.append(link);}
-        const p=document.createElement('p');p.textContent=info.enabled?'Local certificate option: install the public CA in Android settings, then use the local HTTPS QR. Fingerprint: '+info.fingerprint_sha256:'Local HTTP and local certificate HTTPS remain available from the desktop pairing panel.';guide.append(p);
+        advanced.append(privateText);
+        if(privateState.ready&&privateState.url){const button=document.createElement('button');button.textContent='Continue with private HTTPS';button.addEventListener('click',()=>this.secureHandoff(privateState.url));advanced.append(button);}
+        else{const link=document.createElement('a');link.href='https://tailscale.com/download/android';link.textContent='Get Tailscale for Android';link.target='_blank';link.rel='noopener';advanced.append(link);}
+        const p=document.createElement('p');p.textContent=info.enabled?'Local certificate option: install the public CA in Android settings, then use the local HTTPS QR. Fingerprint: '+info.fingerprint_sha256:'Local HTTP and local certificate HTTPS remain available from the desktop pairing panel.';advanced.append(p);
         if(info.enabled){
           const addGuide=(title,steps,open=false)=>{
             if(!Array.isArray(steps)||!steps.length)return;
             const details=document.createElement('details'),summary=document.createElement('summary'),list=document.createElement('ol');
             summary.textContent=title;details.open=open;details.className='pairing-guide-steps';
             for(const step of steps){const item=document.createElement('li');item.textContent=step;list.append(item);}
-            details.append(summary,list);guide.append(details);
+            details.append(summary,list);advanced.append(details);
           };
-          addGuide('Android · install this PC’s CA',info.trust_guide,true);
+          addGuide('Android · install this PC’s CA',info.trust_guide);
           addGuide('iPhone / iPad · profile and full trust',info.trust_ios);
           addGuide('Troubleshooting and removal',info.trust_troubleshooting);
           const references=document.createElement('p');
           for(const [label,url]of [['Android settings help','https://support.google.com/pixelphone/answer/2844832'],['iPhone trust help','https://support.apple.com/102390']]){
             const link=document.createElement('a');link.textContent=label+' ↗';link.href=url;link.target='_blank';link.rel='noopener';references.append(link,document.createTextNode(' '));
           }
-          guide.append(references);
+          advanced.append(references);
           const download=document.createElement('button');download.textContent='Download local public certificate';
           download.addEventListener('click',async()=>{download.disabled=true;try{
             const certificate=await fetch(this.api('/api/pairing/certificate'),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});
             if(!certificate.ok)throw Error('Certificate download failed. Reconnect and retry.');
             const url=URL.createObjectURL(await certificate.blob()),a=document.createElement('a');a.href=url;a.download='touchhelm-ca.crt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-          }catch(error){p.textContent=error.message;}finally{download.disabled=false;}});guide.append(download);
-          const button=document.createElement('button');button.textContent='Continue with local HTTPS';button.addEventListener('click',()=>this.secureHandoff(info.https_url||info.https_port||8766));guide.append(button);
+          }catch(error){p.textContent=error.message;}finally{download.disabled=false;}});advanced.append(download);
+          const button=document.createElement('button');button.textContent='Continue with local HTTPS';button.addEventListener('click',()=>this.secureHandoff(info.https_url||info.https_port||8766));advanced.append(button);
         }
       }catch(error){guide.textContent=error.message;}
     }

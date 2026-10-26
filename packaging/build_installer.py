@@ -9,6 +9,8 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
+import urllib.request
 import uuid
 
 import build_portable as base
@@ -16,8 +18,11 @@ from windows_redist import ensure_openmp
 
 ROOT = base.ROOT
 DIST = ROOT/'dist'
-VERSION = '2.2.0-test.4'
-OUTPUT = 'TouchHelm-2.2.0-test4-setup-win-x64'
+VERSION = '2.2.0-test.5'
+OUTPUT = 'TouchHelm-2.2.0-test5-setup-win-x64'
+sys.path.insert(0,str(ROOT))
+from server.browser_link import ensure_helper, HASH as HELPER_HASH, VERSION as HELPER_VERSION, URL as HELPER_URL, LICENSE_URL
+LICENSE_HASH='58d1e17ffe5109a7ae296caafcadfdbe6a7d176f0bc4ab01e12a689b0499d8bd'
 
 
 def validate_files(stage):
@@ -40,6 +45,8 @@ def validate_files(stage):
         raise RuntimeError('Installer must use bundled features with system WebView2')
     if not (stage/'runtime/vcomp140.dll').is_file():
         raise RuntimeError('Screen capture requires the bundled Microsoft OpenMP runtime')
+    if base.sha(stage/'cloudflared/cloudflared.exe')!=HELPER_HASH or base.sha(stage/'cloudflared/LICENSE')!=LICENSE_HASH:
+        raise RuntimeError('Browser helper or license failed its integrity check')
     return files
 
 
@@ -54,6 +61,17 @@ def stage_runtime(source):
     openmp, vendor = ensure_openmp(ROOT/'build/portable-cache')
     shutil.copy2(openmp, stage/'runtime/vcomp140.dll')
     (stage/'redistributables.json').write_text(json.dumps({'openmp': vendor}, indent=2))
+    cache=ROOT/'build/browser-link-helper'
+    helper=ensure_helper(cache_dir=cache,protector=lambda path:None)
+    license_file=cache/'LICENSE'
+    if not license_file.is_file() or base.sha(license_file)!=LICENSE_HASH:
+        with urllib.request.urlopen(LICENSE_URL,timeout=20) as response:
+            license_file.write_bytes(response.read(200000))
+    if base.sha(license_file)!=LICENSE_HASH:raise RuntimeError('Browser helper license changed')
+    (stage/'cloudflared').mkdir()
+    shutil.copy2(helper,stage/'cloudflared/cloudflared.exe')
+    shutil.copy2(license_file,stage/'cloudflared/LICENSE')
+    (stage/'cloudflared/NOTICE.txt').write_text('cloudflared '+HELPER_VERSION+'\nCopyright Cloudflare, Inc.\nApache License 2.0; original binary unmodified.\nSource: https://github.com/cloudflare/cloudflared/tree/'+HELPER_VERSION+'\nBinary: '+HELPER_URL+'\nSHA-256: '+HELPER_HASH+'\n')
     app = stage/'app'
     app.mkdir()
     for name in ('server', 'gui', 'web', 'assets'):
@@ -63,6 +81,8 @@ def stage_runtime(source):
         shutil.copy2(ROOT/name, app/name)
     shutil.copy2(ROOT/'packaging/requirements-remote.lock', app/'requirements-remote-portable.txt')
     shutil.copy2(ROOT/'docs/WINDOWS_INSTALLER.md', app/'WINDOWS_INSTALLER.md')
+    for document in ('BROWSER_LINK.md','WINDOWS_TRUST_RESEARCH.md'):
+        shutil.copy2(ROOT/'docs'/document,app/document)
     (app/'MICROSOFT_RUNTIME_NOTICE.txt').write_text(
         'Microsoft Visual C++ v14 OpenMP runtime, x64, 14.51.36247.0\n'
         'Copyright Microsoft Corporation. All rights reserved.\n'
@@ -107,8 +127,9 @@ def build(compiler, source):
         'features_bundled': True, 'requires_system_python': False, 'changes_path': False,
         'webview': 'system-evergreen-auto-bootstrap-if-missing', 'target': 'Windows 10/11 x64',
         'stage': str(stage.relative_to(ROOT)), 'dependencies': json.loads((stage/'dependencies.json').read_text())}
+    manifest['browser_helper']={'version':HELPER_VERSION,'sha256':HELPER_HASH,'bundled':True}
     (DIST/'installer-build-manifest.json').write_text(json.dumps(manifest, indent=2))
-    (DIST/'SHA256SUMS-test4.txt').write_text(manifest['sha256']+'  '+exe.name+'\n')
+    (DIST/'SHA256SUMS-test5.txt').write_text(manifest['sha256']+'  '+exe.name+'\n')
     shutil.copy2(ROOT/'docs/WINDOWS_INSTALLER.md', DIST/'WINDOWS_INSTALLER.md')
     print(json.dumps({k: v for k, v in manifest.items() if k != 'dependencies'}, indent=2))
 

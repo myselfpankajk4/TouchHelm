@@ -176,3 +176,5 @@ During exercises the task inspector replaces the ordinary action dock. Head
 scroll uses a visible virtual cursor with immediate direction departure; its
 Up/Down/Done geometry is shared with hit testing. No simulated exercise injects
 Windows input. See docs/AIRCONTROL_DAILY_USE_RELEASE.md for current screenshots.
+
+Browser pairing refinement (26 October 2026): fresh desktop profiles offer browser-only HTTPS without starting it automatically. The selected connection, explicit Start/Stop/New QR actions, readiness and lifetime precede a compact QR/address/PIN group. Internet/provider routing is visible beside the choice; screen/audio permission and advanced methods use disclosures. Host loading/failure hides stale QR/PIN data and offers Retry. Copy feedback stays beside its button; settings use a sticky dirty/save bar and retain drafts across polling. Unchanged diagnostics preserve selection. Preserve seven themes, native system typography, 44px controls, reduced motion and 820x620/200-percent reflow. Visual proof uses the incumbent desktop and synthetic fixtures; no new image direction was introduced.

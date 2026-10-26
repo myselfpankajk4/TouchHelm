@@ -6,17 +6,17 @@
   #error OutputDir is required
 #endif
 #ifndef OutputName
-  #define OutputName "TouchHelm-2.2.0-test4-setup-win-x64"
+  #define OutputName "TouchHelm-2.2.0-test5-setup-win-x64"
 #endif
 
 [Setup]
 AppId={{35ADAE35-C8FB-4D10-BCE5-964D4C96BE66}
 AppName=TouchHelm
-AppVersion=2.2.0.4
-AppVerName=TouchHelm 2.2.0 Test 4
+AppVersion=2.2.0.5
+AppVerName=TouchHelm 2.2.0 Test 5
 AppPublisher=TouchHelm Project
 AppPublisherURL=https://github.com/myselfpankajk4/TouchHelm
-VersionInfoVersion=2.2.0.4
+VersionInfoVersion=2.2.0.5
 VersionInfoDescription=TouchHelm Windows Setup
 DefaultDirName={localappdata}\Programs\TouchHelm
 DefaultGroupName=TouchHelm

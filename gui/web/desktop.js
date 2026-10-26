@@ -5,7 +5,17 @@
   const preview = new URL(location.href).searchParams.get('preview') === '1' || !!window.__TOUCHHELM_DESKTOP_PREVIEW__;
   let state = null, busy = false, dirty = false, preferencesLoaded = false, deviceStamp = '', activityStamp = '', connectionMode = 'http', preferenceSave = Promise.resolve(), preferenceRevision = 0, tailscaleChecked = 0, tailscaleBusy = false;
   const fixture = () => ({preview:true,config:{mouse_sensitivity:1.3,mouse_acceleration:1.25,scroll_speed:1,invert_scroll:false,require_pin:true,laser_color:'blue'},pin_code:'5678',devices:[{device:'Android phone',ip:'192.168.1.40',authenticated:true,ping:12},{device:'Tablet',ip:'192.168.1.41',authenticated:false,ping:0}],activity:['[10:40:12] Android phone: Connected','[10:40:15] Android phone: Pointer moved'],pairing:{http_url:'http://192.168.1.25:8765/',https_url:null,secure_ready:false,qr:null,certificate:{},setup_url:'http://192.168.1.25:8765/pairing'},preferences:{theme:'glass',appearance:'dark',motion:'system',contrast:'system'},diagnostics:{engine:'EdgeChromium / WebView2',python:'Preview',build:'Sample build',source:'Sample workspace',host:'192.168.1.25',http_port:8765,https_port:8766,certificate_trust:'Manual installation only'}});
-  let trustedSetupApplied=false;
+  let trustedSetupApplied=false, trustedSetupRequested=false, linkBusy=false, linkError='',hostReady=false, diagnosticStamp='';
+  function settingsDirty(value){dirty=value;$('settingsSaveBar').dataset.dirty=String(value);$('saveSettings').disabled=!hostReady||!value;}
+  function availability(ready,loading=false){
+    hostReady=ready;$('desktopConnectionNotice').hidden=ready;
+    $('desktopConnectionMessage').textContent=loading?'Loading host controls…':'Desktop connection unavailable. Reconnect to refresh pairing details.';
+    $('retryDesktop').hidden=ready||loading;
+    $('connectionMode').disabled=!ready;
+    for(const field of $('settingsForm').querySelectorAll('fieldset'))field.disabled=!ready;
+    $('saveSettings').disabled=!ready||!dirty;
+    if(!ready){$('phoneURL').value='';$('copyURL').disabled=$('openURL').disabled=true;$('pairingQR').hidden=true;$('pinCode').hidden=true;document.querySelector('.qr-wrap').classList.add('qr-placeholder');document.querySelector('.qr-wrap').dataset.placeholder=loading?'Loading your connection…':'Reconnect to refresh your QR code';$('browserLinkStart').disabled=true;$('browserLinkRotate').disabled=true;$('browserLinkStop').disabled=true;$('enablePairingRemote').disabled=true;$('deviceStatus').textContent=loading?'Loading devices…':'Device status unavailable';$('noDevices').hidden=true;}
+  }
   function message(text,kind='error'){$('feedback').textContent=text;$('feedback').dataset.kind=kind;$('feedback').hidden=!text;if(text)window.TouchHelmEffects?.react($('feedback'),{kind});}
   async function invoke(method,...args){
     if(preview){if(method==='get_state')return state||fixture();if(method==='save_settings'){state.config={...state.config,...args[0]};state.pin_code=args[0].pin_code;return {success:true,config:state.config};}if(method==='save_preferences')return {success:true};return {success:false,error:'Native commands are disabled in the interface preview.'};}
@@ -13,20 +23,22 @@
     return api[method](token,...args);
   }
   function showPanel(id){window.TouchHelmEffects?.reset?.();for(const panel of document.querySelectorAll('[data-page]'))panel.hidden=panel.dataset.page!==id;for(const button of document.querySelectorAll('[data-panel]')){if(button.dataset.panel===id)button.setAttribute('aria-current','page');else button.removeAttribute('aria-current');}document.querySelector('.desktop-content').scrollTop=0;window.dispatchEvent(new CustomEvent('touchhelm:desktop-panel',{detail:id}));}
-  window.TouchHelmDesktop={invoke,showPanel,preview,get state(){return state;}};
+  window.TouchHelmDesktop={invoke,showPanel,preview,refresh:()=>poll(),get state(){return state;}};
   for(const button of document.querySelectorAll('[data-panel]'))button.addEventListener('click',()=>showPanel(button.dataset.panel));
   const fields={mouse_sensitivity:'sensitivity',mouse_acceleration:'acceleration',scroll_speed:'scrollSpeed',invert_scroll:'invertScroll',require_pin:'requirePIN',pin_code:'pinInput',laser_color:'laserColor',remote_enabled:'remoteEnabled'};
   function labels(){for(const[id,output,digits]of [['sensitivity','sensitivityValue',1],['acceleration','accelerationValue',2],['scrollSpeed','scrollSpeedValue',1]])$(output).textContent=`${Number($(id).value).toFixed(digits)}×`; $('pinInput').required=$('requirePIN').checked;$('pinInput').disabled=!$('requirePIN').checked;}
-  $('settingsForm').addEventListener('input',()=>{dirty=true;$('saveStatus').textContent='Unsaved changes';labels();});
+  $('settingsForm').addEventListener('input',()=>{settingsDirty(true);$('saveStatus').textContent='Unsaved changes';labels();});
   $('settingsForm').addEventListener('submit',async event=>{
     event.preventDefault();const settings={};for(const[key,id]of Object.entries(fields)){const node=$(id);settings[key]=node.type==='checkbox'?node.checked:node.type==='range'?Number(node.value):node.value;}
     if(!settings.require_pin)settings.pin_code=settings.pin_code||'';
     $('saveSettings').disabled=true;$('saveError').hidden=true;
     try{const result=await invoke('save_settings',settings);if(!result.success)throw new Error(result.error||'Settings were not saved.');dirty=false;state.config={...state.config,...result.config};state.pin_code=result.pin_code??settings.pin_code;$('saveStatus').textContent=result.warning?'Settings saved · phone update pending':'Settings saved';if(result.warning)message(result.warning);else window.TouchHelmEffects?.react($('saveSettings'),{kind:'success'});render(state);}
     catch(error){$('saveError').textContent=`Settings were not saved: ${error.message} Adjust these settings and retry.`;$('saveError').hidden=false;window.TouchHelmEffects?.react($('saveSettings'),{kind:'error'});}
-    finally{$('saveSettings').disabled=false;}
+    finally{settingsDirty(dirty);}
   });
   function render(next){
+    if(!next?.config)return;
+    availability(next.connection_state!=='disconnected'&&next.connection_state!=='loading',next.connection_state==='loading');
     const trusted=next.trusted_setup||{state:'idle',message:'Set up private HTTPS without downloading a phone certificate. Tailscale sign-in is required on both devices.'};
     const trustedMessage=trusted.state==='ready'&&next.pairing?.tailscale?.ready===false?next.pairing.tailscale.message:trusted.message;
     if($('trustedSetupStatus').textContent!==trustedMessage)$('trustedSetupStatus').textContent=trustedMessage;
@@ -35,7 +47,7 @@
     $('selectedTrustedStatus').textContent=trustedMessage;
     $('selectedTrustedProgress').hidden=$('trustedSetupProgress').hidden;
     $('startTailscaleSetup').disabled=$('prepareTrustedPairing').disabled;
-    if(trusted.state==='ready'&&!trustedSetupApplied){trustedSetupApplied=true;connectionMode='tailscale';preferencesLoaded=true;}
+    if(trusted.state==='ready'&&trustedSetupRequested&&!trustedSetupApplied){trustedSetupApplied=true;connectionMode='tailscale';preferencesLoaded=true;}
     const setup=next.wireless_display||{state:'unknown',progress:null,message:'First-time setup may take a few minutes. Install the Windows receiver here.'};
     $('wirelessDisplayStatus').textContent=setup.message;
     const installing=['checking','permission','installing'].includes(setup.state);
@@ -50,37 +62,55 @@
     $('desktopRemoteBannerText').textContent=$('desktopRemoteStatus').textContent;
     state=next;const offline=next.connection_state==='disconnected';$('hostStatus').textContent=offline?'Host disconnected':next.connection_state==='loading'?'Loading host…':'Host running';document.querySelector('.host-status').classList.toggle('offline',offline);
     $('previewBanner').hidden=!preview;
-    if(!preferencesLoaded)connectionMode=next.preferences?.connection_mode||'http';
-    const pairing=next.pairing||{},tail=pairing.tailscale||{},secure=connectionMode==='local_ca',url=connectionMode==='tailscale'?pairing.tailscale_url:secure?pairing.https_url:pairing.http_url;
+    if(!preferencesLoaded)connectionMode=next.preferences?.connection_mode||'browser_link';
+    const pairing=next.pairing||{},tail=pairing.tailscale||{},link=pairing.browser_link||{},browser=connectionMode==='browser_link',secure=connectionMode==='local_ca',url=!hostReady?null:browser?(link.ready?pairing.browser_link_url||link.pairing_url:null):connectionMode==='tailscale'?pairing.tailscale_url:secure?pairing.https_url:pairing.http_url;
+    const active=['preparing','starting','ready'].includes(link.state),pending=['preparing','starting'].includes(link.state);
+    $('browserLinkActions').hidden=$('browserLinkStatusRow').hidden=$('browserLinkNotice').hidden=$('browserLinkHelp').hidden=!browser;
+    $('browserLinkStart').hidden=link.ready===true;$('browserLinkStart').disabled=!hostReady||linkBusy||pending;$('browserLinkStart').textContent=pending?'Preparing link…':link.state==='error'?'Retry browser link':'Start browser link';
+    $('browserLinkStop').hidden=!active;$('browserLinkStop').disabled=!hostReady||linkBusy;
+    $('browserLinkRotate').hidden=!link.ready;$('browserLinkRotate').disabled=!hostReady||linkBusy;
+    $('browserLinkStatus').textContent=linkError||link.message||'Start a secure link, then scan the QR code. No phone setup needed.';
+    const seconds=Math.max(0,Number(link.expires_in)||0);$('browserLinkExpiry').textContent=link.ready?`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')} remaining`:'';
+    $('pairingRemoteStatus').textContent=next.config.remote_enabled?'Screen and audio access enabled. Start a session from your phone.':'Screen and audio access is off.';$('enablePairingRemote').hidden=!!next.config.remote_enabled;$('enablePairingRemote').disabled=!hostReady;
     $('connectionMode').value=connectionMode;$('localCASetup').hidden=!secure;$('tailscaleSetup').hidden=connectionMode!=='tailscale';
-    $('connectionSetupGuide').dataset.mode=connectionMode;$('connectionSetupGuide').hidden=connectionMode==='http';
+    $('connectionSetupGuide').dataset.mode=connectionMode;$('connectionSetupGuide').hidden=connectionMode==='http'||browser;
     document.querySelector('.trusted-quick-setup').hidden=connectionMode!=='http';
-    $('phoneURL').value=url||'Complete setup to get an address';$('copyURL').disabled=!url;$('openURL').disabled=!url;
-    $('pairingMode').textContent=connectionMode==='tailscale'?'Trusted HTTPS · private tailnet':secure?'HTTPS · install this PC’s CA on your phone first':'HTTP · local network';
-    $('pairingLead').textContent=connectionMode==='tailscale'?'Connect Tailscale on your phone and this PC, then scan the code and enter the host PIN.':'Use the same Wi-Fi as this PC, then scan the code with your phone camera.';
+    if($('phoneURL').value!==(url||''))$('copyStatus').textContent='';
+    $('phoneURL').value=url||'';$('copyURL').disabled=!url;$('openURL').disabled=!url;
+    $('pairingMode').textContent=browser?'Trusted HTTPS · browser only':connectionMode==='tailscale'?'Trusted HTTPS · private tailnet':secure?'HTTPS · phone certificate required':'HTTP · local network';
+    $('pairingLead').textContent=browser?'Connect securely in Chrome. No phone app or certificate to install.':connectionMode==='tailscale'?'Connect Tailscale on your phone and this PC, then scan the code and enter the host PIN.':'Use the same Wi-Fi as this PC, then scan the code with your phone camera.';
     $('tailscaleStatus').textContent=tail.message||'Check Tailscale to begin private HTTPS setup.';$('tailscaleStatus').dataset.state=tail.state||'unchecked';
     $('enableTailscale').textContent=tail.ready?'Disable private HTTPS':'Enable private HTTPS';$('enableTailscale').disabled=tailscaleBusy||!['ready','setup_required'].includes(tail.state);
-    const qr=connectionMode==='tailscale'?pairing.qr_tailscale:secure?pairing.qr_https:pairing.qr_http||pairing.qr;
+    const qr=!url?null:browser?pairing.qr_browser_link:connectionMode==='tailscale'?pairing.qr_tailscale:secure?pairing.qr_https:pairing.qr_http||pairing.qr;
+    document.querySelector('.qr-wrap').dataset.placeholder=browser?(link.ready?'QR expired. Choose New QR code.':pending?'Preparing your secure link…':'Start a browser link to show your QR code'):'Complete setup to show your QR code';
     document.querySelector('.qr-wrap').classList.toggle('qr-placeholder',!qr);$('pairingQR').hidden=!qr;if(qr)$('pairingQR').src=qr;
     document.querySelector('.pairing-security h2').textContent=next.config.require_pin?'Your pairing PIN':'Connection security';$('pairingPINHelp').hidden=!next.config.require_pin;
-    $('pinStatus').textContent=next.config.require_pin?'Enter this PIN on your phone to connect.':'Direct access: phones on this network can connect without a password.';$('pinCode').textContent=next.pin_code||'';$('pinCode').hidden=!next.config.require_pin;
+    $('pinStatus').textContent=next.config.require_pin?'Enter this PIN on your phone to connect.':browser?'Starting a browser link creates a pairing PIN automatically.':'Direct access: phones on this network can connect without a password.';$('pinCode').textContent=next.pin_code||'';$('pinCode').hidden=!next.config.require_pin||!hostReady;
     $('secureStatus').textContent=pairing.secure_ready?'HTTPS is running. Trust must be installed manually on each phone.':'HTTPS is optional and currently off. No trust store is changed automatically.';$('enableHTTPS').textContent=pairing.secure_ready?'Disable HTTPS':'Enable HTTPS';$('useHTTP').hidden=true;
     const cert=pairing.certificate||{};$('certificateFingerprint').textContent=cert.fingerprint_sha256||'Enable HTTPS to create this PC’s certificate.';$('trustGuide').replaceChildren(...(cert.trust_guide||['Enable HTTPS here. Keep this PC and phone on the same Wi-Fi.','On the phone open the HTTP address, enter the TouchHelm PIN, then Settings → Secure pairing → Download local public certificate.','Compare the SHA-256 fingerprint on both devices before trusting this PC.','In Android Settings search Install a certificate → CA certificate. Choose Downloads → touchhelm-ca.crt. Unlock with your phone’s screen-lock PIN if asked.','Return to the phone guide and choose Continue with local HTTPS, or scan the new HTTPS QR. Enter the TouchHelm PIN and confirm Chrome reports a secure connection.','If trust fails, check the exact address, phone date/time and CA installation type. The phone guide includes iPhone steps, removal and troubleshooting.']).map(text=>{const li=document.createElement('li');li.textContent=text;return li;}));$('setupAddress').textContent=pairing.setup_url?`On your phone: ${pairing.setup_url} → Settings → Secure pairing`:'';
     const devices=next.devices||[],stamp=JSON.stringify(devices);if(stamp!==deviceStamp){deviceStamp=stamp;$('devicesBody').replaceChildren(...devices.map(device=>{const row=document.createElement('tr');if(!device.authenticated)row.className='locked';for(const text of [device.device||'Unknown device',device.ip||'',device.authenticated?'Ready':'PIN required',device.authenticated&&Number(device.ping)>0?`${device.ping} ms`:'—']){const cell=document.createElement('td');cell.textContent=text;row.appendChild(cell);}return row;}));}$('deviceCount').textContent=`${devices.length} ${devices.length===1?'device':'devices'}`;$('noDevices').hidden=devices.length>0;
     const activity=(next.activity||[]).join('\n');if(activity!==activityStamp){activityStamp=activity;const log=$('activityLog'),bottom=log.scrollHeight-log.scrollTop-log.clientHeight<20;log.textContent=activity||'No activity yet.';if(bottom)log.scrollTop=log.scrollHeight;}
     if(!dirty){for(const[key,id]of Object.entries(fields)){const node=$(id),value=key==='pin_code'?next.pin_code||'':next.config[key];if(node.type==='checkbox')node.checked=!!value;else node.value=value??'';}labels();}
-    $('diagnostics').replaceChildren(...Object.entries(next.diagnostics||{}).flatMap(([key,value])=>{const term=document.createElement('dt'),detail=document.createElement('dd');term.textContent=key.replaceAll('_',' ').replace(/^./,char=>char.toUpperCase());detail.textContent=String(value);return [term,detail];}));
+    $('deviceStatus').textContent=!hostReady?'Device status unavailable':devices.length?`${devices.length} ${devices.length===1?'phone':'devices'} connected`:'No phone connected yet.';$('noDevices').hidden=!hostReady||devices.length>0;
+    const diag=JSON.stringify(next.diagnostics||{});if(diag!==diagnosticStamp){diagnosticStamp=diag;$('diagnostics').replaceChildren(...Object.entries(next.diagnostics||{}).flatMap(([key,value])=>{const term=document.createElement('dt'),detail=document.createElement('dd');term.textContent=key.replaceAll('_',' ').replace(/^./,char=>char.toUpperCase());detail.textContent=String(value);return [term,detail];}));}
+    settingsDirty(dirty);
     if(!preferencesLoaded&&window.TouchHelmThemes){const prefs=next.preferences||{},selected=window.TouchHelmThemes.migrate(prefs.theme||'glass');window.TouchHelmThemes.apply(selected.id,{appearance:prefs.appearance||selected.appearance,motion:prefs.motion||'system',contrast:prefs.contrast||'system',effects:prefs.effects||'rich'});preferencesLoaded=true;}
     window.TouchHelmThemes?.updateContext({connected:!offline,deviceCount:devices.length});
     window.dispatchEvent(new CustomEvent('touchhelm:desktop-state',{detail:next}));
   }
-  async function poll(){if(busy||document.hidden)return;busy=true;try{render(await invoke('get_state'));}catch(error){message(error.message);$('hostStatus').textContent='Desktop connection unavailable';document.querySelector('.host-status').classList.add('offline');}finally{busy=false;}}
-  $('copyURL').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('phoneURL').value);message('Address copied. Open it on your phone.','success');}catch(_){$('phoneURL').focus();$('phoneURL').select();message('Select the address and press Ctrl+C to copy it.');}});
+  async function poll(){if(busy||document.hidden)return;busy=true;try{render(await invoke('get_state'));}catch(error){availability(false);$('hostStatus').textContent='Desktop connection unavailable';document.querySelector('.host-status').classList.add('offline');}finally{busy=false;}}
+  $('retryDesktop').addEventListener('click',poll);
+  $('copyURL').addEventListener('click',async()=>{try{await navigator.clipboard.writeText($('phoneURL').value);$('copyStatus').textContent='Address copied. Open it on your phone.';}catch(_){$('phoneURL').focus();$('phoneURL').select();$('copyStatus').textContent='Press Ctrl+C to copy the selected address.';}});
+  async function updateLink(method,...args){if(linkBusy||!hostReady)return;linkBusy=true;linkError='';render(state);try{const result=await invoke(method,...args);if(!result.success)throw Error(result.error||'Could not update browser link.');if(result.pairing){state.pairing=result.pairing;render(state);}await poll();}catch(error){linkError=error.message;}finally{linkBusy=false;render(state);}}
+  $('browserLinkStart').addEventListener('click',()=>updateLink('request_browser_link',true));
+  $('browserLinkStop').addEventListener('click',()=>updateLink('request_browser_link',false));
+  $('browserLinkRotate').addEventListener('click',()=>updateLink('rotate_browser_link'));
+  $('enablePairingRemote').addEventListener('click',async()=>{try{const result=await invoke('save_settings',{remote_enabled:true});if(!result.success)throw Error(result.error);state.config={...state.config,...result.config};await poll();}catch(error){$('pairingRemoteStatus').textContent=error.message;}});
   $('openURL').addEventListener('click',async()=>{try{const result=await invoke('open_pairing',connectionMode);if(result&&!result.success)message(result.error);}catch(error){message(error.message);}});
   $('minimize').addEventListener('click',async()=>{try{const result=await invoke('minimize');if(result?.success===false)message(result.error);}catch(error){message(error.message);}});
   $('enableHTTPS').addEventListener('click',async()=>{const button=$('enableHTTPS');button.disabled=true;try{const result=await invoke('request_https',!state.pairing.secure_ready);if(!result.success)throw new Error(result.error);await poll();message('Secure pairing updated. Follow the manual Android certificate steps.','success');}catch(error){message(`Secure pairing was not changed: ${error.message}`);}finally{button.disabled=false;}});
   function savePreferences(preferences){const revision=++preferenceRevision;preferenceSave=preferenceSave.then(async()=>{try{const result=await invoke('save_preferences',{...preferences,connection_mode:connectionMode});if(!result.success)throw new Error(result.error);if(revision===preferenceRevision)message('Desktop preferences saved.','success');}catch(error){if(revision===preferenceRevision)message(`Preferences were not saved: ${error.message}`);}});}
-  $('connectionMode').addEventListener('change',()=>{connectionMode=$('connectionMode').value;preferencesLoaded=true;render(state);const prefs=window.TouchHelmThemes?.state;savePreferences(prefs?{theme:prefs.id,appearance:prefs.appearance,motion:prefs.motion,contrast:prefs.contrast,effects:prefs.effects}:state.preferences);if(connectionMode==='tailscale')checkTailscale();});
+  $('connectionMode').addEventListener('change',()=>{if(!hostReady||!state)return;connectionMode=$('connectionMode').value;preferencesLoaded=true;render(state);const prefs=window.TouchHelmThemes?.state;savePreferences(prefs?{theme:prefs.id,appearance:prefs.appearance,motion:prefs.motion,contrast:prefs.contrast,effects:prefs.effects}:state.preferences);if(connectionMode==='tailscale')checkTailscale();});
   async function checkTailscale(){if(tailscaleBusy||preview||!state)return;tailscaleBusy=true;tailscaleChecked=Date.now();$('refreshTailscale').disabled=true;try{const result=await invoke('refresh_tailscale');if(!result.success)throw new Error(result.error);state.pairing=result.pairing;render(state);}catch(error){message(error.message);}finally{tailscaleBusy=false;$('refreshTailscale').disabled=false;render(state);}}
   $('refreshTailscale').addEventListener('click',checkTailscale);
   $('enableTailscale').addEventListener('click',async()=>{tailscaleBusy=true;$('enableTailscale').disabled=true;$('tailscaleStatus').textContent='Updating private HTTPS…';try{const result=await invoke('request_tailscale',!state.pairing.tailscale?.ready);if(!result.success)throw new Error(result.error);await poll();message('Private HTTPS updated. Use the address for the selected connection mode.','success');}catch(error){message(`Private HTTPS: ${error.message}`);await poll();}finally{tailscaleBusy=false;render(state);}});
@@ -91,9 +121,10 @@
   $('installWirelessDisplay').addEventListener('click',async()=>{try{const result=await invoke('install_wireless_display');if(!result.success)throw new Error(result.error);await poll();}catch(error){message(error.message);}});
   $('generatePassword').addEventListener('click',async()=>{try{const result=await invoke('generate_password');if(!result.success)throw new Error(result.error);state.pin_code=result.password;state.config={...state.config,...result.config};$('pinInput').value=result.password;$('requirePIN').checked=true;labels();message('New pairing password saved. Pair connected phones again.','success');await poll();}catch(error){message(error.message);}});
   $('remoteEnabled').addEventListener('change',()=>{if($('remoteEnabled').checked)$('requirePIN').checked=true;labels();});
-  $('prepareTrustedPairing').addEventListener('click',async()=>{try{trustedSetupApplied=false;const result=await invoke('prepare_trusted_pairing');if(!result.success)throw new Error(result.error);await poll();}catch(error){message(error.message);}});
+  $('prepareTrustedPairing').addEventListener('click',async()=>{try{trustedSetupApplied=false;trustedSetupRequested=true;const result=await invoke('prepare_trusted_pairing');if(!result.success)throw new Error(result.error);await poll();}catch(error){message(error.message);}});
   $('startTailscaleSetup').addEventListener('click',()=>$('prepareTrustedPairing').click());
   if(window.TouchHelmThemes)window.TouchHelmThemes.mountPicker($('themePicker'),(id,prefs)=>savePreferences({theme:id,...prefs}));
+  availability(false,true);
   if(preview){window.TouchHelmDesktopPreview={setState(name){const value=window.__TOUCHHELM_DESKTOP_PREVIEW__||fixture();state=structuredClone(value);if(name.startsWith('remote_'))state.remote={device:['remote_control','remote_view','remote_connecting'].includes(name)?'Android phone · preview':null,mode:name==='remote_view'?'view':'control',state:name==='remote_connecting'?'connecting':name==='remote_paused'?'paused':name==='remote_unavailable'?'unavailable':'live',display:{name:'Sample monitor'},audio:false};if(name==='disconnected'){state.connection_state='disconnected';state.devices=[];}if(name==='loading'){state.connection_state='loading';state.devices=[];state.activity=['Loading device status…'];}if(name==='unavailable'){state.devices=[];state.activity=['Provider context unavailable. Native connection remains available.'];}if(name.startsWith('tailscale_')){connectionMode='tailscale';state.preferences.connection_mode='tailscale';const ready=name==='tailscale_ready';state.pairing.tailscale={state:ready?'ready':name==='tailscale_permission'?'permission_required':'unavailable',ready,url:ready?'https://sample-pc.example.ts.net:8443/':null,message:ready?'Preview: private HTTPS is ready. Connect the phone to this tailnet and enter the host PIN.':name==='tailscale_permission'?'Preview: your tailnet administrator must enable HTTPS certificates.':'Preview: Tailscale disconnected. Reconnect both devices and check again.'};state.pairing.tailscale_url=state.pairing.tailscale.url;state.pairing.qr_tailscale=ready?state.pairing.preview_trusted_qr:null;}render(state);}};window.addEventListener('touchhelm:preview-state',event=>window.TouchHelmDesktopPreview.setState(event.detail?.state||'ready'));window.TouchHelmDesktopPreview.setState('ready');}
   else{window.addEventListener('pywebviewready',poll);setInterval(()=>{poll();if(connectionMode==='tailscale'&&Date.now()-tailscaleChecked>10000&&!document.hidden)checkTailscale();},1000);if(window.pywebview?.api)poll();}
   if(preview){showPanel('pairing');window.TouchHelmDesktopPreview.setWirelessDisplayState=value=>{state=structuredClone(state||fixture());state.wireless_display=value;render(state);};}

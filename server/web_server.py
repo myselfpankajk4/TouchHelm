@@ -13,7 +13,7 @@ import math
 import hmac
 from urllib.parse import urlsplit
 from contextlib import suppress
-from aiohttp import web
+from aiohttp import web, ClientSession, ClientTimeout
 
 from server.windows_input import WindowsInputController, VK_MAP
 from server.laser_overlay import LaserOverlayClient
@@ -21,6 +21,8 @@ from server.config import ConfigManager
 from server.discovery import get_local_ip_addresses
 from server.desktop_services import DesktopServices
 from server.build_version import get_build_id, render_versioned
+from server.browser_gateway import BrowserLinkGateway, BROWSER_ORIGIN, BROWSER_SESSION
+from server.browser_link import BrowserLinkManager
 
 WEB_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "web")
 
@@ -40,6 +42,7 @@ class ConnectedClient:
         self.text_revision = ''
         self.text_write_id = 0
         self.text_write_field_id = ''
+        self.browser_link_session = None
 
 
 class TouchHelmServer:
@@ -80,6 +83,10 @@ class TouchHelmServer:
         from server.text_sync import FocusedTextService
         self.text_service = FocusedTextService()
         self._text_tasks = {}
+        self.browser_link = BrowserLinkManager(on_stopped=self._browser_link_stopped)
+        self.browser_gateway = None
+        self._browser_link_task = None
+        self._browser_link_error = ''
         from server.aircontrol.service import AirControlService
         from server.aircontrol.overlay import AirOverlay
         from server.aircontrol.voice import VoiceController
@@ -184,6 +191,78 @@ class TouchHelmServer:
         result = await self.remote.request(client, data, secure)
         if client.authenticated and not client.ws.closed:
             with suppress(ConnectionError, RuntimeError): await client.ws.send_json(result)
+
+    def browser_link_status(self):
+        status=self.browser_link.snapshot()
+        if self._browser_link_error:
+            return dict(status,state='error',ready=False,origin=None,pairing_url=None,expires_in=0,message=self._browser_link_error)
+        if self._browser_link_task and status['state'] in ('stopped','ready'):
+            return dict(status,state='preparing',ready=False,origin=None,pairing_url=None,expires_in=0,message='Checking the secure browser link…')
+        return status
+
+    async def request_browser_link(self, enabled):
+        """Return promptly to the desktop; helper preparation runs on this loop."""
+        if enabled:
+            if not self.config.get('require_pin'):
+                raise ValueError('Enable a pairing PIN before starting a browser link.')
+            if not self._browser_link_task and not self.browser_link.snapshot()['ready']:
+                self._browser_link_error = ''
+                self._browser_link_task = asyncio.create_task(self._start_browser_link())
+                await asyncio.sleep(0)
+        else:
+            self._browser_link_error = ''
+            task = self._browser_link_task
+            if task and task is not asyncio.current_task():
+                task.cancel()
+                await asyncio.gather(task, return_exceptions=True)
+            await self.browser_link.stop()
+            await self._browser_link_stopped()
+        return self.browser_link_status()
+
+    async def _start_browser_link(self):
+        gateway = BrowserLinkGateway(self, self.browser_link)
+        self.browser_gateway = gateway
+        try:
+            backend = await gateway.start()
+            snapshot=await self.browser_link.start(backend)
+            # A registered helper can precede public DNS/edge readiness. Show a
+            # QR only after the public HTTPS path succeeds with normal TLS checks.
+            async with ClientSession(timeout=ClientTimeout(total=5)) as probe:
+                async with asyncio.timeout(40):
+                    while True:
+                        try:
+                            async with probe.get(snapshot['origin']+'/api/browser-link/status',allow_redirects=False) as response:
+                                if response.status==200 and await response.json()=={'ready':False}:break
+                        except (OSError,asyncio.TimeoutError,ValueError):pass
+                        await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            await self.browser_link.stop()
+            raise
+        except Exception:
+            self._browser_link_error='Could not verify the browser link. Check internet access and retry.'
+            await self.browser_link.stop(self._browser_link_error)
+        finally:
+            self._browser_link_task = None
+            if not self.browser_link.snapshot()['ready']:
+                if self.browser_gateway is gateway:self.browser_gateway = None
+                await gateway.close()
+
+    async def rotate_browser_link(self):
+        return self.browser_link.rotate_ticket()
+
+    async def _browser_link_stopped(self):
+        public = [client for client in list(self.clients.values()) if client.browser_link_session]
+        for client in public:
+            client.authenticated = False
+            self._cancel_text_request(client)
+            self._cancel_desktop_requests(client)
+            self._release_client_input(client)
+        if self.remote.owner in public:
+            await self.remote.stop('Browser link stopped. Pair again from the desktop.')
+        if public:
+            await asyncio.gather(*(client.ws.close(code=1001,message=b'Browser link ended') for client in public),return_exceptions=True)
+        gateway, self.browser_gateway = self.browser_gateway, None
+        if gateway:await gateway.close()
 
     async def stop_remote(self):
         await self.remote.stop('Stopped from the desktop.')
@@ -365,6 +444,8 @@ class TouchHelmServer:
 
     async def invalidate_auth_sessions(self):
         """Release held input and apply changes to the configured PIN immediately."""
+        if not self.config.get('require_pin',False):
+            await self.request_browser_link(False)
         self._pin_failures.clear()
         self._pin_blocked_until = 0.
         clients = list(self.clients.items())
@@ -544,6 +625,8 @@ class TouchHelmServer:
                     raise ValueError("Settings must be an object")
                 if any(key in data for key in ('port','https_port','https_enabled','tailscale_enabled','tailscale_owned_host','remote_enabled')):
                     raise ValueError("Changing the port requires a server restart")
+                if data.get('require_pin') is False and self.browser_link_status()['state'] in ('preparing','starting','ready'):
+                    raise ValueError('Stop the browser link on the desktop before disabling its PIN.')
                 pin_setting_changed = any(k in data and self.config.get(k) != data[k]
                                           for k in ("require_pin", "pin_code"))
                 self.config.update(data)
@@ -557,11 +640,16 @@ class TouchHelmServer:
         return web.json_response(self.config.public_data(), headers=headers)
 
     async def handle_ws(self, request):
-        ws = web.WebSocketResponse(heartbeat=15.0)
+        session = request.get(BROWSER_SESSION)
+        if not isinstance(session,str):session=None
+        if session and (not self.config.get('require_pin') or not self.browser_link.valid_session(session)):
+            raise web.HTTPUnauthorized()
+        ws = web.WebSocketResponse(heartbeat=15.0, max_msg_size=65536 if session else 4*1024*1024)
         await ws.prepare(request)
 
         remote_ip = request.remote or "unknown"
         client = ConnectedClient(ws, remote_ip)
+        client.browser_link_session = session
         client.remote_secure = self.request_origin(request).startswith('https://')
         self.clients[ws] = client
         self._notify_client_change()
@@ -575,6 +663,9 @@ class TouchHelmServer:
                 await ws.send_json({"type": "auth_required"})
             self._notify_client_change()
             async for msg in ws:
+                if session and not self.browser_link.valid_session(session):
+                    await ws.close(code=1001,message=b'Browser link expired')
+                    break
                 if msg.type == web.WSMsgType.TEXT:
                     try:
                         data = json.loads(msg.data)
@@ -907,6 +998,8 @@ class TouchHelmServer:
                 and request.remote=='127.0.0.1' and request.host==urlsplit(self.tailscale_origin).netloc)
 
     def request_origin(self, request):
+        browser_origin=request.get(BROWSER_ORIGIN)
+        if isinstance(browser_origin,str):return browser_origin
         if self._is_tailscale_request(request):
             return self.tailscale_origin
         return f'{request.scheme}://{request.host}'
@@ -1088,6 +1181,7 @@ class TouchHelmServer:
         print(f"TouchHelm Server listening on port {port}")
 
     async def stop(self):
+        await self.request_browser_link(False)
         await self.aircontrol.close()
         text_tasks=list(self._text_tasks.values())
         for task in text_tasks:task.cancel()

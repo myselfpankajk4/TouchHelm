@@ -210,6 +210,7 @@ test('v2 certificate download uses authenticated headers and handoff preserves t
   await page.route('**/api/pairing/handoff',route=>route.fulfill({status:503,contentType:'application/json',body:'{}'}));
   await page.evaluate(()=>{window.touchhelm.authPin='5678';window.touchhelm.typeInput.value='keep\nthis';});
   await page.locator('#btnSettings').click();await page.locator('#btnSecurePairing').click();
+  await page.getByText('Advanced methods · phone setup required',{exact:true}).click();
   const request=page.waitForRequest('**/api/pairing/certificate');await page.getByRole('button',{name:'Download local public certificate',exact:true}).click();
   assert.equal((await request).headers()['x-touchhelm-pin'],'5678');
   const handoff=page.waitForRequest('**/api/pairing/handoff');await page.getByRole('button',{name:'Continue with local HTTPS',exact:true}).click();const data=(await handoff).postDataJSON();

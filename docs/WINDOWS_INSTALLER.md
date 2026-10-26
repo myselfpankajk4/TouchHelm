@@ -1,6 +1,6 @@
-# TouchHelm Windows installer — Test 4
+# TouchHelm Windows installer — Test 5
 
-Use `TouchHelm-2.2.0-test4-setup-win-x64.exe` for a normal installation on Windows
+Use `TouchHelm-2.2.0-test5-setup-win-x64.exe` for a normal installation on Windows
 10/11 x64. Run setup and choose Install. It installs for the current Windows user,
 creates Start Menu and desktop shortcuts (desktop selected by default), and adds
 TouchHelm to Settings → Apps → Installed apps with an uninstaller. The application
@@ -57,7 +57,7 @@ runtimes into a fresh stage, checks models and private-file exclusions, compiles
 the installed launcher, then uses Inno Setup's solid LZMA2 compression. It excludes
 the private browser and package installers; all native dependency licenses remain
 with their distributions. The file size and SHA-256 are in
-`dist/installer-build-manifest.json` and `dist/SHA256SUMS-test4.txt`.
+`dist/installer-build-manifest.json` and `dist/SHA256SUMS-test5.txt`.
 
 ## Verification
 
@@ -66,3 +66,5 @@ both bundled runtimes, model integrity, actual WebView2 JavaScript execution, an
 the Tk fallback without opening a camera or sending PC input. It uses the same
 installed launcher as the shortcuts. Build-host checks do not substitute for a
 clean Windows VM or a physical Android Chrome test.
+
+Test 5 adds optional browser-only HTTPS pairing. The verified Cloudflare helper and its Apache license are bundled; no helper installer or phone download is needed. Internet is required throughout this mode. Control/text pass through Cloudflare; screen/audio remain local WebRTC. See [Browser link setup and limits](BROWSER_LINK.md).

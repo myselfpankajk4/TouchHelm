@@ -296,6 +296,7 @@ class TouchHelmClient {
   // CONFIG SYNC WITH SERVER
   // --------------------------------------------------------------------------
   async fetchServerConfig() {
+    if (window.TouchHelmBrowserLink && !await window.TouchHelmBrowserLink.ready) return;
     const host = this.host;
     try {
       const resp = await fetch(`${this.httpBase()}/api/info`, { cache: "no-store" });
@@ -399,6 +400,12 @@ class TouchHelmClient {
   // WEBSOCKET & NETWORK
   // --------------------------------------------------------------------------
   connect() {
+    const gate=window.TouchHelmBrowserLink;
+    if(gate&&!gate.settled){
+      if(!this.browserLinkPending){this.browserLinkPending=true;gate.ready.then(ok=>{this.browserLinkPending=false;if(ok)this.connect();});}
+      return;
+    }
+    if(gate&&!gate.allowed){this.setStatus('disconnected','Scan a fresh PC QR');return;}
     clearTimeout(this.reconnectTimer);
     this.reconnectTimer = null;
     this.releaseDragLock();
@@ -2204,6 +2211,7 @@ class TouchHelmClient {
   }
 
   initPwa() {
+    if(window.TouchHelmBrowserLink){const box=document.getElementById('pwaInstallBox');if(box)box.hidden=true;return;}
     window.addEventListener("beforeinstallprompt", (e) => {
       e.preventDefault();
       this.deferredPrompt = e;
