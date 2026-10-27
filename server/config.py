@@ -33,6 +33,7 @@ DEFAULT_CONFIG = {
     "https_port": 8766,
     "tailscale_enabled": False,
     "remote_enabled": False,
+    "files_enabled": False,
     "tailscale_owned_host": ""
 }
 
@@ -66,6 +67,8 @@ class ConfigManager:
                     self.data["pin_code"] = random_password()
                 if self.data['remote_enabled'] and not self.data['require_pin']:
                     self.data['remote_enabled']=False
+                if self.data['files_enabled'] and not self.data['require_pin']:
+                    self.data['files_enabled']=False
             except Exception as e:
                 print(f"Error loading config: {e}")
 
@@ -104,7 +107,7 @@ class ConfigManager:
             valid = type(value) in (int, float) and low <= value <= high and math.isfinite(value)
         elif key in ("port","https_port"):
             valid = type(value) is int and 1 <= value <= 65535
-        elif key in ("require_pin", "invert_scroll", "haptics_enabled","https_enabled","tailscale_enabled","remote_enabled"):
+        elif key in ("require_pin", "invert_scroll", "haptics_enabled","https_enabled","tailscale_enabled","remote_enabled","files_enabled"):
             valid = type(value) is bool
         elif key == 'tailscale_owned_host':
             import re
@@ -133,6 +136,8 @@ class ConfigManager:
                 raise ValueError('Disable private Tailscale HTTPS before removing the host PIN.')
             if updated['remote_enabled'] and not updated['require_pin']:
                 raise ValueError('Set a host PIN before enabling Remote screen access.')
+            if updated['files_enabled'] and not updated['require_pin']:
+                raise ValueError('Set a host PIN before enabling File access.')
             previous = self.data
             self.data = updated
             try:

@@ -80,6 +80,8 @@ class TouchHelmServer:
             notify=self._remote_state_changed, before_control=self._remote_acquire_input,
             control_allowed=lambda:not (getattr(self,'aircontrol',None) and self.aircontrol.owns_input))
         self._remote_tasks = {}
+        from server.file_http import FileHTTP
+        self.files=FileHTTP(self)
         from server.text_sync import FocusedTextService
         self.text_service = FocusedTextService()
         self._text_tasks = {}
@@ -291,6 +293,8 @@ class TouchHelmServer:
         await self.remote.stop('Stopped from the desktop.')
 
     async def remote_settings_changed(self):
+        if not self.config.get('files_enabled') or not self.config.get('require_pin'):
+            for client in self.clients.values():self.files.revoke(client)
         if not self.config.get('remote_enabled') or not self.config.get('require_pin'):
             await self.remote.stop('Remote screen access disabled on the desktop.')
         await self.broadcast({'type':'config_sync','config':self.config.public_data()})
@@ -472,6 +476,7 @@ class TouchHelmServer:
         self._pin_failures.clear()
         self._pin_blocked_until = 0.
         clients = list(self.clients.items())
+        for _,client in clients:self.files.revoke(client)
         authorized = not self.config.get("require_pin", False)
         # Revoke every session before yielding to a socket. One disconnected
         # device must not leave the remaining clients authorized with an old PIN.
@@ -520,6 +525,8 @@ class TouchHelmServer:
                                    "brightness": self.input_ctrl.get_brightness(),
                                    "config": self.config.public_data(),
                                    'input_owner':'aircontrol' if self.aircontrol.owns_input else 'phone'})
+        ticket=self.files.ticket(client)
+        if ticket:await client.ws.send_json({'type':'files_ticket','ticket':ticket})
         return True
 
     def _release_client_input(self, client):
@@ -671,13 +678,16 @@ class TouchHelmServer:
         await ws.prepare(request)
 
         remote_ip = request.remote or "unknown"
-        return await self._serve_client(ws,remote_ip,self.request_origin(request).startswith('https://'),session=session)
+        from server.local_network import local_request
+        return await self._serve_client(ws,remote_ip,self.request_origin(request).startswith('https://'),session=session,
+                                       lan=local_request(request),origin=self.request_origin(request))
 
-    async def _serve_client(self,ws,remote_ip,secure,session=None,local=False):
+    async def _serve_client(self,ws,remote_ip,secure,session=None,local=False,lan=False,origin=None):
         client = ConnectedClient(ws, remote_ip)
         client.browser_link_session = session
         client.local_control=local
         client.remote_secure = secure
+        client.local_lan=lan;client.origin=origin
         self.clients[ws] = client
         self._notify_client_change()
         self._log_event("Device connected", remote_ip)
@@ -740,6 +750,11 @@ class TouchHelmServer:
                         continue
 
                     if not client.authenticated:
+                        continue
+
+                    if msg_type=='files_ticket':
+                        ticket=self.files.ticket(client)
+                        await ws.send_json({'type':'files_ticket','ticket':ticket})
                         continue
 
                     if not self.aircontrol.owns_input and self.aircontrol.native_down:self.aircontrol._release_buttons()
@@ -982,6 +997,7 @@ class TouchHelmServer:
                     pass
 
         finally:
+            self.files.revoke(client)
             self._cancel_text_request(client)
             task=self._remote_tasks.pop(ws,None)
             if task and not task.done():task.cancel()
@@ -1226,6 +1242,7 @@ class TouchHelmServer:
         self.app.router.add_get("/api/info", self.handle_info)
         self.app.router.add_route("*", "/api/config", self.handle_config)
         self.app.router.add_get("/ws", self.handle_ws)
+        self.files.routes(self.app)
 
         # Static assets
         self.app.router.add_static("/", WEB_DIR, show_index=False)
@@ -1242,6 +1259,7 @@ class TouchHelmServer:
         print(f"TouchHelm Server listening on port {port}")
 
     async def stop(self):
+        await self.files.close()
         await self.request_browser_link(False)
         await self.aircontrol.close()
         text_tasks=list(self._text_tasks.values())

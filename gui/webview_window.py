@@ -152,7 +152,7 @@ class DesktopAPI:
     def save_settings(self, token, settings):
         self._authorize(token)
         allowed = {'mouse_sensitivity', 'mouse_acceleration', 'scroll_speed', 'invert_scroll',
-                   'require_pin', 'pin_code', 'laser_color', 'haptics_enabled', 'server_name', 'remote_enabled'}
+                   'require_pin', 'pin_code', 'laser_color', 'haptics_enabled', 'server_name', 'remote_enabled','files_enabled'}
         if not isinstance(settings, dict) or not settings or not set(settings) <= allowed:
             return {'success': False, 'error': 'Choose valid desktop settings. Port changes require a restart.'}
         app = self._app
@@ -162,7 +162,7 @@ class DesktopAPI:
                 link=status() if callable(status) else {}
                 if settings.get('require_pin') is False and isinstance(link,dict) and link.get('state') in ('preparing','starting','ready','connected'):
                     raise ValueError('Stop the browser link in Pair your phone before disabling its PIN.')
-                if settings.get('remote_enabled'):
+                if settings.get('remote_enabled') or settings.get('files_enabled'):
                     # Enabling Remote should not require manually making a PIN first.
                     settings=dict(settings,require_pin=True)
                     candidate=settings.get('pin_code',app.config.get('pin_code'))
