@@ -36,3 +36,15 @@ tests: 122 passed, one skip; local transport tests: 3 passed; browser interactio
 89/89 passed; desktop pairing: 9 passed, optional capture skipped. Physical Android/UPI behavior,
 native device capture and external network/firewall conditions remain device
 tests; generated media does not establish those hardware results.
+
+Normal-desktop upgrade to 2.2.0.7 passed. For this user's explicitly requested
+sharing use, screen/audio access was enabled with the required PIN retained; an
+exact comparison confirmed every other config value was preserved. The live host
+confirmed the updated source, local API, required PIN, authenticated connection
+and enabled media flag. Twenty installed-runtime checks, the responsive window,
+Windows uninstall entry and desktop/Start shortcuts passed. No stream was opened
+by the installation smoke test.
+
+Published installer: `TouchHelm-2.2.0-test7-setup-win-x64.exe`, 181,697,876 bytes.
+Local and GitHub SHA-256 both match
+`33a5ee0fd590d99edf44194df6d798c821297717d5fb488e5e34522dfb010f8f`.
