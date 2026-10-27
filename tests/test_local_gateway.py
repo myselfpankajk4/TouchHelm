@@ -7,6 +7,15 @@ from server.local_link import make_proof,verify_proof
 
 
 class LocalGatewayTests(unittest.IsolatedAsyncioTestCase):
+    async def test_phone_brand_icon_is_embedded_before_the_public_origin_closes(self):
+        async def index(request):return web.Response(text='<html><head><link rel="icon" href="/icons/icon.svg"></head><body><img src="/icons/icon.svg"></body></html>',content_type='text/html')
+        self.owner.handle_index=index
+        async with self.client.get(self.base+'/',headers=self.headers) as response:
+            source=await response.text()
+            self.assertEqual(response.status,200)
+            self.assertNotIn('"/icons/icon.svg"',source)
+            self.assertIn('data:image/svg+xml;base64,',source)
+
     async def asyncSetUp(self):
         from server.browser_gateway import BrowserLinkGateway
         self.origin='https://fixture.trycloudflare.com';self.accepted=False

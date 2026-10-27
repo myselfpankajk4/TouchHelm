@@ -122,9 +122,12 @@ class RemoteService:
                 return {'type':'remote_capabilities','success':True,**caps,
                     'enabled':bool(self.config.get('remote_enabled')),
                     'pin_required':True,'secure':bool(secure), **await self.displays()}
-            if not (client.authenticated and not client.ws.closed and secure and
-                    self.config.get('require_pin') and self.config.get('remote_enabled')):
-                raise PermissionError('Enable Remote screen access on the desktop, set a host PIN, and use trusted HTTPS.')
+            if not (client.authenticated and not client.ws.closed and self.config.get('require_pin')):
+                raise PermissionError('Connect and authenticate with the PC pairing PIN before starting screen or audio sharing.')
+            if not secure:
+                raise PermissionError('Use trusted HTTPS or the secure local Wi-Fi pairing link before starting screen or audio sharing.')
+            if not self.config.get('remote_enabled'):
+                raise PermissionError('Screen and audio access is off on this PC. Open TouchHelm on the PC → Pair your phone → Screen and audio access → Enable.')
             if kind=='remote_start':
                 if self.owner or self._closing: raise ValueError('A remote session is active or still stopping. Wait or stop it on the desktop first.')
                 mode, quality, audio=self._options(data)

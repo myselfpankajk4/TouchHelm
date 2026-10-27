@@ -72,6 +72,7 @@
     $('browserLinkStatus').textContent=linkError||link.message||'Start a secure link, then scan the QR code. No phone setup needed.';
     const seconds=Math.max(0,Number(link.expires_in)||0);$('browserLinkExpiry').textContent=link.ready||connected?`${Math.floor(seconds/60)}:${String(seconds%60).padStart(2,'0')} remaining`:'';
     $('pairingRemoteStatus').textContent=next.config.remote_enabled?'Screen and audio access enabled. Start a session from your phone.':'Screen and audio access is off.';$('enablePairingRemote').hidden=!!next.config.remote_enabled;$('enablePairingRemote').disabled=!hostReady;
+    $('pairingRemoteHelp').querySelector('summary').textContent=next.config.remote_enabled?'Screen and audio access · On':'Screen and audio access · Off';
     $('connectionMode').value=connectionMode;$('localCASetup').hidden=!secure;$('tailscaleSetup').hidden=connectionMode!=='tailscale';
     $('connectionSetupGuide').dataset.mode=connectionMode;$('connectionSetupGuide').hidden=connectionMode==='http'||browser;
     document.querySelector('.trusted-quick-setup').hidden=connectionMode!=='http';

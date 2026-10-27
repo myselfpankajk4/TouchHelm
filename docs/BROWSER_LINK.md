@@ -1,4 +1,4 @@
-# Local encrypted browser pairing — Test 6
+# Local encrypted browser pairing — Test 7
 
 On the desktop choose **Pair your phone → Browser link → Start browser link**.
 Keep the PC and Android Chrome on the same local network. Internet is needed
@@ -15,6 +15,17 @@ down once the direct channel connects. No STUN, TURN, router forwarding or
 internet control fallback is configured. The selected peer must belong to a
 private subnet of a local adapter, checked before accepting control and during
 the session. Screen/audio retain their separate desktop permission.
+
+The loaded phone document stays HTTPS and retains its secure context after the
+temporary server closes; the phone is not navigated to an HTTP page. Screen/audio
+also need **Pair your phone → Screen and audio access → Enable** on the PC.
+Test 7 reports that permission separately from PIN and secure-transport errors.
+An off desktop permission is not evidence of lost HTTPS. The phone's Media tab
+now explains an off permission instead of silently turning its audio switch off.
+The brand icon is embedded so delayed browser requests do not need the closed
+origin. Generated video, video-plus-audio and audio-only RTP passed in Chrome
+after shutdown with every later HTTP request blocked. Physical Android and live
+capture on each PC still need device testing.
 
 Plain HTTP remains available for basic local control, but cannot provide all
 secure-context browser features such as motion sensors and wake lock. Browser

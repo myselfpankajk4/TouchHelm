@@ -1099,6 +1099,16 @@ test('Media and Remote share pending audio state and rollback failures',async pa
   assert.equal(await page.locator('#remoteAudio').isChecked(),false);
 });
 
+test('desktop media permission being off is explained on Media without a false HTTPS error',async page=>{
+  await page.evaluate(()=>{touchhelm.remote.caps={audio:true,video:true,enabled:false,secure:true};touchhelm.remote.state='stopped';touchhelm.remote.mode='control';touchhelm.remote.audioConfirmed=false;touchhelm.remote.render();});
+  await page.locator('#tabMedia').click();await page.locator('#mediaPcAudio').click();
+  assert.equal(await page.locator('#mediaPcAudio').isChecked(),false);
+  assert.match(await page.locator('#mediaPcAudioStatus').innerText(),/off.*PC|PC.*off/i);
+  assert.match(await page.locator('#mediaPcAudioStatus').innerText(),/Pair your phone/);
+  assert.doesNotMatch(await page.locator('#mediaPcAudioStatus').innerText(),/HTTPS/);
+  assert.equal(await page.evaluate(()=>__packets.filter(packet=>packet.type==='remote_start').length),0);
+});
+
 test('Hidden viewer stays connected on incoming packets when mobile stops decoding',async page=>{
   await fakeRemote(page);
   await page.locator('#tabMedia').click();

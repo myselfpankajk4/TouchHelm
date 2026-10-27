@@ -88,6 +88,7 @@
     }
     setAudio(enabled){
       if(this.audioPending)return this.syncAudioControls();
+      if(enabled&&this.caps?.enabled===false){this.audioRequested=false;this.status('Screen and audio access is off on this PC. In desktop Pair your phone, open Screen and audio access → Enable.');this.syncAudioControls();return;}
       this.audioRequested=!!enabled;
       if(!enabled&&this.mode==='audio'&&this.session){this.stop();return;}
       if(!this.session){if(enabled){this.start('audio');this.audioPending=this.state==='connecting';}this.syncAudioControls();return;}
@@ -102,6 +103,7 @@
       for(const id of ['remoteAudio','mediaPcAudio']){const el=$(id);el.checked=this.audioPending?this.audioRequested:this.audioConfirmed;el.disabled=pending||!this.client.isConnected||this.caps?.audio===false;}
       for(const id of ['remoteUnmute','mediaPcAudioUnmute','remoteAudioOnlyUnmute'])$(id).hidden=!this.audioConfirmed||!this.video.muted;
       $('mediaPcAudioStatus').textContent=pending?'Connecting PC audio…':this.audioConfirmed?this.video.muted?'PC audio ready · tap Unmute to hear it.':this.state==='live'?'Listening to PC audio on this phone.':'Audio stream waiting for playback…':this.state==='unavailable'?this.lastMessage||'PC audio unavailable.':this.caps?.audio===false?'PC audio provider unavailable on the host.':!this.client.isConnected?'Connect to your PC to listen.':'Audio off · listening alone does not capture or control the screen.';
+      if(this.client.isConnected&&this.caps?.enabled===false)$('mediaPcAudioStatus').textContent='Screen and audio access is off on this PC. In desktop Pair your phone, open Screen and audio access → Enable.';
     }
     wrap(data){return this.session&&document.querySelector('#viewRemote.active')&&inputs.has(data.type)?{type:'remote_input',session_id:this.session,revision:this.revision,command:data}:data;}
     input(command){if(this.mode!=='control'||this.state!=='live')return false;if(command.type==='text'&&command.text?.includes('\n')&&this.client.newlineMode==='shift_enter')command={...command,newline_mode:'shift_enter'};return this.client.send({type:'remote_input',session_id:this.session,revision:this.revision,command});}
@@ -110,6 +112,7 @@
       if(!this.client.isConnected)return this.status('Connect to your PC first.');
       if(!window.isSecureContext||location.protocol!=='https:')return this.status('Choose trusted HTTPS in desktop Pairing before starting Remote.');
       if(!window.RTCPeerConnection)return this.status('WebRTC is unavailable in this browser. Use current Android Chrome.');
+      if(this.caps?.enabled===false)return this.status('Screen and audio access is off on this PC. Open TouchHelm on the PC → Pair your phone → Screen and audio access → Enable, then refresh access here.');
       if(this.session){
         if((this.mode==='audio')!==(mode==='audio')){this.restartMode=mode;this.restartAudio=this.audioConfirmed;this.client.send({type:'remote_stop',session_id:this.session});this.reset('stopped','Switching stream mode…');return;}
         return this.configure();
@@ -146,7 +149,7 @@
         const select=$('remoteMonitor'),old=select.value;select.replaceChildren();
         for(const display of [...msg.displays||[]].sort((a,b)=>Number(!!b.primary)-Number(!!a.primary))){const option=document.createElement('option');option.value=display.id;option.textContent=display.name||display.id;select.append(option);}
         if([...select.options].some(o=>o.value===old))select.value=old;
-        if(!this.session)this.status(!msg.enabled?'Enable Remote screen access and a PIN in desktop Settings.':!msg.secure?'Use trusted HTTPS from desktop Pairing.':msg.message);
+        if(!this.session)this.status(!msg.enabled?'Screen and audio access is off on this PC. In desktop Pair your phone, open Screen and audio access → Enable.':!msg.secure?'Use the secure local Wi-Fi QR from desktop Pairing.':msg.message||(window.TouchHelmBrowserLink?.local?'Screen and audio access is ready over the encrypted local connection.':'Screen and audio access is ready.'));
         $('remoteAudio').disabled=!msg.audio;this.render();return;
       }
       if(msg.success===false){this.restartMode=null;this.audioPending=false;this.audioRequested=this.audioConfirmed;if(this.state==='connecting')this.state=this.session?this.serverState||'reconnecting':'unavailable';this.status(msg.message||'Remote request failed.');this.render();return;}

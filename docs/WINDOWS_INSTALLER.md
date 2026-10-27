@@ -1,6 +1,6 @@
-# TouchHelm Windows installer — Test 6
+# TouchHelm Windows installer — Test 7
 
-Use `TouchHelm-2.2.0-test6-setup-win-x64.exe` for a normal installation on Windows
+Use `TouchHelm-2.2.0-test7-setup-win-x64.exe` for a normal installation on Windows
 10/11 x64. Run setup and choose Install. It installs for the current Windows user,
 creates Start Menu and desktop shortcuts (desktop selected by default), and adds
 TouchHelm to Settings → Apps → Installed apps with an uninstaller. The application
@@ -57,7 +57,7 @@ runtimes into a fresh stage, checks models and private-file exclusions, compiles
 the installed launcher, then uses Inno Setup's solid LZMA2 compression. It excludes
 the private browser and package installers; all native dependency licenses remain
 with their distributions. The file size and SHA-256 are in
-`dist/installer-build-manifest.json` and `dist/SHA256SUMS-test6.txt`.
+`dist/installer-build-manifest.json` and `dist/SHA256SUMS-test7.txt`.
 
 ## Verification
 
@@ -67,4 +67,4 @@ the Tk fallback without opening a camera or sending PC input. It uses the same
 installed launcher as the shortcuts. Build-host checks do not substitute for a
 clean Windows VM or a physical Android Chrome test.
 
-Test 6 uses temporary browser-only HTTPS for pairing and then closes its public helper. All PIN/control/text/settings/artwork traffic uses an encrypted local DataChannel; screen/audio also stay local. There is no public control API or relay fallback. The verified helper and Apache license remain bundled. Keep the phone tab open and scan a fresh QR after reload or disconnect. See [Browser link setup and limits](BROWSER_LINK.md).
+Secure local pairing uses temporary browser-only HTTPS and then closes its public helper. All PIN/control/text/settings/artwork traffic uses an encrypted local DataChannel; screen/audio also stay local. There is no public control API or relay fallback. Test 7 distinguishes desktop media permission being off from missing secure transport, and embeds delayed branding assets. Screen/audio remain a separate PC opt-in. The verified helper and Apache license remain bundled. Keep the phone tab open and scan a fresh QR after reload or disconnect. See [Browser link setup and limits](BROWSER_LINK.md).

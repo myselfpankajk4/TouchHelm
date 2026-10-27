@@ -1,5 +1,6 @@
 """Temporary static/SDP bootstrap. No PC APIs, credentials or control sockets."""
 from pathlib import Path
+import base64
 import re
 from urllib.parse import urlsplit
 from aiohttp import web
@@ -53,6 +54,10 @@ class BrowserLinkGateway:
     async def _index(self,request):
         response=await self.owner.handle_index(request)
         source=re.sub(r'<script\s+src="/demo\.js(?:\?[^"]*)?"\s*>\s*</script>','',response.text)
+        # Chrome may request the favicon much later, including when media starts.
+        # Keep branding available after the temporary HTTPS origin is gone.
+        icon=base64.b64encode((WEB/'icons/icon.svg').read_bytes()).decode('ascii')
+        source=source.replace('"/icons/icon.svg"','"data:image/svg+xml;base64,'+icon+'"')
         return web.Response(text=source.replace('</head>','<meta name="touchhelm-browser-link" content="local"></head>'),content_type='text/html')
 
     async def _status(self,request):

@@ -12,7 +12,7 @@ from server.web_server import TouchHelmServer
 from server.browser_gateway import BrowserLinkGateway
 
 
-async def main(public=False):
+async def main(public=False,media=False):
     report={}
     with tempfile.TemporaryDirectory(prefix='local-check-',dir=Path('build')) as work:
         config=ConfigManager(str(Path(work)/'config.json'));config.update({'require_pin':True,'pin_code':'5678'})
@@ -28,6 +28,19 @@ async def main(public=False):
         server.desktop_services.close=AsyncMock()
         server.desktop_services.assets.get.return_value=b'\x89PNG\r\n\x1a\n'+bytes(180000)
         server.text_service.close=AsyncMock();server.text_service.request=AsyncMock(return_value={'available':False,'message':'Synthetic field'})
+        if media:
+            from tests.synthetic_media import SyntheticMediaWorker
+            config.set('remote_enabled',True)
+            server.remote.worker_factory=SyntheticMediaWorker
+            server.remote.capabilities=lambda:{'video':True,'audio':True}
+            server.desktop_services.displays=AsyncMock(return_value={'displays':[{'id':'synthetic','name':'Synthetic display','primary':True,'rect':{'x':0,'y':0,'width':640,'height':360}}]})
+            server.remote.displays=server.desktop_services.displays
+            media_trace=[];original_request=server.remote.request
+            async def traced_request(client,data,secure=False):
+                result=await original_request(client,data,secure)
+                media_trace.append({key:result.get(key) for key in ('type','success','state','mode','message')})
+                return result
+            server.remote.request=traced_request
         if public:
             server.browser_link.executable=Path('build/browser-link-helper/cloudflared.exe').absolute()
             server.browser_link._work_root=Path(work).absolute()/'helper'
@@ -51,9 +64,11 @@ async def main(public=False):
                 gateway=server.browser_gateway=BrowserLinkGateway(server,manager)
                 manager.origin=await gateway.start()
                 url=server.browser_link_status()['pairing_url']
-            process=await asyncio.create_subprocess_exec('node',str(Path('tests/local_control_phone_check.cjs').absolute()),stdin=asyncio.subprocess.PIPE,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
-            output,error=await asyncio.wait_for(process.communicate(json.dumps({'url':url}).encode()),100)
+            script='tests/local_media_phone_check.cjs' if media else 'tests/local_control_phone_check.cjs'
+            process=await asyncio.create_subprocess_exec('node',str(Path(script).absolute()),stdin=asyncio.subprocess.PIPE,stdout=asyncio.subprocess.PIPE,stderr=asyncio.subprocess.PIPE)
+            output,error=await asyncio.wait_for(process.communicate(json.dumps({'url':url}).encode()),150)
             report.update(json.loads(output))
+            if media and report.get('error_type'):report['media_trace']=media_trace
             report['public_helper_stopped']=not server.browser_link.snapshot()['ready']
             report['public_gateway_closed']=server.browser_gateway is None
             report['native_mock_received_text']=any(call.args==('synthetic direct control',) for call in server.input_ctrl.type_text.call_args_list)
@@ -68,5 +83,5 @@ async def main(public=False):
 
 
 if __name__=='__main__':
-    parser=argparse.ArgumentParser();parser.add_argument('--public',action='store_true');args=parser.parse_args()
-    raise SystemExit(0 if asyncio.run(main(args.public)) else 1)
+    parser=argparse.ArgumentParser();parser.add_argument('--public',action='store_true');parser.add_argument('--media',action='store_true');args=parser.parse_args()
+    raise SystemExit(0 if asyncio.run(main(args.public,args.media)) else 1)
