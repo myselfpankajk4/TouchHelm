@@ -1,6 +1,6 @@
-# Test 11 — generative themes
+# Generative themes
 
-Build `TouchHelm-2.2.0-test11-setup-win-x64.exe` (version `2.2.0-test.11`, unsigned).
+Release `TouchHelm-2.2.0-setup-win-x64.exe` (version `2.2.0`, unsigned).
 
 ## What changed
 

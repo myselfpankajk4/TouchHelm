@@ -1,4 +1,4 @@
-# Local Wi-Fi and Files — Test 10
+# Local Wi-Fi and Files
 
 Connect the Windows PC and Android phone to the same home Wi-Fi. Open TouchHelm
 on the PC, choose **Pair your phone**, scan its local QR in Chrome, and enter the
