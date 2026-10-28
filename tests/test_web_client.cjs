@@ -1682,6 +1682,7 @@ test('AirControl practice, mapping validation and animated guide reflect explici
   assert.equal(await desktop.locator('#airGuideArt').getAttribute('data-gesture'),'pinch_index');
   await desktop.locator('[data-air-tab="mappings"]').click();
   assert.equal(await desktop.locator('[data-air-gesture="closed_fist"]').isDisabled(),true);
+  await desktop.locator('#airMappingMore>summary').click();
   await desktop.locator('[data-air-gesture="thumb_up"]').selectOption('right_click');
   await desktop.locator('#airSaveMappings').click();
   assert.match(await desktop.locator('#airMappingError').innerText(),/only one|already|duplicate/i);
@@ -1712,7 +1713,7 @@ test('AirControl calibration shows a live finger and keeps its next action besid
   await desktop.locator('[data-panel="aircontrol"]').click();
   await desktop.evaluate(()=>{
     TouchHelmAir.profile.mode='hand';TouchHelmAir.setPreview('calibrating');
-    const hand=Array.from({length:21},()=>[.5,.5]);hand[8]=[.63,.28];
+    const hand=Array.from({length:21},()=>[.5,.5]);for(const i of [5,9,13,17])hand[i]=[.63,.28];
     const state={...TouchHelmAir.state,tracking:true,hand_points:hand,
       tracking_sources:{hand:true,face:false,hand_enabled:true,face_enabled:false}};
     TouchHelmAir.render(state);TouchHelmAir.draw(state);
@@ -1730,6 +1731,7 @@ test('AirControl calibration shows a live finger and keeps its next action besid
   await desktop.locator('[data-air-tab="settings"]').click();
   await desktop.locator('#airShowLandmarks').uncheck();
   await desktop.evaluate(()=>TouchHelmAir.draw({...TouchHelmAir.state,hand_points:Array.from({length:21},()=>[.7,.4])}));
+  await desktop.locator('[data-air-tab="controls"]').click();
   assert.equal(await desktop.locator('#airTrackedPointer').isVisible(),true);
   await desktop.evaluate(()=>TouchHelmAir.render({...TouchHelmAir.state,tracking:false,tracking_sources:{hand:false,face:false,hand_enabled:true,face_enabled:false}}));
   assert.equal(await desktop.locator('#airTrackedPointer').isVisible(),false);
@@ -1764,6 +1766,7 @@ test('AirControl personal face calibration exposes activation and applies a test
   assert.equal(await desktop.locator('#airTrackedPointer').isVisible(),true);
   assert.match(await desktop.locator('#airTrackedPointer').innerText(),/Head pointer/);
   await desktop.locator('[data-air-tab=settings]').click();
+  await desktop.locator('#airExpressionDetails>summary').click();
   await desktop.locator('#airExpressionNeutral').click();
   assert.match(await desktop.locator('#airExpressionResult').innerText(),/relaxed.*captured/i);
   await desktop.locator('#airExpressionSelect').selectOption('smile');

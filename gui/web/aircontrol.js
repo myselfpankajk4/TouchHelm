@@ -44,6 +44,9 @@
     mountWorkspace(){
       const panel=document.querySelector('[data-page=aircontrol]'),coach=$('airCoach'),workspace=panel.querySelector('.air-workspace');
       const progress=document.createElement('div');progress.className='air-progress-row';$('airWorkflow').before(progress);progress.append($('airWorkflow'),$('airSetupSummary'));
+      // What is happening (message), how far along (steps) and what is missing (readiness) share one strip.
+      const status=document.createElement('div');status.className='air-status-strip';$('airMessage').before(status);status.append($('airMessage'),progress,$('airReadiness'));
+      const tools=panel.querySelector('.air-camera-column>.button-row');tools.classList.add('air-tools');tools.append($('airVoiceMessage'));
       panel.querySelector('.air-heading>div').append($('airModeSummary'));
       panel.dataset.airCurrentTab='controls';this.currentTab='controls';this.viewportRevision=0;
       workspace.before(panel.querySelector('.air-tabs'));
@@ -60,10 +63,11 @@
       exercises.innerHTML='<h2>Practice a task</h2><label for="airExercise">Exercise</label><select id="airExercise"><option value="click">Click three targets</option><option value="drag">Drag to a destination</option><option value="scroll">Scroll to the Destination</option><option value="free">Free practice</option></select><button id="airExerciseStart" class="secondary-button">Start exercise</button><div class="button-row"><button id="airExerciseReset" class="quiet-button">Reset exercise</button><button id="airExercisePause" class="quiet-button">Pause exercise</button></div><p id="airExerciseResult" role="status"></p><span id="airExerciseTime" class="muted" aria-live="off"></span>';
       coach.insertBefore(exercises,$('airHeadActions'));
       $('airStage').append($('airPracticeScreen'));
-      const settings=panel.querySelector('[data-air-content=settings]');settings.prepend(panel.querySelector('.air-expression-setup'));
+      const settings=panel.querySelector('[data-air-content=settings]');const faces=document.createElement('details');faces.id='airExpressionDetails';faces.className='air-expression-more';faces.innerHTML='<summary>Face gestures: personal calibration (advanced)</summary>';faces.append(panel.querySelector('.air-expression-setup'));settings.prepend(faces);
       const setup=document.createElement('details');setup.id='airSetupChoices';setup.open=true;
       setup.innerHTML='<summary>Camera, monitor and control mode</summary>';
-      setup.append(panel.querySelector('.air-mode-row'),panel.querySelector('.air-selectors'),$('airCameraMessage'));
+      const choices=document.createElement('div');choices.className='air-setup-inner';
+      choices.append(panel.querySelector('.air-mode-row'),panel.querySelector('.air-selectors'),$('airCameraMessage'));setup.append(choices);
       workspace.after(setup);panel.querySelector('[data-air-content=controls]').append($('airSetup'));
       panel.querySelector('.air-session-actions').append($('airInstall'),$('airCancelInstall'));
       for(const tab of panel.querySelectorAll('[data-air-tab]')){
@@ -105,6 +109,8 @@
       return desktop.preview||!this.viewportPending&&!!v&&p?.viewport?.[0]===v.width&&p.viewport[1]===v.height&&p.viewport_revision===this.viewportRevision;
     }
     mappingRows(){
+      // Five research-backed gestures stay in view; the rest sit under "More gestures" so the page stays short.
+      const core=['pinch_index','pinch_middle','two_fingers','closed_fist','open_palm'];
       const rows=Object.entries(gestures).map(([key,name])=>{
         const row=document.createElement('div');row.className='air-map-row';
         const label=document.createElement('label');label.htmlFor='airMap_'+key;label.textContent=name;
@@ -115,8 +121,10 @@
           if(value==='left_drag'&&!['pinch_index','pinch_middle','smile','wink_left','wink_right','brows_up'].includes(key)||value==='scroll'&&key!=='two_fingers'||value==='pause'&&key!=='closed_fist'||value==='resume'&&key!=='open_palm')continue;
           const option=new Option(text,value);select.append(option);
         }
-        select.addEventListener('change',()=>{this.dirty=true;});row.append(label,select);return row;
-      });$('airMappingRows').replaceChildren(...rows);
+        select.addEventListener('change',()=>{this.dirty=true;});row.append(label,select);row.dataset.airCore=String(core.includes(key));return row;
+      });
+      $('airMappingRows').replaceChildren(...rows.filter(row=>row.dataset.airCore==='true'));
+      $('airMappingMoreRows').replaceChildren(...rows.filter(row=>row.dataset.airCore!=='true'));
     }
     bind(){
       $('switchControlMode').addEventListener('click',()=>desktop.showPanel('home'));
@@ -193,6 +201,8 @@
       for(const [key,id]of Object.entries(fields)){if($(id).type==='checkbox')$(id).checked=profile[key];else $(id).value=profile[key];}
       $('airHeadStability').value=profile.head_stability??8;$('airHandStability').value=profile.hand_stability??6;$('airDwellRadius').value=profile.dwell_radius??22;
       for(const [key,value]of Object.entries(profile.bindings||{})){const node=$('airMap_'+key);if(node)node.value=value;}
+      // A saved profile that uses an extra gesture must show it instead of hiding a live binding.
+      if([...$('airMappingMoreRows').querySelectorAll('select')].some(node=>node.value!=='none'))$('airMappingMore').open=true;
       this.rangeLabels();this.dirty=false;
     }
     capture(){
@@ -246,8 +256,7 @@
       this.currentTab=name;document.querySelector('[data-page=aircontrol]').dataset.airCurrentTab=name;
       this.renderPractice(this.state);
       $('airPracticeScreen').hidden=name!=='practice';$('airExerciseControls').hidden=name!=='practice';
-      if(['settings','mappings','diagnostics'].includes(name))document.querySelector(`[data-air-content=${name}]`).scrollIntoView({block:'start'});
-      else document.querySelector('.desktop-content').scrollTop=0;
+      document.querySelector('.desktop-content').scrollTop=0;
       this.queueViewport();
     }
     guide(name){const value=guides[name]||guides.point;$('airGuideTitle').textContent=value[0];$('airGuideDescription').textContent=value[1];$('airGuideArt').dataset.gesture=guides[name]?name:'point';$('airGuideSelect').value=guides[name]?name:'point';}
@@ -484,8 +493,8 @@
       const canvas=$('airLandmarks'),ctx=canvas.getContext('2d');ctx.clearRect(0,0,640,480);
       const hand=state.hand_points||[],face=state.face_points||[];
       const point=p=>Array.isArray(p)&&p.length===2&&p.every(Number.isFinite)&&p.every(v=>v>=-1&&v<=2);
-      const pointer=$('airTrackedPointer'),head=state.profile?.mode!=='hand',tip=head?state.point:hand[8];
-      pointer.querySelector('small').textContent=head?'Head pointer':'Your finger';
+      const pointer=$('airTrackedPointer'),head=state.profile?.mode!=='hand',knuckles=[5,9,13,17].map(i=>hand[i]),tip=head?state.point:(knuckles.every(point)?[0,1].map(k=>knuckles.reduce((sum,p)=>sum+p[k],0)/4):null);
+      pointer.querySelector('small').textContent=head?'Head pointer':'Your hand';
       pointer.hidden=!state.camera_active||!state.tracking||!((head?state.tracking_sources?.face:state.tracking_sources?.hand)??true)||!point(tip);
       if(!pointer.hidden){pointer.style.left=Math.max(0,Math.min(1,tip[0]))*100+'%';pointer.style.top=Math.max(0,Math.min(1,tip[1]))*100+'%';}
       if(!$('airShowLandmarks').checked)return;

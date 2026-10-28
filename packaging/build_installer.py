@@ -18,8 +18,8 @@ from windows_redist import ensure_openmp
 
 ROOT = base.ROOT
 DIST = ROOT/'dist'
-VERSION = '2.2.0'
-OUTPUT = 'TouchHelm-2.2.0-setup-win-x64'
+VERSION = '2.2.1'
+OUTPUT = 'TouchHelm-2.2.1-setup-win-x64'
 sys.path.insert(0,str(ROOT))
 
 

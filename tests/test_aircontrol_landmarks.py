@@ -71,7 +71,8 @@ class LandmarkTests(unittest.TestCase):
         state,center,points=hand_state(result,'right',None)
         self.assertEqual(state['pinch_index'],0);self.assertTrue(state['index_extended'])
         self.assertEqual(len(points),21);self.assertEqual(state['gesture_confidence'],.9)
-        self.assertAlmostEqual(state['x'],.38)
+        # The cursor follows the knuckle centre (landmarks 5, 9, 13, 17), not the pinching fingertip.
+        self.assertAlmostEqual(state['x'],.41)
 
     def test_same_hand_binding_does_not_jump_to_a_distant_person(self):
         result=Item(hand_landmarks=[hand(.7)],handedness=[[Item(category_name='Right',score=.99)]],gestures=[[]])

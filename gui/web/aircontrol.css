@@ -133,3 +133,102 @@
 
 @media(max-width:980px){.air-panel .air-heading{top:-22px}.air-panel .air-stage{height:clamp(240px,calc(100dvh - 330px),480px)}}
 @media(max-width:700px){.welcome-heading{gap:14px;margin-bottom:24px}.welcome-heading>img{width:44px;height:44px}.welcome-heading h1{font-size:25px}.control-home .control-mode-card{grid-template-columns:48px minmax(0,1fr) 14px;gap:6px 14px;padding:20px 16px}.control-home .mode-art{width:48px;height:76px}.mode-art svg{width:70px;height:68px}.control-home .mode-name{font-size:17px}.control-home .mode-footnote{font-size:11px}.air-panel .air-stage{height:300px}.air-panel .air-tabs{top:96px}}
+
+/* Compact one-screen layout: the page fits the window; only a very short window falls back to scrolling. */
+body[data-surface=desktop] .desktop-content:has(.air-panel:not([hidden])){padding:10px 20px 12px;display:flex;flex-direction:column}
+body[data-surface=desktop] .air-panel:not([hidden]){display:flex;flex-direction:column;gap:6px;width:100%;max-width:1180px;flex:1 1 auto;min-height:0}
+body[data-surface=desktop] .air-panel .air-heading{position:static;margin:0;padding:0 0 6px;min-height:0;gap:12px;border-bottom:1px solid var(--desktop-stroke)}
+body[data-surface=desktop] .air-panel .air-heading h1{font-size:22px;line-height:1.1}
+body[data-surface=desktop] .air-panel .air-session-actions{flex-wrap:wrap}
+body[data-surface=desktop] .air-panel .air-session-actions button{min-height:44px;padding:6px 14px}
+.air-status-strip{display:flex;flex-wrap:wrap;align-items:center;gap:2px 20px}
+.air-status-strip #airMessage{flex:1 1 300px;margin:0;font-size:13px;line-height:1.35;font-weight:600;color:var(--th-text)}
+.air-status-strip .air-progress-row{margin:0;flex:0 1 auto}
+.air-status-strip .air-progress-row .air-workflow{flex:0 1 auto;gap:18px}
+.air-status-strip .air-workflow li{padding:2px 0}
+.air-status-strip .air-setup-summary .quiet-button{min-height:44px}
+.air-status-strip #airReadiness{flex:1 0 100%;margin:0;font-size:12px;line-height:1.3}
+.air-status-strip #airReadiness:empty{display:none}
+body[data-surface=desktop] .air-panel .air-tabs{position:static;margin:0;gap:0}
+body[data-surface=desktop] .air-panel .air-tabs button{min-height:44px;padding:4px 14px;font-size:13px}
+body[data-surface=desktop] .air-panel .air-workspace{flex:1 1 240px;min-height:244px;grid-template-columns:minmax(0,1fr) 224px;grid-template-rows:minmax(0,1fr);gap:14px;align-items:stretch}
+body[data-surface=desktop] .air-panel .air-camera-column{display:flex;flex-direction:column;gap:6px;min-height:0;min-width:0}
+body[data-surface=desktop] .air-panel .air-stage{flex:1 1 auto;height:auto;min-height:244px}
+body[data-surface=desktop] .air-panel .air-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0}
+body[data-surface=desktop] .air-panel .air-tools button{min-height:44px;padding:4px 12px;font-size:12px}
+body[data-surface=desktop] .air-panel .air-tools #airVoiceMessage{flex:1 1 180px;margin:0;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-coach{gap:8px;padding:0 0 0 12px;overflow:auto;min-height:0;scrollbar-width:thin}
+body[data-surface=desktop] .air-panel .air-dwell-buttons button{min-height:44px;padding:4px 8px;font-size:12px}
+body[data-surface=desktop] .air-panel .air-dwell-feedback{font-size:11px;line-height:1.3;gap:4px}
+body[data-surface=desktop] .air-panel .air-dwell-feedback p{margin:0;font-size:11px;line-height:1.3}
+body[data-surface=desktop] .air-panel .air-scroll-controls button{min-height:44px}
+body[data-surface=desktop] .air-panel .air-dwell-heading{margin:0}
+body[data-surface=desktop] .air-panel .air-calibration-controls{padding:0 0 6px}
+#airSetupChoices{margin:0}
+#airSetupChoices>summary{display:none}
+#airSetupChoices .air-setup-inner{display:flex;flex-wrap:wrap;align-items:flex-end;gap:6px 14px}
+#airSetupChoices .air-mode-row{margin:0;flex:1 1 360px;gap:6px}
+#airSetupChoices .air-mode-row button{min-height:44px;padding:4px 10px;grid-template-columns:24px 1fr}
+#airSetupChoices .air-mode-row button small{display:none}
+#airSetupChoices .air-selectors{display:flex;flex:2 1 420px;gap:8px;margin:0;align-items:flex-end}
+#airSetupChoices .air-selectors label{flex:1 1 0;min-width:110px;gap:3px}
+#airSetupChoices .air-selectors select{min-height:44px}
+#airSetupChoices .air-selectors .quiet-button{min-height:44px;padding:4px 10px}
+#airSetupChoices #airCameraMessage{flex:1 0 100%;margin:0;font-size:12px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-section{margin:0;padding:10px 14px;scroll-margin-top:0;overflow:auto;flex:0 1 auto;min-height:0}
+body[data-surface=desktop] .air-panel .air-section h2{font-size:15px;margin:0 0 4px}
+body[data-surface=desktop] .air-panel .air-section p{margin:0 0 6px;font-size:12px;line-height:1.4}
+body[data-surface=desktop] .air-panel .air-onboarding{display:grid;grid-template-columns:1fr 1fr;gap:6px 24px}
+body[data-surface=desktop] .air-panel .air-onboarding .muted:not(#airCalibrationStatus){display:none}
+#airCalibrationStatus:empty{display:none}
+body[data-surface=desktop] .air-panel .air-onboarding .button-row{margin:4px 0 0}
+/* Until the camera runtime is installed the only next step is installing it, so the later steps wait. */
+body[data-surface=desktop] .air-panel .air-section:has(#airSetup:not([hidden])) .air-onboarding{display:none}
+body[data-surface=desktop] .air-panel .air-onboarding .button-row{margin:0}
+body[data-surface=desktop] .air-panel .air-onboarding button{min-height:44px;padding:4px 12px}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-section>.air-setup{gap:6px 20px;padding:4px 2px;margin:0;border:0;background:none;box-shadow:none}
+body[data-surface=desktop] .air-panel .air-setup>div:first-child{flex:1 1 320px}
+body[data-surface=desktop] .air-panel .air-setup progress{height:6px}
+/* Face-gesture calibration is advanced, so it takes two short rows instead of a page. */
+body[data-surface=desktop] .air-panel .air-expression-setup{display:grid;grid-template-columns:minmax(0,1.3fr) minmax(0,1fr);gap:4px 24px;margin:0 0 10px;padding:0 0 10px}
+body[data-surface=desktop] .air-panel .air-expression-setup>h3{display:none}
+.air-expression-more{margin:0 0 4px}
+body[data-surface=desktop] .air-panel .air-section .air-settings-grid{margin:6px 0}
+body[data-surface=desktop] .air-panel .air-section details{margin-top:6px}
+body[data-surface=desktop] .air-panel .air-section #airHotkeyStatus:empty{display:none}
+.air-expression-more>summary{cursor:pointer;font-size:13px;font-weight:600;padding:4px 0}
+body[data-surface=desktop] .air-panel .air-expression-setup>p{margin:0;font-size:12px;line-height:1.35;max-width:none}
+body[data-surface=desktop] .air-panel .air-expression-setup>p:first-of-type{grid-column:1/-1}
+body[data-surface=desktop] .air-panel .air-expression-controls{margin:0;gap:6px 10px}
+body[data-surface=desktop] .air-panel .air-expression-controls button{min-height:44px;padding:4px 12px}
+body[data-surface=desktop] .air-panel .air-expression-controls select{min-height:44px}
+body[data-surface=desktop] .air-panel .air-expression-levels{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:4px 10px;margin:0;grid-column:2;grid-row:3/5;align-self:center}
+body[data-surface=desktop] .air-panel .air-expression-levels label{font-size:11px;gap:2px}
+/* Customise, personal settings and diagnostics replace the camera view so they need no scrolling. */
+.air-panel:is([data-air-current-tab=mappings],[data-air-current-tab=settings],[data-air-current-tab=diagnostics]) :is(.air-workspace,#airSetupChoices){display:none}
+.air-panel:is([data-air-current-tab=mappings],[data-air-current-tab=settings],[data-air-current-tab=diagnostics]) .air-section:not([hidden]){flex:1 1 auto;max-height:none}
+body[data-surface=desktop] .air-panel .air-mapping-rows{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:6px 18px}
+body[data-surface=desktop] .air-panel .air-mapping-rows label{display:grid;grid-template-columns:minmax(90px,.8fr) minmax(140px,1.3fr);align-items:center;gap:8px}
+body[data-surface=desktop] .air-panel .air-mapping-rows select{min-height:44px}
+body[data-surface=desktop] .air-panel .air-mapping-rows label small{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+.air-mapping-more{margin:8px 0 0}
+.air-mapping-more>summary{cursor:pointer;font-size:13px;font-weight:600;padding:4px 0}
+body[data-surface=desktop] .air-panel .air-settings-grid{grid-template-columns:repeat(auto-fit,minmax(128px,1fr));gap:4px 12px}
+body[data-surface=desktop] .air-panel .air-settings-grid label{font-size:12px;gap:2px}
+body[data-surface=desktop] .air-panel .air-settings-grid input:not([type=range]),body[data-surface=desktop] .air-panel .air-settings-grid select{min-height:44px;height:44px;padding-top:2px;padding-bottom:2px}
+body[data-surface=desktop] .air-panel .air-preference-toggles{display:flex;flex-wrap:wrap;gap:4px 18px;margin:8px 0}
+body[data-surface=desktop] .air-panel .air-section .button-row{margin:6px 0 0;gap:8px}
+body[data-surface=desktop] .air-panel .air-section .button-row button{min-height:44px;padding:4px 14px}
+@media(max-width:980px){body[data-surface=desktop] .air-panel .air-workspace{grid-template-columns:minmax(0,1fr) 196px;gap:10px}}
+@media(max-width:700px){
+  body[data-surface=desktop] .desktop-content:has(.air-panel:not([hidden])){padding:8px 12px 12px}
+  body[data-surface=desktop] .air-panel .air-workspace{flex:0 0 auto;grid-template-columns:1fr;grid-template-rows:auto}
+  body[data-surface=desktop] .air-panel .air-stage{flex:0 0 auto;height:min(46vh,260px)}
+  :root[data-theme] body[data-surface=desktop] .air-panel .air-coach{padding:8px 0 0;border-left:0;border-top:1px solid var(--desktop-stroke);overflow:visible}
+  body[data-surface=desktop] .air-panel .air-onboarding{grid-template-columns:1fr}
+  body[data-surface=desktop] .air-panel .air-section{max-height:none}
+  .air-status-strip #airMessage{flex-basis:100%}
+}
+@media(max-height:560px) and (min-width:701px){body[data-surface=desktop] .air-panel .air-workspace{flex-basis:244px}}
+body[data-surface=desktop] .air-panel>:is(.air-heading,.air-status-strip,.air-tabs,#airSetupChoices,.air-progress-row){flex-shrink:0}
+body[data-surface=desktop] .air-panel .air-section:is([data-air-content=settings],[data-air-content=diagnostics])>h2{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}

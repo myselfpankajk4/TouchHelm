@@ -41,6 +41,13 @@ HEAD_ADAPT_TAU=1.5
 EDGE_START=.25
 EDGE_GAIN=2.
 VERTICAL_GAIN=1.25
+# A click starts a moment before it is recognised: the fingers drift together (hand) or the
+# face moves (head) while the gesture builds. The pointer is pinned to where it was this long
+# before recognition so the click lands where the user was aiming, not where the closing hand
+# dragged it. Positions older than TRAIL_SECONDS are not kept.
+HAND_LOOKBACK=.15
+HEAD_LOOKBACK=.15
+TRAIL_SECONDS=.5
 
 class GestureEngine:
     def __init__(self,profile):
@@ -50,7 +57,7 @@ class GestureEngine:
         self.dwell_exit=None;self.last_action=-10.;self.progress=0.;self.confidence=0.
         self.sequence_time=-1.
         self.pinch_anchor=None;self.pinch_origin=None
-        self.hand_rebase=None
+        self.hand_rebase=None;self.trail=[]
         self.dwell_action='left_click';self.drag_latched=False;self.hud_regions=[];self.dwell_target=None
         self.steady_point=None;self.pose_accepted=None;self.pose_suspect=None;self.pose_speed=(0.,0.);self.jitter=0.;self.jitter_from=None;self.jitter_time=None
         self.hud_blocked=False
@@ -65,6 +72,11 @@ class GestureEngine:
         if self.profile['mode']!='hand':return max(1.,self.profile['sensitivity']*HEAD_RANGE_REFERENCE/self.profile['head_range'])*self.local_gain[axis]
         bounds=self.profile['calibration']['hand_bounds'];span=(bounds[2]-bounds[0],bounds[3]-bounds[1])[axis]
         return max(1.,self.profile['sensitivity']*.7/max(span,.05))
+
+    def _lookback(self,t,seconds):
+        # Pointer position nearest to `seconds` before now, from frames before this one.
+        if not self.trail:return None
+        return min(self.trail,key=lambda entry:abs(entry[0]-(t-seconds)))[1]
 
     def _reach(self,offset,axis):
         # offset is the signed distance from the screen center in screen widths (0.5 is the
@@ -136,7 +148,7 @@ class GestureEngine:
         self.dwell_anchor=None;self.dwell_fired=False;self.dwell_exit=None;self.point=None;self.progress=0.
         self.pinch_anchor=None;self.pinch_origin=None
         self.dwell_action='left_click';self.drag_latched=False;self.dwell_target=None;self.steady_point=None;self.pose_accepted=None;self.pose_suspect=None;self.pose_speed=(0.,0.);self.jitter=0.;self.jitter_from=None;self.jitter_time=None;self.local_gain=[1.,1.]
-        self.hand_rebase=None
+        self.hand_rebase=None;self.trail=[]
         self.head_scroll=False;self.scroll_target='';self.scroll_last=None
         # Interruption must not turn an uninterrupted expression into a new
         # press. Only a valid, neutral observation below releases this latch.
@@ -276,7 +288,10 @@ class GestureEngine:
         target_gesture=(mode in ('hand','combined') and gesture.startswith('pinch_') or mode=='head' and gesture in ('smile','wink_left','wink_right','brows_up') and self.profile['bindings'].get(gesture) in ('left_click','right_click','double_click','left_drag'))
         if target_gesture:
             if self.pinch_anchor is None or self.gesture!=gesture:
-                self.pinch_anchor=previous_point or filtered;self.pinch_origin=filtered
+                # A fresh press anchors where the pointer was just before the gesture began;
+                # switching between pinches while one is held keeps the held position.
+                earlier=self._lookback(t,HAND_LOOKBACK if mode!='head' else HEAD_LOOKBACK) if self.pinch_anchor is None else previous_point
+                self.pinch_anchor=earlier or previous_point or filtered;self.pinch_origin=filtered
             if self.gesture!=gesture or not self.fired or self.profile['bindings'][gesture]!='left_drag':self.point=self.pinch_anchor
             else:self.point=tuple(clamp(a+b-c) for a,b,c in zip(self.pinch_anchor,filtered,self.pinch_origin))
         elif self.pinch_anchor is not None:
@@ -291,6 +306,9 @@ class GestureEngine:
                     # eases toward the head; seeding the held point as a sample
                     # would read the gap as a fast move and jump the pointer.
                     if mode!='hand':filter.value=held
+        if self.pinch_anchor is None:
+            self.trail.append((t,self.point))
+            while self.trail and t-self.trail[0][0]>TRAIL_SECONDS:self.trail.pop(0)
         if self.lock=='conflict' and gesture:
             self.progress=0.;return events
         if self.lock and self.lock!=gesture and gesture:

@@ -75,12 +75,17 @@ def validate_profile(profile):
 # Revision of the tuning defaults a saved file was written with. Files written before it
 # existed carry the old head_stability default (4 px), which validate_profile cannot
 # replace because it only fills missing keys.
-TUNING=2
+TUNING=3
 OLD_HEAD_STABILITY=4
 
 def upgrade_profile(profile,tuning):
     if tuning<2 and isinstance(profile,dict) and type(profile.get('head_stability')) in (int,float) and profile['head_stability']==OLD_HEAD_STABILITY:
         profile=dict(profile,head_stability=default_profile()['head_stability'])
+    if tuning<3 and isinstance(profile,dict) and isinstance(profile.get('calibration'),dict):
+        # Tuning 3 aims with the knuckle centre instead of the index fingertip, which sits
+        # about a finger-length lower in the image. Movement bounds captured on the fingertip
+        # would place the cursor off-screen until Quick setup is run again.
+        profile=dict(profile,calibration=dict(profile['calibration'],hand_bounds=list(default_profile()['calibration']['hand_bounds'])))
     return profile
 
 class ProfileStore:
