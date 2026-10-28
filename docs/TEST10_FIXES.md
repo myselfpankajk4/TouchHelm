@@ -44,6 +44,8 @@ external requests. It checks playback in both inline and separate Chrome
 players, viewport/container bounds at 393×850, 320×568 and 844×390, previews from
 a scrolled folder, transfers, cancellation and compact progress. Screenshots
 were inspected, including the short portrait screen and active mini strip.
+Saved examples: [mini transfer strip](design/files-transfer-mini.png) and
+[short-screen portrait player](design/files-portrait-short.png).
 
 Full Python verification: **581 passed**. `npm test`: **122 passed, one optional
 skip**. A fresh read-only review found the delayed-download priority and
@@ -57,6 +59,24 @@ tabs and a collapsed transfer strip at most 72 px tall. Files accessibility:
 checked the final sizing and toggle corrections with no remaining actionable
 finding.
 
-Installer and installed-copy results are recorded after those checks complete.
+## Installer verification
+
+- File: `dist/TouchHelm-2.2.0-test10-setup-win-x64.exe`.
+- Size: **168,241,922 bytes**; SHA-256:
+  `b2c7ec2afd7816e9ff229d32d064a33a04df1a8187420494e2ec10ed52d944b6`.
+  The finished installer matches its manifest.
+- Exact packaged source/runtime: **37 Files/HTTP/local-mode tests passed**.
+- Packaged launcher: **20 native self-test checks passed**, with only Windows
+  on PATH and deliberately invalid Python environment paths. The bundled Python,
+  camera models, WebView2 execution and Tk fallback work; no public pairing
+  helper is included. Server and Files UI source hashes match the tested tree.
+
+The normal desktop installer successfully upgraded the existing copy to
+**2.2.0.10**. Windows registration, uninstaller and desktop/Start shortcuts are
+present. The final pre-install settings file was preserved byte for byte.
+Installed server and Files UI hashes match the tested sources. The reopened
+window responds, and the installed-source identity, local API and
+PIN-authenticated WebSocket checks all pass.
+
 Physical Android Chrome codec/native-control acceptance still requires the
-user's device test.
+user's device test. This remains an unsigned test installer.
