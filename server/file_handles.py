@@ -16,10 +16,16 @@ def check_local(path):
     return path
 
 
-def check_stat(info):
+def needs_recall(attributes,*,enumerated=False):
+    # 0x40000 means RECALL_ON_OPEN only in directory enumeration. In stat /
+    # FileAttributeTagInfo it means EA (extended attributes), common on downloads.
+    return bool(attributes&(0x1000|0x400000|(0x40000 if enumerated else 0)))
+
+
+def check_stat(info,*,enumerated=False):
     if stat.S_ISLNK(info.st_mode) or getattr(info,'st_reparse_tag',0)&0x20000000:
         raise PermissionError('Linked folders and files are not shared. Open their original local location.')
-    if getattr(info,'st_file_attributes',0)&(0x1000|0x40000|0x400000):
+    if needs_recall(getattr(info,'st_file_attributes',0),enumerated=enumerated):
         raise PermissionError('Make this file or folder available offline on the PC first.')
     if not (stat.S_ISDIR(info.st_mode) or stat.S_ISREG(info.st_mode)):
         raise PermissionError('Only ordinary local files and folders are available.')
@@ -42,7 +48,7 @@ def _native_open(path,access,creation=3):
         tags=(wintypes.DWORD*2)()
         if not api.GetFileInformationByHandleEx(handle,9,ctypes.byref(tags),ctypes.sizeof(tags)):
             raise ctypes.WinError(ctypes.get_last_error())
-        if tags[0]&(0x1000|0x40000|0x400000) or tags[1]&0x20000000:
+        if needs_recall(tags[0]) or tags[1]&0x20000000:
             raise PermissionError('This location is linked or needs an online download. Choose its offline original.')
         return handle
     except BaseException:

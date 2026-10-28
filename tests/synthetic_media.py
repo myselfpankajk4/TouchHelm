@@ -1,4 +1,4 @@
-"""Generated video/silent audio for transport tests. Never captures the PC."""
+"""Generated video and test-tone audio. Never captures the PC."""
 from aiortc import RTCPeerConnection,RTCConfiguration,RTCSessionDescription,VideoStreamTrack,AudioStreamTrack
 from av import VideoFrame
 from server.remote_service import private_sdp
@@ -20,10 +20,15 @@ class GeneratedCapture:
 class GeneratedAudio:
     def __init__(self,on_state,ready=None):
         self.stream=None;self.device=None
+        source=self
         class Track(AudioStreamTrack):
             async def recv(self):
                 if ready:await ready.wait()
-                return await super().recv()
+                frame=await super().recv()
+                import math,struct
+                raw=b''.join(struct.pack('<h',int(3000*math.sin(2*math.pi*440*(frame.pts+i)/frame.sample_rate)) if source.stream else 0) for i in range(frame.samples))
+                for plane in frame.planes:plane.update(raw.ljust(plane.buffer_size,b'\0'))
+                return frame
         self.track=Track()
     def enable(self,value):self.stream=object() if value else None
     def close(self):self.stream=None

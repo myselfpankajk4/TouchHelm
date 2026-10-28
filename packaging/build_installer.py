@@ -18,8 +18,8 @@ from windows_redist import ensure_openmp
 
 ROOT = base.ROOT
 DIST = ROOT/'dist'
-VERSION = '2.2.0-test.8'
-OUTPUT = 'TouchHelm-2.2.0-test8-setup-win-x64'
+VERSION = '2.2.0-test.9'
+OUTPUT = 'TouchHelm-2.2.0-test9-setup-win-x64'
 sys.path.insert(0,str(ROOT))
 
 
@@ -115,7 +115,7 @@ def build(compiler, source):
         'stage': str(stage.relative_to(ROOT)), 'dependencies': json.loads((stage/'dependencies.json').read_text())}
     manifest['connection']={'mode':'local-wifi-only','internet_required':False,'public_helper_bundled':False}
     (DIST/'installer-build-manifest.json').write_text(json.dumps(manifest, indent=2))
-    (DIST/'SHA256SUMS-test8.txt').write_text(manifest['sha256']+'  '+exe.name+'\n')
+    (DIST/'SHA256SUMS-test9.txt').write_text(manifest['sha256']+'  '+exe.name+'\n')
     shutil.copy2(ROOT/'docs/WINDOWS_INSTALLER.md', DIST/'WINDOWS_INSTALLER.md')
     print(json.dumps({k: v for k, v in manifest.items() if k != 'dependencies'}, indent=2))
 

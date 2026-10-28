@@ -96,7 +96,15 @@
     }
     unmute(){
       if(!this.audioConfirmed)return;
-      this.video.muted=false;this.video.play().then(()=>this.syncAudioControls()).catch(()=>{this.video.muted=true;this.status('The browser blocked audio playback. Tap Unmute again.');this.syncAudioControls();});
+      this.playMedia();
+    }
+    playMedia(){
+      const session=this.session,attempt=this.playAttempt=(this.playAttempt||0)+1;
+      this.video.muted=!this.audioConfirmed;
+      this.video.play().then(()=>{if(this.session===session&&this.playAttempt===attempt)this.syncAudioControls();}).catch(error=>{
+        if(this.session!==session||this.playAttempt!==attempt||error.name==='AbortError')return;
+        if(this.audioConfirmed){this.video.muted=true;this.status('The browser blocked audio playback. Tap Unmute to hear PC audio.');this.syncAudioControls();}
+      });
     }
     syncAudioControls(){
       const pending=this.audioPending||!!this.session&&this.state==='connecting';
@@ -126,7 +134,7 @@
       this.pc=new RTCPeerConnection({iceServers:[]});const pc=this.pc;
       if(this.mode!=='audio')pc.addTransceiver('video',{direction:'recvonly'});pc.addTransceiver('audio',{direction:'recvonly'});
       this.stream=new MediaStream();this.video.srcObject=this.stream;
-      pc.ontrack=event=>{if(this.pc!==pc)return;this.stream.addTrack(event.track);this.video.play().catch(()=>{});this.syncAudioControls();};
+      pc.ontrack=event=>{if(this.pc!==pc)return;this.stream.addTrack(event.track);this.playMedia();this.syncAudioControls();};
       pc.onconnectionstatechange=()=>{if(this.pc!==pc)return;if(['disconnected','failed'].includes(pc.connectionState)){this.state='reconnecting';this.status('Media connection interrupted. Waiting for a fresh frame…');this.render();}};
       try{
         await pc.setLocalDescription(await pc.createOffer());
@@ -170,9 +178,10 @@
       this.state=msg.state==='live'?'connecting':msg.state;
       this.geometry=msg.display?.rect;$('remoteMode').value=msg.mode;$('remoteQuality').value=msg.quality;
       if(msg.display)$('remoteMonitor').value=msg.display.id;
-      this.audioConfirmed=!!msg.audio;
+      const hadAudio=this.audioConfirmed;this.audioConfirmed=!!msg.audio;
       if(msg.success){this.audioPending=false;this.audioRequested=this.audioConfirmed;}
       if(!msg.audio)this.video.muted=true;
+      else if(!hadAudio||!this.video.muted)this.playMedia();
       this.status(msg.message);this.render();
     }
     configure(){

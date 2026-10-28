@@ -56,7 +56,12 @@ async function main({url}){
   await page.screenshot({path:'build/files-video-preview.png'});await page.locator('#filesPreviewBack').click();await page.waitForSelector('#filesPreview',{state:'hidden'});
   await row('Evening mix.mp3').locator('.files-open-entry').click();await page.waitForFunction(()=>document.querySelector('#filesPreview audio')?.readyState>=1);
   await page.locator('#filesPreviewBack').click();await page.waitForSelector('#filesPreview',{state:'hidden'});
-  await row('Travel guide.pdf').locator('.files-open-entry').click();assert.ok(await page.locator('#filesPreview iframe').getAttribute('src'));await page.locator('#filesPreviewBack').click();await page.waitForSelector('#filesPreview',{state:'hidden'});
+  await row('Travel guide.pdf').locator('.files-open-entry').click();
+  assert.equal(await page.locator('#filesPreview iframe').count(),0);
+  const pdfLink=page.locator('#filesOpenExternal');assert.equal(await pdfLink.innerText(),'Open PDF in Chrome');
+  const pdfResponse=await context.request.get(new URL(await pdfLink.getAttribute('href'),url).href);
+  assert.equal(pdfResponse.status(),200);assert.match(pdfResponse.headers()['content-type'],/application\/pdf/);assert.ok((await pdfResponse.body()).subarray(0,5).equals(Buffer.from('%PDF-')));
+  await page.locator('#filesPreviewBack').click();await page.waitForSelector('#filesPreview',{state:'hidden'});
   const payload=Buffer.alloc(2560000);for(let i=0;i<payload.length;i++)payload[i]=i%256;
   for(let attempt=0;attempt<2;attempt++){
    await page.locator('#filesPicker').setInputFiles({name:'phone file.bin',mimeType:'application/octet-stream',buffer:payload});
@@ -89,8 +94,9 @@ async function main({url}){
   await page.locator('#tabRemote').click();await page.waitForFunction(()=>touchhelm.remote.caps?.local);
   await page.locator('[data-remote-mode=view]').click();await page.waitForFunction(()=>touchhelm.remote.state==='live'&&remoteVideo.videoWidth>0,null,{timeout:30000}).catch(async error=>{console.error('GENERATED MEDIA STATE',await page.evaluate(()=>({state:touchhelm.remote.state,status:remoteStatus.textContent,connection:touchhelm.remote.pc?.connectionState})));throw error;});
   await page.locator('#remoteStop').click();await page.waitForFunction(()=>!touchhelm.remote.session);
-  await page.evaluate(()=>touchhelm.remote.start('audio'));await page.waitForFunction(()=>touchhelm.remote.state==='live'&&touchhelm.remote.mode==='audio',null,{timeout:30000});
-  await page.waitForFunction(async()=>{const pc=touchhelm.remote.pc;if(!pc)return false;const stats=await pc.getStats();return [...stats.values()].some(row=>row.type==='inbound-rtp'&&row.kind==='audio'&&row.packetsReceived>0);},null,{timeout:15000});
+  await page.locator('#tabMedia').click();await page.locator('#mediaPcAudio').check();
+  await page.waitForFunction(()=>touchhelm.remote.state==='live'&&touchhelm.remote.mode==='audio',null,{timeout:30000});
+  await page.waitForFunction(async()=>{const pc=touchhelm.remote.pc;if(!pc||remoteVideo.muted||remoteVideo.paused)return false;const stats=await pc.getStats();return [...stats.values()].some(row=>row.type==='inbound-rtp'&&row.kind==='audio'&&row.packetsReceived>0&&row.totalAudioEnergy>0);},null,{timeout:15000});
   await page.evaluate(()=>touchhelm.remote.stop());
   await page.waitForFunction(()=>!touchhelm.remote.session);
   await page.evaluate(()=>touchhelm.send({type:'text',text:'synthetic local file control'}));

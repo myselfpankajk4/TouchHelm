@@ -35,6 +35,43 @@ class FileStoreTests(unittest.TestCase):
             self.assertEqual((self.disk/result['name']).read_bytes(),content)
         self.assertEqual(len(list(self.disk.glob('*.txt'))),2)
 
+    def test_extended_attributes_do_not_make_local_files_cloud_only(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        target=self.disk/'downloaded.pdf';target.write_bytes(b'local fixture')
+        original=Path.lstat
+        def lstat(path,*args,**kwargs):
+            info=original(path,*args,**kwargs)
+            if path!=target:return info
+            fields={key:getattr(info,key,0) for key in ('st_mode','st_dev','st_ino','st_size','st_mtime','st_reparse_tag')}
+            return SimpleNamespace(**fields,st_file_attributes=0x40020)
+        with patch.object(Path,'lstat',lstat):
+            entries=self.store.listing(self.location)['entries']
+            self.assertEqual(entries[0]['name'],'downloaded.pdf')
+            self.assertIsNotNone(entries[0]['id'])
+            with self.store.open_read(entries[0]['id']) as source:self.assertEqual(source.read(),b'local fixture')
+
+    def test_one_entry_losing_access_does_not_block_the_whole_folder(self):
+        from unittest.mock import patch
+        (self.disk/'available.txt').write_bytes(b'local')
+        (self.disk/'changed.txt').write_bytes(b'local')
+        original=self.store._register
+        def register(path,*args,**kwargs):
+            if path.name=='changed.txt':raise PermissionError('Entry no longer accessible')
+            return original(path,*args,**kwargs)
+        with patch.object(self.store,'_register',side_effect=register):
+            entries=self.store.listing(self.location)['entries']
+        self.assertIn('available.txt',[entry['name'] for entry in entries])
+        changed=next(entry for entry in entries if entry['name']=='changed.txt')
+        self.assertIsNone(changed['id']);self.assertTrue(changed['unavailable'])
+
+    def test_recall_on_open_enumeration_is_still_disabled(self):
+        from types import SimpleNamespace
+        import stat
+        info=SimpleNamespace(st_file_attributes=0x40000,st_reparse_tag=0,st_mode=stat.S_IFREG,st_size=100,st_mtime=0)
+        entry=self.store._describe(self.disk/'virtual.pdf',self.disk,info)
+        self.assertIsNone(entry['id']);self.assertIn('offline',entry['unavailable'])
+
     def test_upload_owner_offset_size_and_cancel(self):
         upload=self.store.begin('phone',self.location,'file.bin',4)
         for owner,offset,body in [('other',0,b'x'),('phone',1,b'x'),('phone',0,b'12345')]:

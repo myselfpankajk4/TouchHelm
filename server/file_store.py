@@ -10,7 +10,7 @@ import secrets
 import shutil
 import stat
 import threading
-from .file_handles import DirectoryLease,check_local,check_stat,open_local,rename_open_file,delete_open_file
+from .file_handles import DirectoryLease,check_local,check_stat,needs_recall,open_local,rename_open_file,delete_open_file
 
 CHUNK=1024**2
 MAX_FILE=16*1024**3
@@ -108,11 +108,12 @@ class FileStore:
             return {'locations':result,'max_file_size':MAX_FILE,'chunk_size':CHUNK}
 
     def _describe(self,path,root,info=None):
+        enumerated=info is not None
         info=info or path.lstat()
         mime,preview=MIMES.get(path.suffix.lower(),('application/octet-stream','download'))
-        if getattr(info,'st_file_attributes',0)&(0x1000|0x40000|0x400000):
+        if needs_recall(getattr(info,'st_file_attributes',0),enumerated=enumerated):
             return {'id':None,'name':path.name,'directory':stat.S_ISDIR(info.st_mode),'size':info.st_size,'modified':info.st_mtime,'mime':mime,'preview':preview,'unavailable':'Make this file or folder available offline on the PC first.'}
-        check_stat(info)
+        check_stat(info,enumerated=enumerated)
         return {'id':self._register(path,root),'name':path.name,'directory':stat.S_ISDIR(info.st_mode),'size':info.st_size,'modified':info.st_mtime,'mime':mime,'preview':preview,'kind':'folder' if stat.S_ISDIR(info.st_mode) else preview}
 
     def listing(self,identifier,query='',sort='name',offset=0,limit=PAGE):
@@ -127,9 +128,9 @@ class FileStore:
                         if entry.name.startswith('.touchhelm-') or query.casefold() not in entry.name.casefold():continue
                         try:
                             info=entry.stat(follow_symlinks=False)
-                            if getattr(info,'st_file_attributes',0)&(0x1000|0x40000|0x400000):
+                            if needs_recall(getattr(info,'st_file_attributes',0),enumerated=True):
                                 if stat.S_ISLNK(info.st_mode) or getattr(info,'st_reparse_tag',0)&0x20000000:continue
-                            else:check_stat(info)
+                            else:check_stat(info,enumerated=True)
                             rows.append((entry.name,info))
                         except OSError:continue
                 def order(row):
@@ -137,7 +138,12 @@ class FileStore:
                     value={'name':name.casefold(),'size':info.st_size,'date':-info.st_mtime,'type':Path(name).suffix.casefold()}[sort]
                     return (not stat.S_ISDIR(info.st_mode),value,name.casefold())
                 rows.sort(key=order)
-                entries=[self._describe(path/name,item['root'],info) for name,info in rows[offset:offset+limit]]
+                entries=[]
+                for name,info in rows[offset:offset+limit]:
+                    try:entries.append(self._describe(path/name,item['root'],info))
+                    except FileNotFoundError:continue
+                    except OSError:
+                        entries.append({'id':None,'name':name,'directory':stat.S_ISDIR(info.st_mode),'size':info.st_size,'modified':info.st_mtime,'unavailable':'Windows cannot access this item. Check its permissions and offline availability on the PC.'})
                 chain=[];part=path
                 while True:
                     chain.append({'id':self._register(part,item['root'],name=item['name'] if part==item['root'] else None),'name':item['name'] if part==item['root'] and item['name'] else part.name or str(part)})

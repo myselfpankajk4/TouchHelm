@@ -202,12 +202,12 @@
     preview(entry,push=true){
       this.previewEntry=entry;$('filesPreview').hidden=false;$('filesWorkspace').dataset.preview='true';$('filesPreviewName').textContent=entry.name;
       const url=this.contentURL(entry);let media;
-      $('filesPreviewHint').textContent='';$('filesOpenExternal').href=url;$('filesOpenExternal').hidden=entry.preview==='download';
+      $('filesPreviewHint').textContent='';$('filesOpenExternal').href=url;$('filesOpenExternal').hidden=entry.preview==='download';$('filesOpenExternal').textContent=entry.preview==='pdf'?'Open PDF in Chrome':'Open file in Chrome';
       if(entry.preview==='audio'||entry.preview==='video'){
         media=document.createElement(entry.preview);media.controls=true;media.preload='metadata';media.setAttribute('playsinline','');media.src=url;media.addEventListener('error',()=>{$('filesPreviewHint').textContent='Chrome cannot play this format. Receive the file to open it in a compatible app.';});
         if(entry.preview==='audio'){const wrap=document.createElement('div');wrap.className='files-audio-preview';wrap.append(icon('audio'),text('h3',entry.name),media);media=wrap;}
       }else if(entry.preview==='image'){media=document.createElement('img');media.src=url;media.alt=entry.name;media.addEventListener('error',()=>{$('filesPreviewHint').textContent='This image cannot be displayed. Receive it to open in another app.';});}
-      else if(entry.preview==='pdf'){media=document.createElement('iframe');media.src=url;media.title=`PDF preview: ${entry.name}`;$('filesPreviewHint').textContent='If the PDF does not appear, choose Open file in Chrome or Receive.';}
+      else if(entry.preview==='pdf'){media=document.createElement('div');media.className='files-unsupported';media.append(icon('pdf'),text('h3',entry.name),text('p','Open this PDF in a Chrome tab to read it, or Receive to save a copy on your phone.'));}
       else{media=document.createElement('div');media.className='files-unsupported';media.append(icon('download'),text('h3','Ready to receive'),text('p','Receive this file to open it with an app on your phone. It will not run on the PC.'));}
       $('filesPreviewBody').replaceChildren(media);if(push)this.remember(true,entry.id);$('filesPreviewBack').focus({preventScroll:true});
     }

@@ -1110,6 +1110,38 @@ test('desktop media permission being off is explained on Media without a false H
   assert.equal(await page.evaluate(()=>__packets.filter(packet=>packet.type==='remote_start').length),0);
 });
 
+test('PC audio switch starts audible playback after host confirmation',async page=>{
+  await fakeRemote(page);
+  await page.evaluate(()=>{const r=touchhelm.remote;r.caps={audio:true};r.pc={close(){}};r.video.play=async()=>{};r.render();});
+  await page.locator('#tabMedia').click();await page.locator('#mediaPcAudio').check();
+  assert.equal(await page.evaluate(()=>remoteVideo.muted),true,'Wait for PC permission and audio confirmation');
+  await page.evaluate(()=>touchhelm.remote.handle({type:'remote_state',success:true,session_id:'fixture',revision:'geometry1',mode:'control',state:'live',audio:true,quality:'clear'}));
+  await page.waitForFunction(()=>!remoteVideo.muted);
+  assert.equal(await page.locator('#mediaPcAudioUnmute').isVisible(),false);
+});
+
+test('blocked PC audio offers a working playback retry',async page=>{
+  await fakeRemote(page);
+  await page.evaluate(()=>{const r=touchhelm.remote;r.caps={audio:true};r.pc={close(){}};r.video.play=async()=>{throw new DOMException('Playback needs a tap','NotAllowedError');};r.render();});
+  await page.locator('#tabMedia').click();await page.locator('#mediaPcAudio').check();
+  await page.evaluate(()=>touchhelm.remote.handle({type:'remote_state',success:true,session_id:'fixture',revision:'geometry1',mode:'control',state:'live',audio:true,quality:'clear'}));
+  await page.waitForFunction(()=>remoteVideo.muted);
+  assert.equal(await page.locator('#mediaPcAudioUnmute').isVisible(),true);
+  await page.evaluate(()=>{remoteVideo.play=async()=>{};});await page.locator('#mediaPcAudioUnmute').click();
+  await page.waitForFunction(()=>!remoteVideo.muted);
+});
+
+test('PDF preview has one Chrome open action without embedded viewer controls',async page=>{
+  await page.locator('#tabFiles').click();
+  await page.evaluate(()=>touchhelm.files.preview({id:'fixture-pdf',name:'Travel guide.pdf',preview:'pdf',mime:'application/pdf',size:500}));
+  assert.equal(await page.locator('#filesPreview iframe').count(),0);
+  assert.equal(await page.locator('#filesOpenExternal').textContent(),'Open PDF in Chrome');
+  assert.equal(await page.locator('#filesOpenExternal').getAttribute('href'),'/api/files/content/fixture-pdf');
+  assert.equal(await page.locator('#filesOpenExternal').getAttribute('target'),'_blank');
+  assert.equal(await page.locator('#filesPreviewReceive').isVisible(),true);
+  await screenshot(page,'test9-pdf-preview');
+});
+
 test('Hidden viewer stays connected on incoming packets when mobile stops decoding',async page=>{
   await fakeRemote(page);
   await page.locator('#tabMedia').click();

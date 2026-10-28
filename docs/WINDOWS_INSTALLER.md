@@ -1,6 +1,6 @@
-# TouchHelm Windows installer — Test 8
+# TouchHelm Windows installer — Test 9
 
-Use `TouchHelm-2.2.0-test8-setup-win-x64.exe` for a normal installation on Windows
+Use `TouchHelm-2.2.0-test9-setup-win-x64.exe` for a normal installation on Windows
 10/11 x64. Run setup and choose Install. It installs for the current Windows user,
 creates Start Menu and desktop shortcuts (desktop selected by default), and adds
 TouchHelm to Settings → Apps → Installed apps with an uninstaller. The application
@@ -63,7 +63,7 @@ runtimes into a fresh stage, checks models and private-file exclusions, compiles
 the installed launcher, then uses Inno Setup's solid LZMA2 compression. It excludes
 the private browser and package installers; all native dependency licenses remain
 with their distributions. The file size and SHA-256 are in
-`dist/installer-build-manifest.json` and `dist/SHA256SUMS-test8.txt`.
+`dist/installer-build-manifest.json` and `dist/SHA256SUMS-test9.txt`.
 
 ## Verification
 

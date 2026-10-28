@@ -1,4 +1,4 @@
-# Local Wi-Fi and Files — Test 8
+# Local Wi-Fi and Files — Test 9
 
 Connect the Windows PC and Android phone to the same home Wi-Fi. Open TouchHelm
 on the PC, choose **Pair your phone**, scan its local QR in Chrome, and enter the
@@ -25,9 +25,12 @@ On the phone, open **Files**:
   names and drive availability come from Windows. Breadcrumbs return to earlier
   locations. Search looks in the current folder; Name/Newest/Type/Size changes
   the order. Show more files/folders continues a large listing.
-- Tap a file to preview it on the phone. Images, supported audio/video and PDFs
-  have browser previews. Media supports seeking. Browser codec/PDF support
-  varies; **Receive** and **Open file in Chrome** provide alternatives.
+- Tap a file to preview it on the phone. Images and supported audio/video have
+  inline previews; media supports seeking. PDFs offer one **Open PDF in Chrome**
+  action, opening a separate browser tab, plus **Receive** to save a copy. The
+  embedded PDF viewer was removed because its extra Open control could lose the
+  authenticated session on mobile. Browser codec/PDF support varies;
+  **Receive** remains available for opening a file in another phone app.
   Executables, HTML, SVG and unsupported formats download rather than run in
   TouchHelm. Opening a file here never executes it on the PC.
 - Choose **Send to PC**, select files with Android's picker, choose a PC folder,
@@ -53,6 +56,15 @@ Cloud-only placeholders explain that they must be made available offline on the
 PC first. TouchHelm does not hydrate them using internet. Network shares, device
 paths, alternate streams and reparse-point redirects are not accepted. A folder
 that Windows denies or that disappears must be selected again after recovery.
+An unavailable entry no longer prevents the rest of its folder from loading.
+
+## Listen to PC audio
+
+Enable **Screen and audio access** on the PC, then switch on **PC audio** in
+Media or Remote on the phone. Playback starts after the PC confirms the stream;
+there is no routine second Unmute step. If Chrome blocks audible playback,
+**Unmute** appears as a retry. The phone receives the current Windows output
+device's loopback audio; that output must be playing something to hear sound.
 
 ## Connection properties
 
