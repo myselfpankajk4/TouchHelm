@@ -80,3 +80,29 @@ download/open fallback. A generated silent audio stream proves transport, not
 speaker output. The 16 GiB limit is an implementation bound; a 16 GiB physical
 Android transfer has not been tested. HTTP does not gain TLS protection simply
 because it is on home Wi-Fi.
+
+## Local Test 8 installer
+
+Built successfully from commit `ad9eddb` using the cached offline runtimes:
+
+- File: `dist/TouchHelm-2.2.0-test8-setup-win-x64.exe`
+- Size: **168,239,789 bytes** (168.2 MB / 160.4 MiB), 13,458,087 bytes smaller
+  than Test 7 (about 7.4%).
+- SHA-256: `852dc02dfb19d582352837ea62f43bf1e367a0e0c03ba4a85df09080389ecd0a`
+- The generated manifest checksum matches the finished file. No public tunnel
+  helper is present in the stage or bundled payload. The installer is unsigned.
+- **32 Files/HTTP/local-peer tests pass using the packaged runtime and packaged
+  source**, with only fixture tests loaded from the development checkout.
+- The actual packaged launcher passes **20 native self-test checks**, with PATH
+  restricted to Windows and deliberately invalid PYTHONHOME/PYTHONPATH. It uses
+  its bundled Python, verifies camera models without camera input, executes
+  WebView2 JavaScript and opens/closes the hidden Tk fallback.
+- The isolated packaged redistributables check also passes: system browser ready
+  with downloads/package commands forbidden, screen/audio and camera packages
+  present, and DXcam's actual native NumPy extension loads the bundled Microsoft
+  OpenMP DLL from the app directory.
+
+This is a local build for testing. The existing installed TouchHelm copy was not
+replaced and no GitHub release was published by this implementation task. A fresh
+Windows VM install/uninstall and physical Android remain separate acceptance;
+the app registration/shortcut template is inherited from the tested Test 7 installer.
