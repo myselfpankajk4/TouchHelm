@@ -1142,6 +1142,39 @@ test('PDF preview has one Chrome open action without embedded viewer controls',a
   await screenshot(page,'test9-pdf-preview');
 });
 
+test('Files transfers show only a mini progress strip until expanded',async page=>{
+  await page.locator('#tabFiles').click();
+  await page.evaluate(()=>{const files=touchhelm.files;files.transfers=[{id:'compact-transfer',name:'Video.mp4',size:1000,sent:250,direction:'send',state:'sending',destination:'Downloads'}];files.drawTransfers();filesTransfers.querySelector('details').open=false;});
+  assert.equal(await page.locator('#filesTransfers .files-transfer:visible').count(),0);
+  assert.ok((await page.locator('#filesTransfers').boundingBox()).height<=72);
+  assert.equal(await page.locator('#filesTransferProgress').isVisible(),true);
+  assert.equal(await page.locator('#filesTransferProgress').getAttribute('value'),'250');
+  await page.locator('#filesTransferSummary').click();assert.equal(await page.getByRole('button',{name:'Cancel Video.mp4',exact:true}).isVisible(),true);
+  await page.evaluate(()=>{touchhelm.files.transfers[0].sent=500;touchhelm.files.drawTransfers();});
+  assert.equal(await page.locator('#filesTransfers details').getAttribute('open'),'');
+  await page.locator('#filesTransferSummary').click();
+  await page.evaluate(()=>{touchhelm.files.transfers[0].state='complete';touchhelm.files.drawTransfers();});
+  assert.equal(await page.locator('#filesTransfers .files-transfer:visible').count(),0);
+  await screenshot(page,'test10-transfers-collapsed');
+});
+
+test('Files mini progress prioritizes active transfer over a pending Chrome download',async page=>{
+  await page.locator('#tabFiles').click();
+  await page.evaluate(()=>{touchhelm.files.transfers=[{id:'pending-download',name:'Download.mp4',size:1000,sent:0,direction:'receive',state:'browser'},{id:'active-upload',name:'Upload.mp4',size:1000,sent:500,direction:'send',state:'sending',destination:'Downloads'}];touchhelm.files.drawTransfers();});
+  assert.equal(await page.locator('#filesTransferProgress').getAttribute('value'),'500');
+  assert.match(await page.locator('#filesTransferLabel').textContent(),/in progress/);
+});
+
+test('Files video refits when transfer history expands and collapses',async page=>{
+  await page.locator('#tabFiles').click();
+  await page.evaluate(()=>{const files=touchhelm.files;files.transfers=Array.from({length:4},(_,i)=>({id:'history'+i,name:'Saved '+i+'.mp4',size:1000,sent:1000,direction:'send',state:'complete',destination:'Downloads'}));files.drawTransfers();files.preview({id:'fixture-video',name:'Portrait.mp4',preview:'video'});const video=filesPreviewBody.querySelector('video');video.width=360;video.height=640;files.fitPreviewVideo();});
+  const before=await page.locator('#filesPreview video').evaluate(video=>video.getBoundingClientRect().height);
+  await page.locator('#filesTransferSummary').click();
+  await page.waitForFunction(before=>document.querySelector('#filesPreview video').getBoundingClientRect().height<before-10,before);
+  await page.locator('#filesTransferSummary').click();
+  await page.waitForFunction(before=>document.querySelector('#filesPreview video').getBoundingClientRect().height>=before-1,before);
+});
+
 test('Hidden viewer stays connected on incoming packets when mobile stops decoding',async page=>{
   await fakeRemote(page);
   await page.locator('#tabMedia').click();

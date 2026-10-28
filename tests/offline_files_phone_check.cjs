@@ -38,8 +38,8 @@ async function main({url}){
   await page.screenshot({path:'build/files-393-light.png'});
   const retainedFocus=await page.evaluate(()=>{
    const files=touchhelm.files;const fixture={id:'a'.repeat(24),name:'Focus test.bin',size:1000,sent:0,direction:'send',state:'sending',destination:'Downloads'};
-   files.transfers.push(fixture);files.drawTransfers();const action=document.querySelector('[aria-label="Cancel Focus test.bin"]');action.focus();fixture.sent=200;files.drawTransfers();
-   const retained=document.activeElement===action;files.transfers.pop();files.drawTransfers();return retained;
+   files.transfers.push(fixture);files.drawTransfers();filesTransfers.querySelector('details').open=true;const action=document.querySelector('[aria-label="Cancel Focus test.bin"]');action.focus();fixture.sent=200;files.drawTransfers();
+   const retained=document.activeElement===action;files.transfers.pop();files.drawTransfers();filesTransfers.querySelector('details').open=false;return retained;
   });assert.equal(retainedFocus,true,'A progress update must preserve keyboard focus on Cancel');
   const queuedReceive=await page.evaluate(()=>{
    const files=touchhelm.files,entries=files.entries.filter(entry=>!entry.directory).slice(0,2),before=files.transfers.length,click=HTMLAnchorElement.prototype.click;
@@ -53,7 +53,38 @@ async function main({url}){
   await row('Weekend.mp4').locator('.files-open-entry').click();await page.waitForFunction(()=>document.querySelector('#filesPreview video')?.readyState>=1);
   await page.evaluate(()=>document.querySelector('#filesPreview video').currentTime=1);
   await page.waitForFunction(()=>document.querySelector('#filesPreview video').currentTime>=1);
+  {
+   const opened=page.waitForEvent('popup');await page.locator('#filesOpenExternal').click();const videoTab=await opened;
+   const mediaErrors=[];videoTab.on('console',message=>{if(message.type()==='error')mediaErrors.push(message.text());});
+   await videoTab.waitForLoadState('domcontentloaded');
+   await videoTab.waitForFunction(()=>document.querySelector('video')?.readyState>=2,null,{timeout:7000}).catch(error=>{console.error('TOP LEVEL MEDIA',mediaErrors);throw error;});
+   await videoTab.evaluate(()=>{const video=document.querySelector('video');video.muted=true;return video.play();});
+   await videoTab.waitForFunction(()=>document.querySelector('video').currentTime>0);await videoTab.close();
+  }
   await page.screenshot({path:'build/files-video-preview.png'});await page.locator('#filesPreviewBack').click();await page.waitForSelector('#filesPreview',{state:'hidden'});
+  {
+   await page.setViewportSize({width:320,height:568});await page.evaluate(()=>viewFiles.scrollTop=viewFiles.scrollHeight);
+   await row('Portrait.mp4').locator('.files-open-entry').click();await page.waitForFunction(()=>document.querySelector('#filesPreview video')?.readyState>=1);
+   assert.equal(await page.evaluate(()=>viewFiles.scrollTop),0,'Opening a file must start its preview at the top');
+   await page.evaluate(()=>{const video=document.querySelector('#filesPreview video');video.muted=true;return video.play();});await page.waitForFunction(()=>document.querySelector('#filesPreview video').currentTime>.1);await page.evaluate(()=>document.querySelector('#filesPreview video').pause());
+   for(const [width,height] of [[393,850],[320,568],[844,390]]){
+    await page.setViewportSize({width,height});
+    const bounds=await page.evaluate(()=>{const video=document.querySelector('#filesPreview video'),body=filesPreviewBody.getBoundingClientRect(),rect=video.getBoundingClientRect(),viewport=viewFiles.getBoundingClientRect();return {top:rect.top-body.top,bottom:body.bottom-rect.bottom,viewportTop:rect.top-viewport.top,viewportBottom:viewport.bottom-rect.bottom,fit:getComputedStyle(video).objectFit,controls:video.controls,width:rect.width,height:rect.height};});
+    assert.ok(bounds.top>=-1&&bounds.bottom>=-1,`Portrait player and controls must fit their container: ${JSON.stringify(bounds)}`);assert.equal(bounds.fit,'contain');assert.equal(bounds.controls,true);
+    assert.ok(bounds.viewportTop>=-1&&bounds.viewportBottom>=-1,`The full portrait player must be visible above the phone navigation: ${JSON.stringify(bounds)}`);
+    await page.screenshot({path:`build/test10-portrait-${width}.png`});
+   }
+   await page.setViewportSize({width:393,height:850});await page.locator('#filesPreviewBack').click();
+  }
+  {
+   await row('Voice memo.aac').locator('.files-open-entry').click();await page.waitForFunction(()=>document.querySelector('#filesPreview audio')?.readyState>=2);
+   assert.equal(await page.locator('#filesOpenExternal').isVisible(),true);
+   await page.evaluate(()=>{const audio=document.querySelector('#filesPreview audio');audio.muted=true;return audio.play();});await page.waitForFunction(()=>document.querySelector('#filesPreview audio').currentTime>0);
+   const opened=page.waitForEvent('popup');await page.locator('#filesOpenExternal').click();const audioTab=await opened;
+   await audioTab.waitForFunction(()=>document.querySelector('video,audio')?.readyState>=2);
+   await audioTab.evaluate(()=>{const audio=document.querySelector('video,audio');audio.muted=true;return audio.play();});await audioTab.waitForFunction(()=>document.querySelector('video,audio').currentTime>0);await audioTab.close();
+   await page.locator('#filesPreviewBack').click();
+  }
   await row('Evening mix.mp3').locator('.files-open-entry').click();await page.waitForFunction(()=>document.querySelector('#filesPreview audio')?.readyState>=1);
   await page.locator('#filesPreviewBack').click();await page.waitForSelector('#filesPreview',{state:'hidden'});
   await row('Travel guide.pdf').locator('.files-open-entry').click();
@@ -85,8 +116,10 @@ async function main({url}){
   await page.route('**/api/files/uploads/*',async route=>{if(route.request().method()==='PUT')await new Promise(resolve=>setTimeout(resolve,600));return route.continue().catch(()=>{});});
   await page.locator('#filesPicker').setInputFiles({name:'cancel me.bin',mimeType:'application/octet-stream',buffer:payload});await page.waitForFunction(()=>!filesDestinationConfirm.disabled);await page.locator('#filesDestinationConfirm').click();
   await page.waitForFunction(()=>touchhelm.files.transfers.some(t=>t.name==='cancel me.bin'&&t.upload));
-  assert.ok((await page.locator('#filesTransfers').boundingBox()).height<190,'The compact transfer tray must leave the file list usable');
+  assert.ok((await page.locator('#filesTransfers').boundingBox()).height<=72,'Only the mini progress strip should show by default');
+  assert.equal(await page.locator('#filesTransfers .files-transfer:visible').count(),0);
   await page.screenshot({path:'build/files-transfer-progress.png'});
+  await page.locator('#filesTransferSummary').click();
   await page.getByRole('button',{name:'Cancel cancel me.bin',exact:true}).click();await page.waitForFunction(()=>touchhelm.files.transfers.some(t=>t.name==='cancel me.bin'&&t.state==='cancelled'));
   await page.unroute('**/api/files/uploads/*');
   for(const width of [320,980]){await page.setViewportSize({width,height:850});await page.screenshot({path:`build/files-${width}-light.png`});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
@@ -103,5 +136,5 @@ async function main({url}){
   await page.waitForTimeout(100);
  }finally{await context.close();await browser.close();}
  assert.deepEqual(errors,[]);assert.deepEqual(external,[]);
- console.log(JSON.stringify({files_tab:true,local_http:true,no_external_requests:true,search:true,video_seek:true,mp3_metadata:true,pdf_preview:true,uploads_duplicate:true,download:true,new_folder:true,destination_pagination:true,cancel:true,responsive:true,screen:true,audio_only:true}));
+ console.log(JSON.stringify({files_tab:true,local_http:true,no_external_requests:true,search:true,video_seek:true,chrome_video_playback:true,portrait_player_bounds:true,aac_inline_and_chrome:true,compact_transfers:true,mp3_metadata:true,pdf_preview:true,uploads_duplicate:true,download:true,new_folder:true,destination_pagination:true,cancel:true,responsive:true,screen:true,audio_only:true}));
 }

@@ -216,6 +216,10 @@ class FileHTTP:
                      'Accept-Ranges':'bytes','Content-Length':str(max(0,end-start+1)),'Cache-Control':'no-store',
                      'X-Content-Type-Options':'nosniff','Referrer-Policy':'no-referrer','Cross-Origin-Resource-Policy':'same-origin',
                      'Content-Security-Policy':"default-src 'none'; frame-ancestors 'self'"}
+            if disposition=='inline' and entry['preview'] in ('audio','video'):
+                # Chrome's standalone media document reloads its own URL in a
+                # native player. Keep scripts/default sources denied.
+                headers['Content-Security-Policy']="default-src 'none'; media-src 'self'; frame-ancestors 'self'"
             if partial:headers['Content-Range']=f'bytes {start}-{end}/{size}'
             response=web.StreamResponse(status=206 if partial else 200,headers=headers)
             if not self._valid(session):raise web.HTTPUnauthorized()

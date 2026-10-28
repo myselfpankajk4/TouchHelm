@@ -16,7 +16,7 @@ CHUNK=1024**2
 MAX_FILE=16*1024**3
 PAGE=200
 SCAN=50000
-MIMES={'.pdf':('application/pdf','pdf'),'.jpg':('image/jpeg','image'),'.jpeg':('image/jpeg','image'),'.png':('image/png','image'),'.gif':('image/gif','image'),'.webp':('image/webp','image'),'.avif':('image/avif','image'),'.mp3':('audio/mpeg','audio'),'.m4a':('audio/mp4','audio'),'.wav':('audio/wav','audio'),'.ogg':('audio/ogg','audio'),'.flac':('audio/flac','audio'),'.mp4':('video/mp4','video'),'.webm':('video/webm','video'),'.mov':('video/quicktime','video')}
+MIMES={'.pdf':('application/pdf','pdf'),'.jpg':('image/jpeg','image'),'.jpeg':('image/jpeg','image'),'.png':('image/png','image'),'.gif':('image/gif','image'),'.webp':('image/webp','image'),'.avif':('image/avif','image'),'.mp3':('audio/mpeg','audio'),'.m4a':('audio/mp4','audio'),'.aac':('audio/aac','audio'),'.adts':('audio/aac','audio'),'.wav':('audio/wav','audio'),'.ogg':('audio/ogg','audio'),'.flac':('audio/flac','audio'),'.mp4':('video/mp4','video'),'.webm':('video/webm','video'),'.mov':('video/quicktime','video')}
 
 
 class FileError(Exception):

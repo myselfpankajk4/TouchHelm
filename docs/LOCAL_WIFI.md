@@ -1,4 +1,4 @@
-# Local Wi-Fi and Files — Test 9
+# Local Wi-Fi and Files — Test 10
 
 Connect the Windows PC and Android phone to the same home Wi-Fi. Open TouchHelm
 on the PC, choose **Pair your phone**, scan its local QR in Chrome, and enter the
@@ -33,6 +33,11 @@ On the phone, open **Files**:
   **Receive** remains available for opening a file in another phone app.
   Executables, HTML, SVG and unsupported formats download rather than run in
   TouchHelm. Opening a file here never executes it on the PC.
+  AAC/ADTS audio (`.aac` and `.adts`) is recognized as browser audio. Supported
+  videos and audio can also open in a separate Chrome tab; the inline player
+  pauses when you do this. Portrait video fits the visible phone area while
+  preserving the full frame and native controls. Receive remains the fallback
+  for a codec or AAC variant the phone cannot decode.
 - Choose **Send to PC**, select files with Android's picker, choose a PC folder,
   then **Send here**. **New folder** can create a destination. Duplicates receive
   a numbered name; existing files are never overwritten.
@@ -40,7 +45,10 @@ On the phone, open **Files**:
   **Receive**. Chrome owns the phone's download permission, progress UI and save
   location. TouchHelm reports bytes sent to Chrome, not a claim that Android has
   saved them successfully. Chrome can ask permission for multiple downloads.
-- The transfer tray shows direction, progress, cancellation and Retry. A retry
+- Transfers show a mini progress strip by default. Tap it to expand file names,
+  direction, detailed progress, cancellation, Retry and history; tap again to
+  collapse. New progress does not open it automatically. The strip prioritizes
+  an actively sending/receiving file over a delayed Chrome download. A retry
   starts the interrupted file again; there is no silent replay on reconnect.
 
 Uploads use 1 MiB chunks and downloads use at most 256 KiB per disk read. Files

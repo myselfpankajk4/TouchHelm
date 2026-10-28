@@ -1,6 +1,6 @@
 # TouchHelm product context
 
-Current Test 8: local Wi-Fi only, including first page load and pairing. Seven
+Current Test 10: local Wi-Fi only, including first page load and pairing. Seven
 phone tabs are Trackpad, Files, Presenter, Media, Keyboard, Apps and Remote.
 Files provides local drive/known-folder browsing, supported browser previews,
 Send to PC with an explicit destination and Receive through Chrome downloads.

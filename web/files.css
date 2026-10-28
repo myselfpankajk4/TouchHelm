@@ -62,7 +62,14 @@
 .files-grid .files-select{position:absolute;top:3px;left:2px;width:38px;min-height:44px}
 .files-grid .files-entry>.files-icon-button{width:38px;flex-basis:38px}
 .files-transfers{background:var(--th-surface);border:1px solid var(--th-border);border-radius:13px;padding:0 10px;grid-column:1/-1;margin-top:4px}
-.files-transfers summary{min-height:44px;display:list-item;padding:12px 2px;font-size:13px;font-weight:600;cursor:pointer}
+.files-transfers summary{min-height:44px;display:grid;grid-template-columns:minmax(0,1fr) auto 12px;align-items:center;column-gap:9px;row-gap:7px;padding:10px 2px;font-size:13px;font-weight:600;cursor:pointer;list-style:none}
+.files-transfers summary::-webkit-details-marker{display:none}
+.files-transfers summary::after{content:'';width:7px;height:7px;border-bottom:1.5px solid currentColor;border-right:1.5px solid currentColor;transform:rotate(45deg);justify-self:center;grid-column:3;grid-row:1}
+.files-transfers details[open]>summary::after{transform:rotate(225deg)}
+#filesTransferValue{font-variant-numeric:tabular-nums;color:var(--th-muted);font-size:12px}
+.files-transfers summary progress{grid-column:1/-1;width:100%;height:3px;border:0;border-radius:3px;accent-color:var(--th-accent)}
+.files-transfers summary progress::-webkit-progress-bar{background:var(--th-bg);border-radius:3px}
+.files-transfers summary progress::-webkit-progress-value{background:var(--th-accent);border-radius:3px}
 .files-current-transfer{list-style:none;margin:0;padding:0}
 .files-current-transfer>.files-transfer{border-top:0;padding-top:12px;padding-bottom:4px}
 .files-transfers ol{list-style:none;margin:0;padding:0;max-height:210px;overflow:auto;overscroll-behavior:contain}
@@ -78,8 +85,9 @@
 .files-preview>header{display:flex;align-items:center;gap:7px}
 .files-preview h2{font-size:15px;line-height:1.4;margin:0;flex:1;overflow-wrap:anywhere}
 .files-preview header button{font-size:12px;padding:7px 9px}
-.files-preview-body{flex:1;display:grid;place-items:center;min-height:230px;overflow:hidden;background:var(--th-panel);border-radius:14px;border:1px solid var(--th-border)}
-.files-preview-body>img,.files-preview-body>video{width:100%;height:auto;max-height:65vh;object-fit:contain}
+.files-preview-body{flex:0 0 auto;display:flex;align-items:center;justify-content:center;min-height:230px;overflow:hidden;background:var(--th-panel);border-radius:14px;border:1px solid var(--th-border)}
+.files-preview-body>img,.files-preview-body>video{display:block;width:100%;height:auto;max-height:65vh;max-height:65dvh;object-fit:contain}
+.files-preview-body:has(>video){min-height:0;background:#080d12}
 .files-preview-body iframe{border:0;width:100%;height:65vh;min-height:340px;background:white}
 .files-audio-preview,.files-unsupported{width:100%;padding:24px 15px;text-align:center;overflow-wrap:anywhere}
 .files-audio-preview>img,.files-unsupported>img{width:100px;height:100px;margin:auto}

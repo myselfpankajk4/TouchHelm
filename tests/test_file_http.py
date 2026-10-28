@@ -67,6 +67,19 @@ class FileHTTPTests(unittest.IsolatedAsyncioTestCase):
         response=await self.http.post('/api/files/uploads/'+upload+'/finish',json={},headers=self.headers)
         self.assertEqual(response.status,200);self.assertEqual((self.disk/'sent.txt').read_bytes(),b'test')
 
+    async def test_inline_media_policy_allows_native_player_but_not_scripts(self):
+        _,entry=await self.entry('movie.mp4')
+        response=await self.http.get('/api/files/content/'+entry['id'])
+        policy=response.headers['Content-Security-Policy']
+        self.assertIn("media-src 'self'",policy);self.assertIn("default-src 'none'",policy)
+        self.assertNotIn('unsafe-inline',policy);self.assertNotIn('https:',policy)
+        await response.read()
+        response=await self.http.get('/api/files/content/'+entry['id']+'?download=1')
+        self.assertNotIn('media-src',response.headers['Content-Security-Policy']);await response.read()
+        _,unsafe=await self.entry('unsafe.html')
+        response=await self.http.get('/api/files/content/'+unsafe['id'])
+        self.assertNotIn('media-src',response.headers['Content-Security-Policy'])
+
     async def test_full_megabyte_chunk_is_not_truncated_to_one_socket_read(self):
         location,_=await self.entry('movie.mp4');body=bytes(range(256))*4096
         response=await self.http.post('/api/files/uploads',json={'parent':location,'name':'large.bin','size':len(body)},headers=self.headers)

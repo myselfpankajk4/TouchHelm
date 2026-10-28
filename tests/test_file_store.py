@@ -105,6 +105,11 @@ class FileStoreTests(unittest.TestCase):
         with self.assertRaises(self.Error):
             with self.store.open_read(entry['id']):pass
 
+    def test_aac_files_are_recognized_for_browser_audio_preview(self):
+        (self.disk/'memo.aac').write_bytes(b'fixture')
+        entry=self.store.listing(self.location)['entries'][0]
+        self.assertEqual(entry['preview'],'audio');self.assertEqual(entry['mime'],'audio/aac')
+
     @unittest.skipUnless(os.name=='nt','Windows sharing semantics')
     def test_destination_cannot_be_renamed_while_upload_lease_is_open(self):
         target=self.store.mkdir(self.location,'target')

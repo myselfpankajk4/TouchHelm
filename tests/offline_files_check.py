@@ -30,13 +30,21 @@ async def main():
                 for plane in frame.planes:plane.update(bytes(plane.buffer_size))
                 for packet in audio.encode(frame):output.mux(packet)
             for packet in audio.encode():output.mux(packet)
-        with av.open(str(disk/'Weekend.mp4'),'w') as output:
-            video=output.add_stream('libx264',rate=10);video.width=320;video.height=180;video.pix_fmt='yuv420p'
-            for i in range(40):
-                frame=av.VideoFrame(320,180,'yuv420p');frame.pts=i;frame.time_base=Fraction(1,10)
-                for index,plane in enumerate(frame.planes):plane.update(bytes([90+i if index==0 else 128])*plane.buffer_size)
-                for packet in video.encode(frame):output.mux(packet)
-            for packet in video.encode():output.mux(packet)
+        with av.open(str(disk/'Voice memo.aac'),'w',format='adts') as output:
+            audio=output.add_stream('aac',rate=48000)
+            for i in range(120):
+                frame=av.AudioFrame(format='fltp',layout='stereo',samples=1024);frame.sample_rate=48000;frame.pts=i*1024;frame.time_base=Fraction(1,48000)
+                for plane in frame.planes:plane.update(bytes(plane.buffer_size))
+                for packet in audio.encode(frame):output.mux(packet)
+            for packet in audio.encode():output.mux(packet)
+        for name,width,height in [('Weekend.mp4',320,180),('Portrait.mp4',360,640)]:
+            with av.open(str(disk/name),'w') as output:
+                video=output.add_stream('libx264',rate=10);video.width=width;video.height=height;video.pix_fmt='yuv420p'
+                for i in range(40):
+                    frame=av.VideoFrame(width,height,'yuv420p');frame.pts=i;frame.time_base=Fraction(1,10)
+                    for index,plane in enumerate(frame.planes):plane.update(bytes([90+i if index==0 else 128])*plane.buffer_size)
+                    for packet in video.encode(frame):output.mux(packet)
+                for packet in video.encode():output.mux(packet)
         (disk/'Picture.png').write_bytes(__import__('base64').b64decode('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII='))
         config=ConfigManager(str(root/'config.json'))
         with socket.socket() as probe:probe.bind(('0.0.0.0',0));port=probe.getsockname()[1]
