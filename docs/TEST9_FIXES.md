@@ -37,6 +37,8 @@ instead of capturing the PC in this integration test.
 A separate native Windows check played a brief generated 440 Hz WAV and detected
 that tone through the actual WASAPI loopback and AudioNormalizer. Only detection
 booleans were recorded; captured PC audio was not saved.
+All 17 ordinary Downloads files carrying extended attributes also opened native
+read handles successfully; their contents were not read by this metadata probe.
 
 Physical Android speaker output and Chrome's device-specific PDF rendering still
 need the user's acceptance test. The earlier Test 8 evidence remains recorded
@@ -53,4 +55,22 @@ Source verification:
 - Desktop/local-network tests: **12 passed, one optional visual skip**.
 - Independent read-only review found no blocking defects in the bugfix diff.
 
-Installer and installed-copy results are added after the build completes.
+Installer verification:
+
+- `dist/TouchHelm-2.2.0-test9-setup-win-x64.exe`: **168,258,246 bytes**.
+- SHA-256: `2478efda88d23ccca5efdcb9f8321d70b0eeb23bff698c21d816800c2686759e`;
+  the finished file matches the build manifest.
+- Exact packaged source/runtime: **35 Files/HTTP/local-mode tests passed**.
+- Packaged launcher: **20 native self-test checks passed**, including bundled
+  Python, models, WebView2 execution and Tk fallback. The normal desktop probe
+  restricts PATH to Windows and deliberately supplies invalid Python environment
+  paths. No public pairing helper is bundled.
+
+The installer successfully upgraded this PC's existing Test 7 copy to Test 9
+using the same app identity. Installed-source hashes match the fixes, Windows
+registration and both shortcuts are present, and the settings file was preserved
+byte for byte through installation. The first launch encountered an older
+singleton lock; after it cleared, relaunch passed the installed-source identity,
+local API and PIN-authenticated WebSocket checks. This remains an unsigned test
+installer. The initial launch failure is retained in the development reports;
+the successful retry is recorded separately.
