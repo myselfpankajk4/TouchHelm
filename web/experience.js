@@ -32,7 +32,7 @@
     send(message){return this.client.send(message);}
     api(path){return `${this.client.httpBase()}${path}`;}
     cancelAppHolds(){for(const cancel of this.appHolds||[])cancel();this.appHolds?.clear();}
-    cacheTheme(){window.TouchHelmThemes?.ready.then(()=>{const link=id('th-active-theme');if(!link)return;const url=new URL(link.href,location.href);const paths=[url.pathname+url.search];const theme=window.TouchHelmThemes.state.id;if(theme==='bloom')paths.push('/themes/assets/bloom-forest.webp');if(theme==='companion')paths.push('/themes/assets/companion-face.webp');navigator.serviceWorker?.controller?.postMessage({type:'cache_theme',paths});});}
+    cacheTheme(){window.TouchHelmThemes?.ready.then(()=>{const link=id('th-active-theme');if(!link)return;const url=new URL(link.href,location.href);const paths=[url.pathname+url.search];navigator.serviceWorker?.controller?.postMessage({type:'cache_theme',paths});});}
     async image(element,assetId){
       if(!element)return false;
       if(assetId&&element.dataset.assetId===assetId&&element.dataset.decoded==='true'&&!element.hidden)return true;

@@ -122,7 +122,7 @@ The phone uses compact toolbars, contextual titles and broad touch surfaces. The
 
 ## Colors
 
-The frontmatter records legacy fallback tokens. Current semantic colors and materials live in `web/themes.css` and the seven packages under `web/themes/`, shared by phone and desktop. Legacy IDs migrate through `web/themes.js`. Bloom, Resonance, Companion, Clay, Glass, Soft UI and Ink each provide light/dark and increased-contrast treatment.
+The frontmatter records legacy fallback tokens. Current semantic colors and materials live in `web/themes.css` and the five packages under `web/themes/`, shared by phone and desktop. Legacy IDs migrate through `web/themes.js`. Aurora, Bloom, Resonance, Constellation and Ink each provide light/dark and increased-contrast treatment.
 
 Primary indicates selected navigation, prominent actions, pressed keys, and focused controls. Main, muted, and dim text separate context from supporting labels without making essential information decorative. Danger marks destructive actions and persistent save failures. Alternate themes retain the same hierarchy and their own contrast color.
 
@@ -175,7 +175,7 @@ inspector, and Session/Practice/Personal settings/Diagnostics tabs. The mode and
 camera selectors belong behind Change setup during a session; it explicitly
 stops control before presenting a fresh setup flow.
 
-Preserve the mouse mark, seven theme families and Segoe UI/system typography.
+Preserve the mouse mark, five theme families and Segoe UI/system typography.
 Use existing theme variables rather than hard-coded default colors; the default
 blue-black/slate/cyan palette remains. Use 26–30 px page titles, 18–20 px section
 titles, 14–16 px body/main controls and at least 12 px supporting information.

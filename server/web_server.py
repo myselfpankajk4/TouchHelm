@@ -638,7 +638,7 @@ class TouchHelmServer:
             "scroll_speed": self.config.get("scroll_speed", 1.0),
             "invert_scroll": self.config.get("invert_scroll", False),
             "laser_color": self.config.get("laser_color", "red"),
-            "theme": self.config.get("theme", "cyber")
+            "theme": self.config.get("theme", "aurora")
         }, headers={"Access-Control-Allow-Origin": "*"})
 
     async def handle_config(self, request):
@@ -1207,7 +1207,7 @@ class TouchHelmServer:
         if relative=='index.html':
             from gui.webview_window import render_preview_html
             return web.Response(text=render_preview_html(),content_type='text/html')
-        if relative.startswith(('themes/','icons/')) or relative in ('themes.js','themes.css','theme-effects.js','theme-effects.css'):
+        if relative.startswith(('themes/','icons/')) or relative in ('themes.js','themes.css','theme-scenes.js','theme-gl.js','theme-gl.css'):
             root=Path(WEB_DIR)
         candidate=(root/relative).resolve()
         if not candidate.is_relative_to(root.resolve()) or candidate.suffix not in ('.html','.js','.css','.svg','.png','.webp'):return web.Response(status=404)

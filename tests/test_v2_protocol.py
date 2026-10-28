@@ -213,7 +213,7 @@ class V2ProtocolTests(unittest.IsolatedAsyncioTestCase):
     async def test_desktop_preview_is_fixture_and_never_serves_private_or_native_files(self):
         response=await self.client.get('/preview/desktop/');self.assertEqual(response.status,200)
         source=await response.text();self.assertIn('__TOUCHHELM_DESKTOP_PREVIEW__',source);self.assertIn('preview-disabled',source)
-        for path in ('desktop.js','themes/glass.css'):
+        for path in ('desktop.js','themes/aurora.css'):
             response=await self.client.get('/preview/desktop/'+path);self.assertEqual(response.status,200)
         for path in ('config.json','webview_window.py','server.key'):
             response=await self.client.get('/preview/desktop/'+path);self.assertEqual(response.status,404)

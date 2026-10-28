@@ -14,7 +14,7 @@ async function main({url}){
   await page.waitForFunction(()=>touchhelm.isConnected&&touchhelm.files?.ready);
   assert.equal(await page.evaluate(()=>isSecureContext),false,'Test must use ordinary LAN HTTP');
   assert.equal(await page.locator('#btnGyro').isVisible(),false,'Local mode must hide Air Mouse');
-  await page.evaluate(()=>TouchHelmThemes.apply('glass',{appearance:'light',effects:'off'}));
+  await page.evaluate(()=>TouchHelmThemes.apply('aurora',{appearance:'light',effects:'off'}));
   await page.locator('#tabFiles').click();await page.waitForSelector('.files-location');
   await page.locator('.files-location').filter({hasText:'Downloads'}).first().click();
   await page.waitForSelector('.files-entry');
@@ -27,13 +27,13 @@ async function main({url}){
   }
   if(process.env.TOUCHHELM_FILES_THEME_MATRIX==='1'){
    const AxeBuilder=require('@axe-core/playwright').default,results=[];
-   for(const theme of ['bloom','resonance','companion','clay','glass','soft','ink'])for(const appearance of ['light','dark']){
+   for(const theme of ['aurora','bloom','resonance','constellation','ink'])for(const appearance of ['light','dark']){
     await page.evaluate(async value=>{TouchHelmThemes.apply(value.theme,{appearance:value.appearance,effects:'off'});await TouchHelmThemes.ready;},{theme,appearance});
     const audit=await new AxeBuilder({page}).include('#viewFiles').analyze();results.push({theme,appearance,violations:audit.violations.map(item=>({id:item.id,nodes:item.nodes.map(node=>node.target)}))});
     await page.screenshot({path:`build/files-theme-${theme}-${appearance}.png`});
    }
    require('node:fs').writeFileSync('build/files-theme-a11y.json',JSON.stringify(results,null,2));assert.deepEqual(results.flatMap(item=>item.violations),[]);
-   await page.evaluate(async()=>{TouchHelmThemes.apply('glass',{appearance:'light',effects:'off'});await TouchHelmThemes.ready;});
+   await page.evaluate(async()=>{TouchHelmThemes.apply('aurora',{appearance:'light',effects:'off'});await TouchHelmThemes.ready;});
   }
   await page.screenshot({path:'build/files-393-light.png'});
   const retainedFocus=await page.evaluate(()=>{
@@ -123,7 +123,7 @@ async function main({url}){
   await page.getByRole('button',{name:'Cancel cancel me.bin',exact:true}).click();await page.waitForFunction(()=>touchhelm.files.transfers.some(t=>t.name==='cancel me.bin'&&t.state==='cancelled'));
   await page.unroute('**/api/files/uploads/*');
   for(const width of [320,980]){await page.setViewportSize({width,height:850});await page.screenshot({path:`build/files-${width}-light.png`});assert.equal(await page.evaluate(()=>document.documentElement.scrollWidth>innerWidth),false);}
-  await page.setViewportSize({width:393,height:850});await page.evaluate(()=>TouchHelmThemes.apply('glass',{appearance:'dark',effects:'off'}));await page.screenshot({path:'build/files-393-dark.png'});
+  await page.setViewportSize({width:393,height:850});await page.evaluate(()=>TouchHelmThemes.apply('aurora',{appearance:'dark',effects:'off'}));await page.screenshot({path:'build/files-393-dark.png'});
   await page.locator('#tabRemote').click();await page.waitForFunction(()=>touchhelm.remote.caps?.local);
   await page.locator('[data-remote-mode=view]').click();await page.waitForFunction(()=>touchhelm.remote.state==='live'&&remoteVideo.videoWidth>0,null,{timeout:30000}).catch(async error=>{console.error('GENERATED MEDIA STATE',await page.evaluate(()=>({state:touchhelm.remote.state,status:remoteStatus.textContent,connection:touchhelm.remote.pc?.connectionState})));throw error;});
   await page.locator('#remoteStop').click();await page.waitForFunction(()=>!touchhelm.remote.session);

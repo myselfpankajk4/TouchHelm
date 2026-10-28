@@ -1,0 +1,19 @@
+/* Aurora: ribbons of light that follow touch. The shader supplies the sky; panels stay calm and readable. */
+:root[data-theme="aurora"][data-appearance="dark"] {
+  --th-bg:#0b1220; --th-panel:#121c2e; --th-surface:#1a2740; --th-hover:#24365a;
+  --th-text:#eef8fc; --th-muted:#b0c8d8; --th-accent:#34e0b4; --th-on-accent:#06231c;
+  --th-border:#5f7898; --th-danger:#ffa4b2; --th-success:#a3e6bb;
+  --th-gl-a:#34e0b4; --th-gl-b:#7a7cff; --th-gl-c:#ff7ad9;
+}
+:root[data-theme="aurora"][data-appearance="light"] {
+  --th-bg:#eef5f7; --th-panel:#e1edf1; --th-surface:#d3e4ea; --th-hover:#c3dae2;
+  --th-text:#0f2430; --th-muted:#3f5866; --th-accent:#0b6e5d; --th-on-accent:#ffffff;
+  --th-border:#6a8794; --th-danger:#a32843; --th-success:#0b6e5d;
+  --th-gl-a:#19b89a; --th-gl-b:#7b7dff; --th-gl-c:#ff8ad8;
+}
+:root[data-theme="aurora"] { --th-radius:16px; --th-key-radius:11px; --th-pad-radius:26px; }
+:root[data-theme="aurora"] :is(.touch-surface,.laser-surface) { border:1px solid color-mix(in srgb,var(--th-accent) 38%,transparent); }
+:root[data-theme="aurora"] :is(.trackpad-btn,.tool-btn,.native-key,.macro-btn,.shortcut-btn,.media-btn) { background:var(--th-panel-a); border:1px solid var(--th-border); box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 12%,transparent); transition:transform .12s ease,background .12s ease; }
+:root[data-theme="aurora"] :is(.trackpad-btn,.tool-btn,.native-key,.macro-btn,.shortcut-btn,.media-btn):active { transform:scale(.96); }
+:root[data-theme="aurora"] .nav-tab.active { box-shadow:inset 0 -2px var(--th-accent); border-radius:12px 12px 6px 6px; }
+:root[data-theme="aurora"] .trackpad-hints { text-shadow:0 0 12px var(--th-bg),0 0 3px var(--th-bg); }

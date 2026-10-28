@@ -96,7 +96,7 @@
     $('deviceStatus').textContent=!hostReady?'Device status unavailable':devices.length?`${devices.length} ${devices.length===1?'phone':'devices'} connected`:'No phone connected yet.';$('noDevices').hidden=!hostReady||devices.length>0;
     const diag=JSON.stringify(next.diagnostics||{});if(diag!==diagnosticStamp){diagnosticStamp=diag;$('diagnostics').replaceChildren(...Object.entries(next.diagnostics||{}).flatMap(([key,value])=>{const term=document.createElement('dt'),detail=document.createElement('dd');term.textContent=key.replaceAll('_',' ').replace(/^./,char=>char.toUpperCase());detail.textContent=String(value);return [term,detail];}));}
     settingsDirty(dirty);
-    if(!preferencesLoaded&&window.TouchHelmThemes){const prefs=next.preferences||{},selected=window.TouchHelmThemes.migrate(prefs.theme||'glass');window.TouchHelmThemes.apply(selected.id,{appearance:prefs.appearance||selected.appearance,motion:prefs.motion||'system',contrast:prefs.contrast||'system',effects:prefs.effects||'rich'});preferencesLoaded=true;}
+    if(!preferencesLoaded&&window.TouchHelmThemes){const prefs=next.preferences||{},selected=window.TouchHelmThemes.migrate(prefs.theme||'aurora');window.TouchHelmThemes.apply(selected.id,{appearance:prefs.appearance||selected.appearance,motion:prefs.motion||'system',contrast:prefs.contrast||'system',effects:prefs.effects||'rich'});preferencesLoaded=true;}
     window.TouchHelmThemes?.updateContext({connected:!offline,deviceCount:devices.length});
     window.dispatchEvent(new CustomEvent('touchhelm:desktop-state',{detail:next}));
   }

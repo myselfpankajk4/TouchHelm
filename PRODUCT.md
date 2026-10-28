@@ -18,7 +18,7 @@ The phone is typically held in one hand while attention stays on the PC or prese
 
 Approved 12 October 2026: five phone tabs — Trackpad, Presenter, Media, Keyboard, Apps — with Numpad inside Keyboard and Windows Start only in Keyboard. First pad contact collapses the typing dock without discarding a draft or sending input. Live typing defaults on; offline edits require explicit Send after reconnect. Presenter and Media show actual provider context and missing capabilities. Apps use verified window identities; normal Close window preserves the application's save prompts.
 
-Preserve seven themes, the mouse mark, original app branding, system typography, native focus behavior, 44px targets and safe areas. Bloom, Companion, Resonance and Clay have passive randomized living effects with Rich/Calm/Off preferences. System reduced motion wins; decoration cannot obscure controls or capture input. Drafts, navigation, themes and timer stay usable offline. Remote actions require a ready authenticated link; save errors must not pretend the socket disconnected.
+Preserve five themes (Aurora, Bloom, Resonance, Constellation, Ink), the mouse mark, original app branding, system typography, native focus behavior, 44px targets and safe areas. Aurora, Bloom, Resonance and Constellation render a generative WebGL field that reacts to where and when the user touches, types and presses (position and timing only, never typed text) with Rich/Calm/Off preferences; Ink stays plain. System reduced motion wins; decoration cannot obscure controls or capture input. Drafts, navigation, themes and timer stay usable offline. Remote actions require a ready authenticated link; save errors must not pretend the socket disconnected.
 
 Provider differences are product truth: PowerPoint exposes rich deck state and direct controls; other supported presenter windows may expose only a title and keyboard fallback. Windows media sessions expose playback metadata where supported, while queue access is adapter-specific. Never invent a playlist, slide count, elapsed value, running certainty, or successful command.
 
@@ -31,8 +31,7 @@ browser allows it and retains exit/Stop controls. New generated PINs use four AS
 digits; actual wrong guesses remain rate limited. Multiline phone Return defaults
 to Shift+Enter on the PC, with an explicit PC Enter action.
 
-All seven themes now use procedural effects; Bloom/Companion bitmap backdrops are
-unused. Existing logos and provider artwork remain. Desktop one-click trusted
+The four generative themes render GLSL fragment shaders (`web/theme-scenes.js`, `web/theme-gl.js`); there are no bitmap theme backdrops. Existing logos and provider artwork remain. Desktop one-click trusted
 setup installs missing providers/Tailscale, asks for required Windows/account steps,
 creates private HTTPS, and enables screen/audio access after setup succeeds.
 Phone-side Tailscale installation/sign-in remains necessary; browser-only private

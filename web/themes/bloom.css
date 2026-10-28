@@ -1,42 +1,20 @@
-/* Bloom: botanical illustration, polished leaf-green controls, living woodland edges. */
+/* Bloom: every tap and keystroke grows a flower in a living woodland. */
 :root[data-theme="bloom"][data-appearance="light"] {
   --th-bg:#f2f5eb; --th-panel:#eaf0e1; --th-surface:#dce8d3; --th-hover:#cedfc2;
-  --th-text:#203b2c; --th-muted:#47604b; --th-accent:#27634f; --th-on-accent:#fff;
+  --th-text:#203b2c; --th-muted:#47604b; --th-accent:#27634f; --th-on-accent:#ffffff;
   --th-border:#6e8463; --th-danger:#a32843; --th-success:#27634f;
-  --th-shadow:0 5px 15px #274b3016;
+  --th-gl-a:#f0728f; --th-gl-b:#f39a4a; --th-gl-c:#f5c63c;
 }
 :root[data-theme="bloom"][data-appearance="dark"] {
   --th-bg:#0e1e19; --th-panel:#162b22; --th-surface:#203d2d; --th-hover:#2e4e3c;
-  --th-text:#f1f5e8; --th-muted:#bacdaf; --th-accent:#bedfa5; --th-on-accent:#162b1c;
+  --th-text:#f1f5e8; --th-muted:#bacdaf; --th-accent:#ffb870; --th-on-accent:#2b1500;
   --th-border:#6b886b; --th-danger:#ffafbb; --th-success:#bedfa5;
-  --th-shadow:0 6px 18px #0004;
+  --th-gl-a:#ff8fab; --th-gl-b:#ffb870; --th-gl-c:#ffe08a;
 }
-:root[data-theme="bloom"] { --th-radius:17px; --th-key-radius:12px; --th-pad-radius:25px; --th-art:none; }
-:root[data-theme="bloom"] .touch-surface { border-color:var(--th-border); background:var(--th-surface); }
-:root[data-theme="bloom"] .touch-surface::before { content:""; position:absolute; inset:0; background:var(--th-art) center bottom/100% auto no-repeat; opacity:.9; }
-:root[data-theme="bloom"] .touch-surface::after { content:""; position:absolute; width:5px; height:5px; bottom:19%; left:17%; border-radius:50%; background:#fffbd2; box-shadow:0 2px 8px 3px #f8ed9c66; animation:th-bloom-light 5s ease-in-out infinite; }
-:root[data-theme="bloom"] .trackpad-hints { padding-bottom:18%; }
-:root[data-theme="bloom"] .trackpad-hints strong { font-weight:600; }
-:root[data-theme="bloom"] :is(.trackpad-btn,.tool-btn,.native-key,.macro-btn,.shortcut-btn,.media-btn) { background:var(--th-panel); border:1px solid var(--th-border); box-shadow:var(--th-shadow); }
-:root[data-theme="bloom"] :is(.btn-next,.send-btn,.play-btn) { background:var(--th-accent); color:var(--th-on-accent); box-shadow:var(--th-shadow); }
-:root[data-theme="bloom"] :is(.trackpad-btn,.tool-btn,.native-key,.macro-btn,.shortcut-btn,.media-btn):active { box-shadow:none; transform:translateY(1px); }
-:root[data-theme="bloom"] .native-key.held { background:var(--th-accent); color:var(--th-on-accent); }
-:root[data-theme="bloom"] .nav-tab.active { border-radius:15px 15px 8px 8px; background:var(--th-surface); }
-:root[data-theme="bloom"] :is(.ui-icon,.nav-tab>svg) { stroke-width:1.9; }
-:root[data-theme="bloom"] :is(.desktop-context,.media-context) { border-color:var(--th-border); padding-right:30px; }
-:root[data-theme="bloom"] :is(.desktop-context,.pairing-panel)::after { content:""; position:absolute; right:0; bottom:0; width:100px; height:78px; background:var(--th-art) right bottom/auto 100% no-repeat; opacity:.45; pointer-events:none; z-index:0; }
-:root[data-theme="bloom"] :is(.app-item,.media-item) { border-radius:10px; padding-inline:8px; }
+:root[data-theme="bloom"] { --th-radius:17px; --th-key-radius:12px; --th-pad-radius:25px; }
+:root[data-theme="bloom"] :is(.touch-surface,.laser-surface) { border:1px solid color-mix(in srgb,var(--th-border) 70%,transparent); }
+:root[data-theme="bloom"] :is(.trackpad-btn,.tool-btn,.native-key,.macro-btn,.shortcut-btn,.media-btn,.desktop-button) { background:var(--th-panel-a); border:1px solid var(--th-border); border-radius:12px 12px 7px 12px; box-shadow:inset 0 1px 0 color-mix(in srgb,#fff 22%,transparent); transition:transform .12s ease; }
+:root[data-theme="bloom"] :is(.trackpad-btn,.tool-btn,.native-key,.macro-btn,.shortcut-btn,.media-btn):active { transform:scale(.96); }
+:root[data-theme="bloom"] .nav-tab.active { border-radius:15px 15px 8px 8px; }
 :root[data-theme="bloom"] .app-monogram { border-radius:15px 15px 8px 15px; }
-:root[data-theme="bloom"] .laser-surface { background:var(--th-surface); border-style:solid; }
-:root[data-theme="bloom"] .typing-dock { background:var(--th-panel); border-color:var(--th-border); }
-:root[data-theme="bloom"] .desktop-panel { box-shadow:var(--th-shadow); }
-@keyframes th-bloom-light { 0%,100%{opacity:.25} 50%{opacity:.9} }
-@media(max-height:560px) { :root[data-theme="bloom"] .trackpad-hints { padding-bottom:10%; } :root[data-theme="bloom"] .touch-surface::before { opacity:.5; } }
-
-/* Leaves hug the key rim; the engraved face and every label stay clear. */
-:root[data-theme="bloom"] { --th-vine:#47724b; --th-leaf:#85a870; --th-petal:#eeb7c1; --th-blossom:#fff1d0; --th-lilac:#bca7dc; --th-pollen:#cd9840; }
-:root[data-theme="bloom"][data-appearance="dark"] { --th-vine:#93b684; --th-leaf:#608e64; --th-petal:#d991a3; --th-blossom:#e6d9ae; --th-lilac:#ad9ad1; }
-:root[data-theme="bloom"] :is(.native-key,.desktop-button,.trackpad-btn) { background:linear-gradient(160deg,color-mix(in srgb,var(--th-panel) 85%,white),var(--th-panel) 55%); border-radius:12px 12px 7px 12px; box-shadow:inset 0 1px 0 #ffffff35,0 3px 7px #264c291c; }
-:root[data-theme="bloom"] .native-key.held { background:var(--th-accent); }
-:root[data-theme="bloom"] .touch-surface::after { animation:none; }
-:root[data-theme="bloom"] .desktop-button:active { box-shadow:inset 0 2px 4px #193d282c; }
+:root[data-theme="bloom"] .trackpad-hints { text-shadow:0 0 12px var(--th-bg),0 0 3px var(--th-bg); }

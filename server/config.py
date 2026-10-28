@@ -27,7 +27,7 @@ DEFAULT_CONFIG = {
     "require_pin": False,
     "pin_code": "",
     "laser_color": "red",
-    "theme": "cyber",
+    "theme": "aurora",
     "haptics_enabled": True,
     "https_enabled": False,
     "https_port": 8766,
@@ -117,7 +117,7 @@ class ConfigManager:
         elif key == "laser_color":
             valid = isinstance(value, str) and value in ("red", "green", "blue", "amber")
         elif key == "theme":
-            valid = isinstance(value, str) and value in ("cyber", "oled", "matrix", "nordic", "light","bloom","resonance","companion","clay","glass","soft","ink")
+            valid = isinstance(value, str) and value in ("aurora","bloom","resonance","constellation","ink","cyber","oled","matrix","nordic","light","companion","clay","glass","soft")
         else:
             valid = isinstance(value, str) and 1 <= len(value.strip()) <= 100
         if not valid:

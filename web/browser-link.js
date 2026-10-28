@@ -22,7 +22,7 @@
       if(!/^[A-Za-z0-9_-]{43}$/.test(secret||'')||!/^[a-f0-9]{64}$/.test(pinned||''))throw Error('Scan the current PC QR.');
       if(!window.isSecureContext||!window.RTCPeerConnection||!crypto.subtle)throw Error('Use current Android Chrome over HTTPS.');
       const protocol=window.TouchHelmLocalTransport;
-      await Promise.all(['bloom','resonance','companion','clay','glass','soft','ink'].map(async id=>{const path='/themes/'+id+'.css';const response=await fetch(path,{cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('Could not prepare the phone interface.');gate.assets.set(path,URL.createObjectURL(new Blob([await response.text()],{type:'text/css'})));}));
+      await Promise.all(['aurora','bloom','resonance','constellation','ink'].map(async id=>{const path='/themes/'+id+'.css';const response=await fetch(path,{cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(15000)});if(!response.ok)throw Error('Could not prepare the phone interface.');gate.assets.set(path,URL.createObjectURL(new Blob([await response.text()],{type:'text/css'})));}));
       const response=await fetch('/api/browser-link/status',{cache:'no-store',credentials:'omit',signal:AbortSignal.timeout(15000)});
       if(!response.ok)throw Error('Pairing is unavailable.');
       const {nonce}=await response.json();if(!/^[A-Za-z0-9_-]{43}$/.test(nonce||''))throw Error('Invalid pairing challenge.');

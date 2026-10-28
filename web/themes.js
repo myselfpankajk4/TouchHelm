@@ -1,26 +1,28 @@
 /* Device-local presentation only. No sockets, configuration writes, or native effects. */
 (() => {
   'use strict';
+  /* Generative themes: each one is a live WebGL scene (theme-scenes.js) that reacts to touch, typing and playback. */
   const backgrounds={
-    bloom:{light:'#f2f5eb',dark:'#0e1e19'},resonance:{light:'#f7efe1',dark:'#211921'},
-    companion:{light:'#f2f0fb',dark:'#211b30'},clay:{light:'#f6ece7',dark:'#292025'},
-    glass:{light:'#eaf4f8',dark:'#0b1929'},soft:{light:'#eef3f6',dark:'#1b2631'},ink:{light:'#fafaf8',dark:'#101215'},
+    aurora:{light:'#eef5f7',dark:'#0b1220'},bloom:{light:'#f2f5eb',dark:'#0e1e19'},
+    resonance:{light:'#f6efe3',dark:'#130f1c'},constellation:{light:'#eef1fa',dark:'#070b16'},
+    ink:{light:'#fafaf8',dark:'#101215'},
   };
   const registry = Object.freeze(Object.fromEntries([
-    ['bloom','Bloom','A flowering woodland, alive with quiet light.','light','#27634f','#f1f4e9'],
-    ['resonance','Resonance','Vinyl, warm metal, and the rhythm of a record.','dark','#efb767','#231b24'],
-    ['companion','Companion','A friendly presence in pearl and violet.','light','#6553a5','#efedf8'],
-    ['clay','Clay','Sculpted controls with a soft, tactile finish.','light','#984137','#f5e9e4'],
-    ['glass','Glass','Clear layers, deep blue, and refracted light.','dark','#8cdef4','#0b1929'],
-    ['soft','Soft','Quiet blue surfaces and carefully measured space.','light','#355e86','#eaf0f5'],
+    ['aurora','Aurora','Ribbons of light that swirl where you touch.','dark','#34e0b4','#0b1220'],
+    ['bloom','Bloom','Every tap and keystroke grows a flower.','light','#f0728f','#f2f5eb'],
+    ['resonance','Resonance','Sound-etched patterns that tune to your pointer.','dark','#ffb454','#130f1c'],
+    ['constellation','Constellation','A drifting star network that links to your finger.','dark','#6a9bff','#070b16'],
     ['ink','Ink','Paper, precise lines, and uncompromising clarity.','light','#171b22','#fafaf8'],
   ].map(([id,label,description,appearance,accent,surface])=>[id,Object.freeze({id,label,description,appearance,accent,surface,backgrounds:Object.freeze(backgrounds[id]),stylesheet:`/themes/${id}.css`})])));
-  const legacy = {cyber:['glass','dark'],oled:['glass','dark'],matrix:['bloom','dark'],nordic:['soft','dark'],light:['clay','light']};
+  const legacy = {
+    cyber:['aurora','dark'],oled:['constellation','dark'],matrix:['bloom','dark'],nordic:['constellation','dark'],light:['aurora','light'],
+    glass:['aurora','dark'],soft:['constellation','light'],clay:['bloom','light'],companion:['resonance','light'],
+  };
   const read = key => {try{return window.localStorage.getItem(key);}catch(_){return null;}};
   const write = (key,value) => {try{window.localStorage.setItem(key,value);}catch(_){/* Private mode still permits a local theme. */}};
   const migrate = id => {
     if(Object.hasOwn(legacy,id))return {id:legacy[id][0],appearance:legacy[id][1]};
-    const selected=Object.hasOwn(registry,id)?registry[id]:registry.glass;
+    const selected=Object.hasOwn(registry,id)?registry[id]:registry.aurora;
     return {id:selected.id,appearance:selected.appearance};
   };
   const queries = {
@@ -33,8 +35,8 @@
   const assetURL=relative=>{const url=new URL(relative,source);if(version)url.searchParams.set('v',version);return url.pathname+url.search;};
   const root=document.documentElement,pickers=new Set();
   let interactionActive=false;
-  let state={...migrate(read('touchhelm_theme')||read('phonepad_theme')||'glass'),
-    appearance:read('touchhelm_appearance')||migrate(read('touchhelm_theme')||'glass').appearance,
+  let state={...migrate(read('touchhelm_theme')||read('phonepad_theme')||'aurora'),
+    appearance:read('touchhelm_appearance')||migrate(read('touchhelm_theme')||'aurora').appearance,
     effects:read('touchhelm_effects')||'rich',motion:read('touchhelm_motion')||'system',contrast:read('touchhelm_contrast')||'system'};
   let ready=Promise.resolve();
   const option=(value,values,fallback)=>values.includes(value)?value:fallback;
@@ -57,7 +59,7 @@
     const original=assetURL(`./themes/${id}.css`),href=window.TouchHelmBrowserLink?.staticURL?.(original)||original;
     if(active.getAttribute('href')===href||active.href===href)return;
     ready=new Promise(resolve=>{
-      active.onload=()=>resolve(true);
+      active.onload=()=>{resolve(true);window.TouchHelmEffects?.synchronize();};
       active.onerror=()=>{
         resolve(false);
         if(id!=='ink')apply('ink',state,false);
@@ -82,7 +84,7 @@
   function mountPicker(container,onSelect){
     if(!container)return ()=>{};
     const choices=node('div',null,'th-theme-choices'),buttons=[];
-    const heading=node('h3','Choose your material','th-picker-heading');
+    const heading=node('h3','Choose your theme','th-picker-heading');
     const choose=(id,prefs)=>{const selected=apply(id,prefs);onSelect?.(selected.id,{appearance:selected.appearance,motion:selected.motion,contrast:selected.contrast,effects:selected.effects});};
     for(const theme of Object.values(registry)){
       const button=node('button',null,'th-theme-choice');button.type='button';button.dataset.themeId=theme.id;

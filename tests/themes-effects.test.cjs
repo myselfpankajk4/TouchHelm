@@ -2,66 +2,86 @@ const {test}=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
-const file=path.join(__dirname,'../web/theme-effects.js');
-const runtime=()=>{assert.ok(fs.existsSync(file),'Shared living effects runtime must exist');return require(file);};
-test('actor budget recycles six touch slots and permits only two idle actors',()=>{
-  const {createDirector}=runtime();const d=createDirector();
-  const idle=[d.acquire('idle',0),d.acquire('idle',0),d.acquire('idle',0)];
-  assert.ok(idle[0]);assert.ok(idle[1]);assert.equal(idle[2],null);
-  const touches=Array.from({length:100},(_,i)=>d.acquire('touch',i));
-  assert.equal(d.snapshot().touch,6);assert.equal(d.snapshot().idle,2);
-  assert.equal(new Set(touches.map(s=>s.id)).size,6);
-  d.expire(10000);assert.equal(d.snapshot().touch,0);assert.equal(d.snapshot().idle,0);
-});
-test('interaction and scrolling suppress idle while local touch feedback remains available',()=>{
-  const {createDirector}=runtime();const d=createDirector();d.acquire('idle',0);
-  d.configure({active:true},50);assert.equal(d.snapshot().idle,0);assert.equal(d.acquire('idle',100),null);
-  assert.ok(d.acquire('touch',100));d.configure({active:false},150);
-  assert.equal(d.acquire('idle',900),null);assert.ok(d.acquire('idle',1400));
-});
-test('off and hidden clear actors; reduced motion has no idle spatial scene',()=>{
-  const {createDirector}=runtime();const d=createDirector();d.acquire('touch',0);
-  d.configure({hidden:true},10);assert.equal(d.snapshot().touch,0);assert.equal(d.acquire('touch',20),null);
-  d.configure({hidden:false,reduced:true},30);assert.equal(d.acquire('idle',2000),null);
-  assert.ok(d.acquire('touch',2000));assert.equal(d.snapshot().mode,'calm');
-  d.configure({mode:'off'},2001);assert.equal(d.acquire('touch',2002),null);assert.equal(d.snapshot().touch,0);
-});
-test('frame admission caps continuous pointer work at thirty updates per second',()=>{
-  const {createDirector}=runtime();const d=createDirector();let frames=0;
-  for(let time=0;time<1000;time++)if(d.frame(time))frames++;
-  assert.ok(frames<=30);assert.ok(frames>=28);
+const vm=require('node:vm');
+const web=file=>path.join(__dirname,'../web',file);
+const loadScenes=()=>{const sandbox={};sandbox.globalThis=sandbox;vm.runInNewContext(fs.readFileSync(web('theme-scenes.js'),'utf8'),sandbox);return sandbox.TouchHelmScenes;};
+const IDS=['aurora','bloom','resonance','constellation'];
+
+test('four generative scenes ship with light and dark fallback palettes',()=>{
+  const scenes=loadScenes();
+  assert.deepEqual([...scenes.ids],IDS);
+  for(const id of IDS)for(const appearance of ['light','dark']){
+    const palette=scenes.scenes[id].defaults[appearance];
+    for(const key of ['bg','a','b','c'])assert.match(palette[key],/^#[0-9a-f]{6}$/i,`${id} ${appearance} ${key}`);
+  }
 });
 
-test('browser DOM lifecycle keeps effects inert, bounded, private and cancellable',{skip:process.env.RUN_EFFECTS_DOM!=='1'},async()=>{
-  const {chromium}=require('D:/Mouse/node_modules/playwright');
-  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE||'C:/Program Files/Google/Chrome/Application/chrome.exe'});
-  try {
+test('scene fallback backgrounds match the theme stylesheets so the first frame never flashes',()=>{
+  const scenes=loadScenes();
+  for(const id of IDS){
+    const css=fs.readFileSync(web(`themes/${id}.css`),'utf8');
+    for(const appearance of ['light','dark']){
+      const block=css.match(new RegExp(`\\[data-appearance="${appearance}"\\] \\{([^}]+)\\}`))[1];
+      assert.equal(block.match(/--th-bg:\s*(#[0-9a-f]{6})/i)[1].toLowerCase(),scenes.scenes[id].defaults[appearance].bg.toLowerCase(),`${id} ${appearance}`);
+      for(const key of ['a','b','c'])assert.match(block,new RegExp(`--th-gl-${key}:\\s*#[0-9a-f]{6}`,'i'),`${id} ${appearance} --th-gl-${key}`);
+    }
+  }
+});
+
+test('fragment sources are complete, sized to the device uniform budget and reject unknown scenes',()=>{
+  const scenes=loadScenes();
+  assert.deepEqual([4,31,32,63,64,256].map(scenes.stampCount),[4,4,8,8,12,12]);
+  for(const id of IDS)for(const stamps of [4,8,12]){
+    const source=scenes.fragmentSource(id,stamps);
+    assert.ok(source.includes(`#define N ${stamps}`),`${id} stamp count`);
+    assert.ok(!source.includes('__N__'));
+    assert.match(source,/void main\s*\(/);
+    assert.equal(source.split('{').length,source.split('}').length,`${id} balanced braces`);
+  }
+  assert.equal(scenes.fragmentSource('nope',4),null);
+  assert.equal(scenes.fragmentSource('__proto__',4),null);
+});
+
+test('themes.js and the GL engine agree on which themes have a generative scene',()=>{
+  const scenes=loadScenes(),themes=fs.readFileSync(web('themes.js'),'utf8');
+  for(const id of scenes.ids)assert.ok(themes.includes(`${id}:`)||themes.includes(`'${id}'`),`${id} registered`);
+});
+
+test('the engine never reads typed text or touches the network',()=>{
+  const engine=fs.readFileSync(web('theme-gl.js'),'utf8');
+  assert.equal(/fetch\(|XMLHttpRequest|WebSocket|sendBeacon/.test(engine),false,'decoration must never touch the network');
+  assert.equal(/\.value\b/.test(engine),false,'inputs and textareas are never read');
+});
+
+test('browser: every scene compiles, reacts, pauses and tears down cleanly',{skip:process.env.RUN_EFFECTS_DOM!=='1'},async()=>{
+  const {chromium}=require(process.env.PLAYWRIGHT_MODULE||'D:/Mouse/node_modules/playwright');
+  const browser=await chromium.launch({headless:true,executablePath:process.env.CHROMIUM_EXECUTABLE||'C:/Program Files/Google/Chrome/Application/chrome.exe',args:['--use-angle=swiftshader','--enable-unsafe-swiftshader','--ignore-gpu-blocklist']});
+  try{
     const page=await browser.newPage({viewport:{width:390,height:844}}),errors=[];
     page.on('pageerror',error=>errors.push(error.message));
-    await page.setContent('<html data-theme="bloom" data-effects="rich" data-motion="full"><body><div class="touch-surface" style="position:absolute;left:15px;top:40px;width:360px;height:400px"></div><button class="native-key" style="position:absolute;left:30px;top:470px;width:90px;height:48px">Ctrl</button><textarea style="position:absolute;left:20px;top:550px">Private draft 9f7e</textarea><div data-effects-protect style="position:absolute;left:250px;top:470px;width:90px;height:90px">QR</div></body></html>');
-    await page.addStyleTag({path:path.join(__dirname,'../web/theme-effects.css')});
-    await page.addScriptTag({path:file});
-    await page.waitForFunction(()=>window.TouchHelmEffects.diagnostics.idle>0);
-    const first=await page.evaluate(()=>({d:TouchHelmEffects.diagnostics,aria:document.querySelector('.th-effects-stage').getAttribute('aria-hidden'),events:getComputedStyle(document.querySelector('.th-effects-stage')).pointerEvents}));
-    assert.ok(first.d.idle<=2);assert.equal(first.aria,'true');assert.equal(first.events,'none');
-    await page.evaluate(()=>{const button=document.querySelector('button');for(let i=0;i<100;i++)TouchHelmEffects.react(button,{kind:'key'});});
-    assert.equal(await page.locator('.th-effect:not([hidden])[data-kind="touch"]').count(),6);
-    assert.equal(await page.locator('.th-effect').count(),8);
-    const input=await page.evaluate(()=>{let calls=0;document.addEventListener('pointerdown',()=>calls++);const b=document.querySelector('button'),event=new PointerEvent('pointerdown',{bubbles:true,pointerId:4,cancelable:true});b.dispatchEvent(event);document.querySelector('textarea').dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,key:'x'}));return {calls,prevented:event.defaultPrevented,d:TouchHelmEffects.diagnostics,text:document.querySelector('.th-effects-stage').textContent};});
-    assert.equal(input.calls,1);assert.equal(input.prevented,false);assert.equal(input.d.idle,0);assert.equal(input.d.touch,6);assert.equal(input.text,'');
-    await page.evaluate(()=>{document.dispatchEvent(new PointerEvent('pointerup',{bubbles:true,pointerId:4}));document.documentElement.dataset.effects='off';TouchHelmEffects.synchronize();});
-    assert.equal(await page.locator('.th-effect:not([hidden])').count(),0);
-    assert.equal(await page.evaluate(()=>TouchHelmEffects.diagnostics.scheduled),false);
-    for(const theme of ['bloom','companion','resonance','clay']){
-      await page.evaluate(theme=>{const r=document.documentElement;r.dataset.theme=theme;r.dataset.effects='rich';TouchHelmEffects.synchronize();TouchHelmEffects.react(document.querySelector('button'),{kind:'key'});},theme);
-      assert.equal(await page.locator(`.th-effect-${theme}:not([hidden]) svg`).count(),1);
+    page.on('console',message=>{if(message.type()==='error')errors.push(message.text());});
+    await page.setContent('<html data-theme="aurora" data-appearance="dark" data-effects="rich" data-motion="full"><body><div class="touch-surface" style="position:absolute;left:15px;top:40px;width:360px;height:400px"></div><button class="native-key" style="position:absolute;left:30px;top:470px;width:90px;height:48px">Ctrl</button><textarea style="position:absolute;left:20px;top:550px">Private draft 9f7e</textarea></body></html>');
+    await page.addStyleTag({path:web('themes.css')});await page.addStyleTag({path:web('theme-gl.css')});
+    for(const id of IDS)await page.addStyleTag({content:fs.readFileSync(web(`themes/${id}.css`),'utf8').replace(/\[data-appearance/g,`[data-theme="${id}"][data-appearance`)});
+    await page.addScriptTag({path:web('theme-scenes.js')});await page.addScriptTag({path:web('theme-gl.js')});
+    await page.waitForFunction(()=>window.TouchHelmEffects&&document.documentElement.dataset.gl);
+    assert.equal(await page.evaluate(()=>document.documentElement.dataset.gl),'on','WebGL must be available for this check');
+    for(const id of IDS)for(const appearance of ['dark','light']){
+      await page.evaluate(({id,appearance})=>{const r=document.documentElement;r.dataset.theme=id;r.dataset.appearance=appearance;TouchHelmEffects.synchronize();},{id,appearance});
+      await page.waitForFunction(id=>TouchHelmEffects.diagnostics.scene===id,id);
+      assert.equal(await page.evaluate(()=>TouchHelmEffects.react(document.querySelector('button'),{kind:'key'})),true,`${id} ${appearance} reacts`);
+      await page.waitForTimeout(120);
+      assert.equal(await page.evaluate(()=>document.documentElement.dataset.gl),'on',`${id} ${appearance} keeps rendering`);
     }
-    await page.evaluate(()=>{document.documentElement.dataset.motion='reduced';TouchHelmEffects.synchronize();});
-    assert.equal(await page.evaluate(()=>TouchHelmEffects.diagnostics.mode),'calm');
-    assert.equal(await page.locator('.th-effect:not([hidden])[data-kind="idle"]').count(),0);
-    await page.evaluate(()=>{Object.defineProperty(document,'hidden',{configurable:true,value:true});document.dispatchEvent(new Event('visibilitychange'));});
-    assert.equal(await page.locator('.th-effect:not([hidden])').count(),0);assert.equal(await page.evaluate(()=>TouchHelmEffects.diagnostics.scheduled),false);
-    await page.evaluate(()=>TouchHelmEffects.destroy());assert.equal(await page.locator('.th-effects-stage').count(),0);
+    const text=await page.evaluate(()=>{document.querySelector('textarea').dispatchEvent(new KeyboardEvent('keydown',{bubbles:true,key:'x'}));return document.getElementById('th-gl').textContent;});
+    assert.equal(text,'');
+    await page.evaluate(()=>{document.documentElement.dataset.effects='off';TouchHelmEffects.synchronize();});
+    assert.equal(await page.evaluate(()=>document.documentElement.dataset.gl),'off');
+    assert.equal(await page.evaluate(()=>TouchHelmEffects.diagnostics.scheduled),false);
+    await page.evaluate(()=>{document.documentElement.dataset.effects='rich';document.documentElement.dataset.motion='reduced';TouchHelmEffects.synchronize();});
+    assert.equal(await page.evaluate(()=>TouchHelmEffects.diagnostics.frozen),true,'reduced motion renders one frozen frame');
+    await page.evaluate(()=>TouchHelmEffects.destroy());
+    assert.equal(await page.locator('#th-gl').count(),0);
     assert.deepEqual(errors,[]);
-  } finally { await browser.close(); }
+  }finally{await browser.close();}
 });

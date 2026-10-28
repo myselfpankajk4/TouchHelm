@@ -209,7 +209,7 @@ test('local settings need no certificate/handoff and preserve the draft and them
   await page.evaluate(()=>{window.touchhelm.authPin='5678';window.touchhelm.typeInput.value='keep\nthis';});
   await page.locator('#btnSettings').click();assert.equal(await page.locator('#btnSecurePairing').isVisible(),false);
   assert.match(await page.locator('#secureCapabilities').innerText(),/local Wi-Fi/i);
-  assert.deepEqual(pairing,[]);assert.equal(await page.evaluate(()=>TouchHelmThemes.state.id),'glass');
+  assert.deepEqual(pairing,[]);assert.equal(await page.evaluate(()=>TouchHelmThemes.state.id),'aurora');
   assert.equal(await page.locator('#typeInput').inputValue(),'keep\nthis');
 });
 test('living Presenter navigation never overlaps monitor controls at narrow sizes',async page=>{
@@ -273,9 +273,9 @@ test('living scrub cancellation sends nothing and rejected seeking restores actu
 });
 
 test('living real pad permits peripheral reactions while keeping labels and input intact',async page=>{
-  await page.evaluate(async()=>{TouchHelmThemes.apply('companion',{effects:'rich',motion:'system'},false);await TouchHelmThemes.ready;});
-  const result=await page.evaluate(()=>{const c=touchhelm,source=document.getElementById('touchSurface');TouchHelmEffects.synchronize();const accepted=TouchHelmEffects.react(source,{kind:'press',x:40,y:550});return {accepted,scenes:document.querySelectorAll('.th-effect-scene:not([hidden])').length,events:getComputedStyle(document.querySelector('.th-effects-stage')).pointerEvents};});
-  assert.equal(result.accepted,true);assert.ok(result.scenes>0);assert.equal(result.events,'none');assert.deepEqual(await packets(page),[]);
+  await page.evaluate(async()=>{TouchHelmThemes.apply('aurora',{effects:'rich',motion:'system'},false);await TouchHelmThemes.ready;});
+  const result=await page.evaluate(()=>{const source=document.getElementById('touchSurface');TouchHelmEffects.synchronize();const accepted=TouchHelmEffects.react(source,{kind:'press',x:40,y:550});const canvas=document.getElementById('th-gl');return {accepted,gl:document.documentElement.dataset.gl,events:getComputedStyle(canvas).pointerEvents,hidden:canvas.getAttribute('aria-hidden')};});
+  assert.equal(result.gl,'on');assert.equal(result.accepted,true);assert.equal(result.events,'none');assert.equal(result.hidden,'true');assert.deepEqual(await packets(page),[]);
 });
 test('living artwork decodes authenticated bytes, reuses valid art, and clears changed media',async page=>{
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jmk0AAAAASUVORK5CYII=','base64');let reads=0;
@@ -390,10 +390,10 @@ test('navigation exposes selected tabs and keyboard theme choices are native con
     assert.ok(await page.locator(`#${view}`).isVisible());
   }
   await openTheme(page);
-  const choice = page.locator('.th-theme-choice[data-theme-id="clay"]');
+  const choice = page.locator('.th-theme-choice[data-theme-id="constellation"]');
   assert.equal(await choice.evaluate(el => el.tagName), 'BUTTON');
   await choice.focus(); await page.keyboard.press('Space');
-  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'clay');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'constellation');
   assert.equal(await choice.getAttribute('aria-pressed'), 'true');
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#themeModal').isVisible(), false);
@@ -620,7 +620,7 @@ test('offline Send preserves drafts and Return still creates a local newline', a
 test('startup reads server settings without posting phone defaults', async page => {
   assert.deepEqual(posts, [], 'startup must not write /api/config');
   assert.equal(await page.evaluate(() => window.touchhelm.sensitivity), serverConfig.mouse_sensitivity);
-  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'glass', 'host settings do not replace the device theme');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'aurora', 'host settings do not replace the device theme');
 });
 
 test('stale socket callbacks cannot mark a newer socket offline or reconnect it', async page => {
@@ -678,7 +678,7 @@ test('server config broadcasts update UI without writing settings back', async p
   })}));
   assert.equal(await page.evaluate(() => window.touchhelm.sensitivity), 1.7);
   assert.equal(await page.locator('#sliderSensitivity').inputValue(), '1.7');
-  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'glass', 'another device cannot restyle this phone');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'aurora', 'another device cannot restyle this phone');
   assert.deepEqual(posts, []);
 });
 
@@ -971,7 +971,7 @@ for (const [width, height] of [[360, 640], [390, 844], [844, 390], [320, 568], [
 
 test('all seven themes keep control text readable on every remote view and settings dialog', async page => {
   const issues = [];
-  for (const theme of ['bloom', 'resonance', 'companion', 'clay', 'glass', 'soft', 'ink']) {
+  for (const theme of ['aurora', 'bloom', 'resonance', 'constellation', 'ink']) {
     for(const appearance of ['light','dark']) {
     await openTheme(page);
     await page.locator(`.th-theme-choice[data-theme-id="${theme}"]`).click();
@@ -994,7 +994,7 @@ test('all seven themes keep control text readable on every remote view and setti
 }, true);
 
 test('living visual matrix covers every theme, appearance, phone size and desktop panel',async(page,context)=>{
-  const issues=[],themes=['bloom','companion','resonance','clay','glass','soft','ink'];
+  const issues=[],themes=['aurora','bloom','resonance','constellation','ink'];
   await page.goto(origin+'/index.html?preview=1');
   await page.waitForFunction(()=>window.touchhelm?.isConnected&&window.TouchHelmEffects);
   const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
@@ -1034,11 +1034,11 @@ test('living visual matrix covers every theme, appearance, phone size and deskto
         if(width===1280&&panel==='pairing')await screenshot(desktop,`living-${theme}-${appearance}-desktop`);
       }
     }
-    if(['bloom','companion','resonance','clay'].includes(theme)&&appearance==='dark'){
+    if(['aurora','bloom','resonance','constellation'].includes(theme)&&appearance==='dark'){
       await page.bringToFront();
       await page.setViewportSize({width:390,height:844});await page.locator('#tabTrackpad').click();
       await page.evaluate(()=>{TouchHelmThemes.apply(TouchHelmThemes.state.id,{effects:'rich',motion:'system'},false);TouchHelmEffects.reset();});
-      await page.waitForFunction(()=>TouchHelmEffects.diagnostics.idle>0,{timeout:4000});
+      await page.waitForFunction(()=>TouchHelmEffects.diagnostics.running,{timeout:4000});
       await page.waitForTimeout(900);
       if(captureScreenshots){fs.mkdirSync(artifactDir,{recursive:true});await page.screenshot({path:path.join(artifactDir,`living-${theme}-idle.png`)});}
       await page.evaluate(()=>TouchHelmEffects.react(document.querySelector('#btnLeftClick'),{kind:'press'}));
@@ -1213,14 +1213,19 @@ test('Phone Return twice remains a draft and uses safe PC line breaks',async pag
   assert.ok(packets.filter(p=>p.type==='text'&&p.text.includes('\n')).every(p=>p.newline_mode==='shift_enter'));
 });
 
-test('Existing seven themes generate bounded procedural reactions without background photos',async page=>{
-  for(const theme of ['bloom','companion','resonance','clay','glass','soft','ink']){
-    await page.evaluate(async theme=>{touchhelm.switchView('viewTrackpad');TouchHelmThemes.apply(theme,{appearance:'dark',effects:'rich',motion:'full'},false);await TouchHelmThemes.ready;TouchHelmEffects.reset();},theme);
-    await page.waitForFunction(theme=>TouchHelmEffects.diagnostics.theme===theme,theme);
-    assert.equal(await page.evaluate(()=>TouchHelmEffects.react(document.querySelector('#btnLeftClick'),{kind:'press'})),true);
-    const info=await page.evaluate(()=>({count:document.querySelectorAll('.th-effect:not([hidden])').length,procedural:TouchHelmEffects.diagnostics.procedural,background:getComputedStyle(touchSurface,'::before').backgroundImage}));
-    assert.ok(info.count>0&&info.count<=8);assert.equal(info.procedural,true);assert.equal(info.background.includes('.webp'),false);
+test('Generative themes render a bounded WebGL backdrop and Ink stays plain',async page=>{
+  for(const theme of ['aurora','bloom','resonance','constellation']){
+    for(const appearance of ['dark','light']){
+      await page.evaluate(async({theme,appearance})=>{touchhelm.switchView('viewTrackpad');TouchHelmThemes.apply(theme,{appearance,effects:'rich',motion:'full'},false);await TouchHelmThemes.ready;TouchHelmEffects.reset();},{theme,appearance});
+      await page.waitForFunction(theme=>TouchHelmEffects.diagnostics.scene===theme,theme);
+      assert.equal(await page.evaluate(()=>TouchHelmEffects.react(document.querySelector('#btnLeftClick'),{kind:'press'})),true,`${theme} ${appearance} reacts`);
+      const info=await page.evaluate(()=>({d:TouchHelmEffects.diagnostics,gl:document.documentElement.dataset.gl,background:getComputedStyle(touchSurface,'::before').backgroundImage}));
+      assert.equal(info.gl,'on');assert.ok(info.d.stamps>0&&info.d.stamps<=info.d.stampSlots);assert.ok(info.d.width*info.d.height<=600000);assert.equal(info.background.includes('.webp'),false);
+    }
   }
+  await page.evaluate(async()=>{TouchHelmThemes.apply('ink',{appearance:'dark',effects:'rich',motion:'full'},false);await TouchHelmThemes.ready;TouchHelmEffects.synchronize();});
+  assert.equal(await page.evaluate(()=>document.documentElement.dataset.gl),'off');
+  assert.equal(await page.evaluate(()=>TouchHelmEffects.diagnostics.scheduled),false);
 });
 
 test('Remote view mode cannot send input and direct coordinates stay scoped',async page=>{
@@ -1478,14 +1483,14 @@ test('Clear clears the linked PC field without the next snapshot restoring its t
 test('Text sync and pairing guides visual inspection',async(page,context)=>{
   const issues=[],desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
   await desktop.waitForFunction(()=>window.TouchHelmDesktopPreview);
-  for(const theme of ['bloom','companion','resonance','clay','glass','soft','ink'])for(const appearance of ['light','dark']){
+  for(const theme of ['aurora','bloom','resonance','constellation','ink'])for(const appearance of ['light','dark']){
     await page.bringToFront();
     await page.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off'},false);await TouchHelmThemes.ready;},{theme,appearance});
     for(const [width,height]of [[320,568],[360,640],[390,844],[844,390],[390,420]]){
       await page.setViewportSize({width,height});await page.locator('#typeInput').focus();
       await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'sample',revision:'r1',text:'Sample PC text\nContinued on the phone',editable:true}));
       issues.push(...await inspectUsability(page,`${theme}/${appearance}/${width}x${height}/sync`));
-      if(theme==='glass'&&appearance==='dark'&&width===390&&height===844)await screenshot(page,'text-sync-phone');
+      if(theme==='aurora'&&appearance==='dark'&&width===390&&height===844)await screenshot(page,'text-sync-phone');
     }
     await desktop.bringToFront();
     await desktop.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off'},false);await TouchHelmThemes.ready;},{theme,appearance});
@@ -1500,7 +1505,7 @@ test('Text sync and pairing guides visual inspection',async(page,context)=>{
         }
         return errors;
       });issues.push(...errors.map(x=>`${theme}/${appearance}/desktop${width}/${mode}: ${x}`));
-      if(theme==='glass'&&appearance==='dark'&&width===1280)await screenshot(desktop,`pairing-guide-${mode}`);
+      if(theme==='aurora'&&appearance==='dark'&&width===1280)await screenshot(desktop,`pairing-guide-${mode}`);
     }
   }
   await desktop.close();assert.deepEqual(issues,[]);
@@ -1812,7 +1817,7 @@ test('AirControl theme and desktop scaling visual matrix',async(page,context)=>{
   const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
   await desktop.waitForFunction(()=>window.TouchHelmAir);
   const issues=[];
-  for(const theme of ['bloom','companion','resonance','clay','glass','soft','ink'])for(const appearance of ['light','dark']){
+  for(const theme of ['aurora','bloom','resonance','constellation','ink'])for(const appearance of ['light','dark']){
     await desktop.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off',motion:'reduced'},false);await TouchHelmThemes.ready;},{theme,appearance});
     for(const [width,height]of [[820,620],[1120,800],[1440,900]]){
       await desktop.setViewportSize({width,height});
@@ -1831,7 +1836,7 @@ test('AirControl theme and desktop scaling visual matrix',async(page,context)=>{
             }
             return result;
           });issues.push(...errors.map(x=>`${theme}/${appearance}/${width}/${tab}: ${x}`));
-          if(theme==='glass'&&appearance==='dark'&&width===1120)await screenshot(desktop,'aircontrol-'+tab);
+          if(theme==='aurora'&&appearance==='dark'&&width===1120)await screenshot(desktop,'aircontrol-'+tab);
         }
       }
     }
@@ -1863,7 +1868,7 @@ test('AirControl accessibility covers session states and all theme appearances',
     await desktop.evaluate(state=>{TouchHelmAir.setPreview(state);TouchHelmAir.tab('controls');},state);await scan(state);
   }
   await desktop.evaluate(()=>{TouchHelmAir.setPreview('active');TouchHelmAir.render({...TouchHelmAir.state,head_scroll:true});});await scan('scrolling');
-  for(const theme of ['bloom','companion','resonance','clay','glass','soft','ink'])for(const appearance of ['light','dark']){
+  for(const theme of ['aurora','bloom','resonance','constellation','ink'])for(const appearance of ['light','dark']){
     await desktop.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off'},false);await TouchHelmThemes.ready;TouchHelmAir.setPreview('practicing');TouchHelmAir.tab('practice');},{theme,appearance});
     await scan(theme+'/'+appearance);
   }
@@ -1881,7 +1886,7 @@ test('AirControl accessibility covers session states and all theme appearances',
   try {
     const executablePath = process.env.CHROMIUM_EXECUTABLE ||
       (fs.existsSync(chromium.executablePath()) ? chromium.executablePath() : 'C:/Program Files/Google/Chrome/Application/chrome.exe');
-    browser = await chromium.launch({executablePath, headless: true});
+    browser = await chromium.launch({executablePath, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']});
     for (const {name, run} of selectedTests) {
       posts.length = 0;
       let context;

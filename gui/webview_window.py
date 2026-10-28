@@ -23,7 +23,7 @@ from server.tailscale_pairing import HELP_URLS
 
 ROOT = Path(__file__).resolve().parents[1]
 GUI_WEB = ROOT / 'gui' / 'web'
-THEMES = {'bloom', 'resonance', 'companion', 'clay', 'glass', 'soft', 'ink'}
+THEMES = {'aurora', 'bloom', 'resonance', 'constellation', 'ink', 'companion', 'clay', 'glass', 'soft'}
 
 
 def preview_state():
@@ -41,7 +41,7 @@ def preview_state():
                     'certificate': {}, 'setup_url': url,
                     'preview_trusted_qr':'data:image/png;base64,'+base64.b64encode(trusted_output.getvalue()).decode(),
                     'tailscale':{'state':'not_installed','ready':False,'url':None,'message':'Preview: install Tailscale on Windows and Android, then sign in to the same tailnet.'}},
-        'preferences': {'theme': 'glass', 'appearance': 'dark', 'motion': 'system', 'contrast': 'system','effects':'rich','connection_mode':'http'},
+        'preferences': {'theme': 'aurora', 'appearance': 'dark', 'motion': 'system', 'contrast': 'system','effects':'rich','connection_mode':'http'},
         'diagnostics': {'engine': 'EdgeChromium / WebView2', 'python': 'Preview', 'build': 'Sample build',
                         'source': 'Sample workspace', 'host': '192.168.1.25', 'http_port': 8765,
                         'https_port': 8766, 'certificate_trust': 'Manual installation only'}}
@@ -71,7 +71,7 @@ class DesktopAssetServer:
             return None
         if relative in ('index.html', 'desktop.css', 'desktop.js','aircontrol.js','aircontrol.css','aircontrol-view.js'):
             return GUI_WEB / relative
-        if relative in ('themes.js', 'themes.css', 'theme-effects.js', 'theme-effects.css'):
+        if relative in ('themes.js', 'themes.css', 'theme-scenes.js', 'theme-gl.js', 'theme-gl.css'):
             return ROOT / 'web' / relative
         if relative.startswith(('themes/', 'assets/', 'icons/')) and Path(relative).suffix.lower() in ('.css', '.svg', '.png', '.webp', '.jpg', '.woff2'):
             candidate = (ROOT / 'web' / relative).resolve()
@@ -359,7 +359,7 @@ class WebViewDesktopApp:
                 return preferences
             return {'connection_mode':'http'}
         except (OSError, ValueError):
-            return {'theme': self.config.get('theme', 'glass'), 'appearance': 'system', 'motion': 'system', 'contrast': 'system','connection_mode':'http'}
+            return {'theme': self.config.get('theme', 'aurora'), 'appearance': 'system', 'motion': 'system', 'contrast': 'system','connection_mode':'http'}
 
     def _save_preferences(self, preferences):
         import os

@@ -6,7 +6,7 @@
   #error OutputDir is required
 #endif
 #ifndef OutputName
-  #define OutputName "TouchHelm-2.2.0-test10-setup-win-x64"
+  #define OutputName "TouchHelm-2.2.0-test11-setup-win-x64"
 #endif
 
 [Setup]
@@ -51,6 +51,16 @@ Name: desktopicon; Description: "Create a desktop shortcut"; Flags: checkedonce
 
 [Files]
 Source: "{#StageDir}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdirs createallsubdirs
+
+[InstallDelete]
+Type: files; Name: "{app}\app\web\theme-effects.css"
+Type: files; Name: "{app}\app\web\theme-effects.js"
+Type: files; Name: "{app}\app\web\themes\clay.css"
+Type: files; Name: "{app}\app\web\themes\companion.css"
+Type: files; Name: "{app}\app\web\themes\glass.css"
+Type: files; Name: "{app}\app\web\themes\soft.css"
+Type: filesandordirs; Name: "{app}\app\web\themes\assets"
+Type: filesandordirs; Name: "{app}\app\assets\theme"
 
 [Icons]
 Name: "{userprograms}\TouchHelm"; Filename: "{app}\TouchHelm.exe"; WorkingDir: "{app}"; AppUserModelID: "TouchHelm.Desktop"
