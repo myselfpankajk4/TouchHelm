@@ -4,6 +4,31 @@ from av import VideoFrame
 from server.remote_service import private_sdp
 
 
+class GeneratedCapture:
+    """Native capture boundary substitute for the real MediaWorker test."""
+    def __init__(self,display,quality):self.display=display;self.quality=quality;self.counter=0;self.opened=False
+    def open(self):self.opened=True
+    def frame(self):
+        if not self.opened:raise RuntimeError('Capture opened before local route validation')
+        import numpy as np
+        self.counter+=1;return np.full((360,640,3),60+self.counter%100,dtype=np.uint8)
+    def cursor(self):return {'visible':False}
+    def configure(self,display,quality):self.display=display;self.quality=quality
+    def close(self):self.opened=False
+
+
+class GeneratedAudio:
+    def __init__(self,on_state,ready=None):
+        self.stream=None;self.device=None
+        class Track(AudioStreamTrack):
+            async def recv(self):
+                if ready:await ready.wait()
+                return await super().recv()
+        self.track=Track()
+    def enable(self,value):self.stream=object() if value else None
+    def close(self):self.stream=None
+
+
 class GeneratedVideo(VideoStreamTrack):
     def __init__(self):super().__init__();self.counter=0
     async def recv(self):

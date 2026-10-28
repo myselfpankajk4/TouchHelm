@@ -100,6 +100,7 @@ class TouchHelmClient {
     if (window.TouchHelmExperience) this.experience = new window.TouchHelmExperience(this);
     if (window.TouchHelmRemote) this.remote = new window.TouchHelmRemote(this);
     if (window.TouchHelmTextSync) this.textSync = new window.TouchHelmTextSync(this);
+    if (window.TouchHelmFiles) this.files = new window.TouchHelmFiles(this);
     this.connect();
     this.initPwa();
     this.fetchServerConfig();
@@ -461,6 +462,7 @@ class TouchHelmClient {
             return;
           }
           this.isConnected = true;
+          this.files?.connected(msg.config);
           this.setInputOwner(msg.input_owner||'phone');
           this.textSync?.connected(true);
           try { if(this.authPin)sessionStorage.setItem(`touchhelm_pairing_${this.host}`,this.authPin); } catch {}
@@ -478,15 +480,21 @@ class TouchHelmClient {
           if ('brightness' in msg) {
             this.onBrightnessSync(msg.brightness);
           }
+        } else if (msg.type === 'files_ticket') {
+          this.files?.acceptTicket(msg.ticket);
+        } else if (msg.type === 'files_download') {
+          this.files?.downloadUpdate(msg);
         } else if (msg.type === 'input_owner') {
           this.setInputOwner(msg.owner);
         } else if (msg.type === "auth_required") {
+          this.files?.disconnected();
           this.remote?.connected(false);
           this.releaseDragLock();
           this.isConnected = false;
           this.stopPing();
           if(this.authPin){if(!this.authPending)this.authenticate();}else this.showPin();
         } else if (msg.type === "config_sync") {
+          if(msg.config)this.files?.configure(msg.config);
           if (msg.config) this.applyServerConfig(msg.config);
           this.remote?.query();
         } else if (msg.type.startsWith('remote_')) {
@@ -513,6 +521,7 @@ class TouchHelmClient {
     };
 
     socket.onclose = () => {
+      this.files?.disconnected();
       if (this.ws !== socket) return;
       this.isConnected = false;
       this.stopPing();
@@ -1044,6 +1053,7 @@ class TouchHelmClient {
   }
 
   switchView(viewId) {
+    this.files?.onView(viewId);
     this.textSync?.onView(viewId);
     this.remote?.onView(viewId);
     window.TouchHelmEffects?.reset?.();
@@ -1055,6 +1065,7 @@ class TouchHelmClient {
       const selected = tab.getAttribute("data-view") === viewId;
       tab.classList.toggle("active", selected);
       tab.setAttribute("aria-selected", String(selected));
+      if(selected)tab.scrollIntoView?.({block:'nearest',inline:'nearest'});
     });
     this.views.forEach((v) => {
       v.classList.toggle("active", v.id === viewId);

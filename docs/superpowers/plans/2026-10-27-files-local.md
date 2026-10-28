@@ -60,7 +60,7 @@ Files: modify `server/web_server.py`, `server/remote_service.py`, `server/remote
 
 ## Task 4: Files browser UI
 
-Files: create `web/files.js`, `web/files.css`, local `web/icons/files/*.svg`; modify `web/index.html`, `web/app.js`, `web/experience.js`, `web/sw.js`; tests `tests/files_logic.test.cjs`, browser tests.
+Files: create `web/files.js`, `web/files.css`, local `web/icons/files/*.svg`; modify `web/index.html`, `web/app.js`, `web/experience.js`, `web/sw.js`; tests use the real browser fixture rather than implementation-mirroring helper tests.
 
 - [ ] Add failing UI tests for tab/auth session, quick folders/drives/breadcrumbs, search/sort/pages, selection/Receive, destination picker/new folder, progress/cancel/retry, preview/download fallback and browser Back.
 - [ ] Observe red; build approved image direction with semantic controls, safe text rendering, sculpted authored icons, all theme tokens, 320/393/wide layouts. Use native video/audio/iframe PDF and bounded HTTP upload chunks; never whole-file buffers.

@@ -1,5 +1,17 @@
 # TouchHelm product context
 
+Current Test 8: local Wi-Fi only, including first page load and pairing. Seven
+phone tabs are Trackpad, Files, Presenter, Media, Keyboard, Apps and Remote.
+Files provides local drive/known-folder browsing, supported browser previews,
+Send to PC with an explicit destination and Receive through Chrome downloads.
+A separate, initially-off PC File access permission and PIN are required.
+Transfers are bounded, cancellable, revoke with the live client, and never
+overwrite existing files. The normal app no longer starts public browser links
+or Tailscale/manual-CA setup. Ordinary controls/files use local HTTP; screen/audio
+use direct encrypted WebRTC with verified local peers. Air Mouse and automatic
+screen-awake are hidden. See docs/LOCAL_WIFI.md and docs/FILES_LOCAL_VERIFICATION.md.
+The earlier release notes below describe the evolution of the retained modules.
+
 TouchHelm lets a person use a phone browser as a Windows remote. Primary tasks are pairing, pointer movement, typing, presentation/media controls, native key chords and registered apps. Python owns the server and WebView2 desktop shell, with a Tk rollback option. The phone uses plain HTML/CSS/JavaScript served by aiohttp.
 
 The phone is typically held in one hand while attention stays on the PC or presentation. Keep movement space large, commands easy to reach, and context readable at a glance. The desktop's first task is pairing: QR code, address, copy/open actions, and security state belong together. Device status and activity support that task without replacing it.

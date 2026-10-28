@@ -17,11 +17,10 @@
       id('chkPinchZoom').addEventListener('change',e=>{client.pinchZoom=e.target.checked;save('touchhelm_pinch',client.pinchZoom);});
       id('btnTestHaptics').addEventListener('click',()=>{this.haptics.test();id('hapticsStatus').textContent=this.haptics.description();});
       id('btnCalibrateGyro').addEventListener('click',()=>{client.lastOrientation=null;client.showFeedback('Air mouse centered. Keep your phone in its neutral position.','info','gyro');});
-      const secure=window.isSecureContext;
-      id('secureCapabilities').textContent=secure?'Secure browser connection. Keep-awake and motion still need browser permission.':'Trusted HTTPS enables secure browser features such as keep-awake and motion.';
-      id('btnSecurePairing').addEventListener('click',()=>this.secureSetup());
+      id('secureCapabilities').textContent='Everything connects over local Wi-Fi. To keep using the remote longer, adjust your phone’s screen timeout.';
+      for(const name of ['btnGyro','btnCalibrateGyro','btnWakeLock','btnSecurePairing','securePairingGuide'])if(id(name))id(name).hidden=true;
       if(window.TouchHelmThemes){const picker=id('themePicker')||document.querySelector('.theme-grid');if(picker)window.TouchHelmThemes.mountPicker(picker,(theme)=>{client.currentTheme=theme;this.cacheTheme();client.vibrate(22);});}
-      navigator.serviceWorker?.ready.then(()=>this.cacheTheme()).catch(()=>{});
+      if(window.isSecureContext)navigator.serviceWorker?.ready.then(()=>this.cacheTheme()).catch(()=>{});
       this.bindMedia();this.bindPresentation();this.bindApps();this.bindChords();
       this.controls?.drawApps();
       this.playbackFrame=setInterval(()=>this.tickMedia(),500);

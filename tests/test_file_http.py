@@ -100,3 +100,66 @@ class FileHTTPTests(unittest.IsolatedAsyncioTestCase):
         self.assertEqual(response.status,401)
         response=await self.http.get('/api/files/locations',headers={'Host':'evil.example'})
         self.assertEqual(response.status,403)
+
+    async def test_revoked_session_object_cannot_reactivate_when_access_returns(self):
+        session=next(iter(self.files.sessions.values()))
+        self.files.revoke(self.client)
+        self.assertFalse(self.files._valid(session))
+
+    async def test_slow_folder_request_cannot_create_after_native_revocation(self):
+        import asyncio
+        location,_=await self.entry('movie.mp4');entered=asyncio.Event();release=asyncio.Event()
+        original=self.files._json
+        async def body(request,*args):
+            value=await original(request,*args);entered.set();await release.wait();return value
+        self.files._json=body
+        request=asyncio.create_task(self.http.post('/api/files/folders',json={'parent':location,'name':'Revoked folder'},headers=self.headers))
+        await entered.wait();self.config['files_enabled']=False;self.files.revoke(self.client);release.set()
+        response=await request;self.assertIn(response.status,(401,403));self.assertFalse((self.disk/'Revoked folder').exists())
+
+    async def test_http_download_interruption_is_reported_on_live_control_socket(self):
+        import asyncio
+        from unittest.mock import AsyncMock
+        self.client.ws.send_json=AsyncMock()
+        with (self.disk/'large.bin').open('wb') as stream:stream.truncate(16*1024**2)
+        _,entry=await self.entry('large.bin')
+        response=await self.http.get('/api/files/content/'+entry['id'],params={'download':'1','transfer':'b'*24})
+        await response.content.readexactly(1000);response.close()
+        for _ in range(50):
+            if any(call.args[0].get('state')=='interrupted' for call in self.client.ws.send_json.call_args_list):break
+            await asyncio.sleep(.01)
+        self.assertTrue(any(call.args[0].get('state')=='interrupted' for call in self.client.ws.send_json.call_args_list))
+
+    async def test_revocation_during_disk_read_does_not_send_the_completed_chunk(self):
+        import asyncio
+        from aiohttp import ClientPayloadError,ClientConnectionError
+        _,entry=await self.entry('movie.mp4');entered=asyncio.Event();release=asyncio.Event();original=self.files.io
+        async def delayed(function,*args,**kwargs):
+            result=await original(function,*args,**kwargs)
+            if getattr(function,'__name__','')=='read':entered.set();await release.wait()
+            return result
+        self.files.io=delayed
+        response=await self.http.get('/api/files/content/'+entry['id'])
+        await entered.wait();self.config['files_enabled']=False;self.files.revoke(self.client);release.set()
+        chunks=[]
+        try:
+            async for chunk in response.content.iter_any():chunks.append(chunk)
+        except (ClientPayloadError,ClientConnectionError):pass
+        self.assertEqual(sum(map(len,chunks)),0)
+
+    async def test_host_shutdown_closes_active_read_leases_and_is_idempotent(self):
+        with (self.disk/'large.bin').open('wb') as stream:stream.truncate(16*1024**2)
+        _,entry=await self.entry('large.bin')
+        response=await self.http.get('/api/files/content/'+entry['id'])
+        self.assertTrue(self.files.active)
+        await self.files.close()
+        self.assertFalse(self.files.active)
+        (self.disk/'large.bin').rename(self.disk/'closed.bin')
+        response.close();await self.files.close()
+
+    async def test_download_cancel_before_chrome_starts_the_request_is_respected(self):
+        _,entry=await self.entry('movie.mp4');identifier='c'*24
+        response=await self.http.post('/api/files/downloads/'+identifier+'/cancel',json={},headers=self.headers)
+        self.assertEqual(response.status,200)
+        response=await self.http.get('/api/files/content/'+entry['id'],params={'download':'1','transfer':identifier})
+        self.assertEqual(response.status,410)

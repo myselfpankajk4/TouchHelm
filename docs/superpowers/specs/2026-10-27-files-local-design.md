@@ -1,6 +1,8 @@
-# Files and fully local Wi-Fi — design for review
+# Files and fully local Wi-Fi — approved design
 
-Status: proposed; product implementation has not started.
+Status: approved by the user on 27 October 2026 and implemented; verified with
+generated-data Chrome/Windows tests on 28 October 2026. Physical Android remains
+an explicit acceptance step. See `docs/FILES_LOCAL_VERIFICATION.md`.
 
 ## Intent and selected approach
 
@@ -261,10 +263,12 @@ of the phone's trust store. Windows installer signing remains a separate matter.
 The builder chooses endpoint details, chunk/page sizes, bounded worker limits,
 SVG geometry and exact adaptive layout within this contract. Proposed limits
 must be explicit before claiming support for large files. The user has approved
-the local-only approach; the written design and visual target are awaiting review.
+the local-only approach, written design and visual target.
 
 Builder review: an independent review agent could not be started in this host.
 A self-review tightened the contract for network drives/cloud placeholders,
 phone download-location permissions, unsafe active previews, path replacement
 races and the distinction between encrypted WebRTC and unencrypted HTTP.
-There are no remaining product questions beyond approval of this written design.
+An independent implementation review subsequently ran successfully. Its four
+important findings were reproduced and fixed with regression coverage; see the
+verification document for the findings and remaining device acceptance.

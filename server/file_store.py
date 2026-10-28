@@ -62,14 +62,21 @@ class FileStore:
 
     def _recover(self):
         for record in list(self.temporary.glob('*.json'))[:100]:
+            remove_record=False;path=None
             try:
-                item=json.loads(record.read_text());path=Path(item['partial'])
-                if not re.fullmatch(r'\.touchhelm-[0-9a-f]{48}\.part',path.name):continue
+                item=json.loads(record.read_text(encoding='utf-8'));path=Path(item['partial'])
+                if not re.fullmatch(r'\.touchhelm-[0-9a-f]{48}\.part',path.name):remove_record=True;continue
                 with DirectoryLease(path.parent),open_local(path,write=True) as stream:
                     delete_open_file(stream,path)
-            except (OSError,ValueError,KeyError,TypeError):pass
+                remove_record=True
+            except FileNotFoundError:
+                # Missing parent may be a disconnected drive; retain its journal.
+                if path is not None and path.parent.exists():remove_record=True
+            except (ValueError,KeyError,TypeError):remove_record=True
+            except OSError:pass
             finally:
-                with suppress(OSError):record.unlink()
+                if remove_record:
+                    with suppress(OSError):record.unlink()
 
     def _register(self,path,root=None,kind=None,name=None):
         path=check_local(path);info=path.lstat();check_stat(info)
@@ -101,8 +108,11 @@ class FileStore:
             return {'locations':result,'max_file_size':MAX_FILE,'chunk_size':CHUNK}
 
     def _describe(self,path,root,info=None):
-        info=info or path.lstat();check_stat(info)
+        info=info or path.lstat()
         mime,preview=MIMES.get(path.suffix.lower(),('application/octet-stream','download'))
+        if getattr(info,'st_file_attributes',0)&(0x1000|0x40000|0x400000):
+            return {'id':None,'name':path.name,'directory':stat.S_ISDIR(info.st_mode),'size':info.st_size,'modified':info.st_mtime,'mime':mime,'preview':preview,'unavailable':'Make this file or folder available offline on the PC first.'}
+        check_stat(info)
         return {'id':self._register(path,root),'name':path.name,'directory':stat.S_ISDIR(info.st_mode),'size':info.st_size,'modified':info.st_mtime,'mime':mime,'preview':preview,'kind':'folder' if stat.S_ISDIR(info.st_mode) else preview}
 
     def listing(self,identifier,query='',sort='name',offset=0,limit=PAGE):
@@ -116,7 +126,10 @@ class FileStore:
                         if index>=SCAN:limited=True;break
                         if entry.name.startswith('.touchhelm-') or query.casefold() not in entry.name.casefold():continue
                         try:
-                            info=entry.stat(follow_symlinks=False);check_stat(info)
+                            info=entry.stat(follow_symlinks=False)
+                            if getattr(info,'st_file_attributes',0)&(0x1000|0x40000|0x400000):
+                                if stat.S_ISLNK(info.st_mode) or getattr(info,'st_reparse_tag',0)&0x20000000:continue
+                            else:check_stat(info)
                             rows.append((entry.name,info))
                         except OSError:continue
                 def order(row):
@@ -144,16 +157,17 @@ class FileStore:
         with self.lock:
             item=self._entry(identifier);return self._describe(item['path'],item['root'])
 
-    def mkdir(self,parent,name):
+    def mkdir(self,parent,name,allowed=None):
         name=filename(name)
         with self.lock:
             item=self._entry(parent)
             with DirectoryLease(item['path']):
+                if allowed and not allowed():raise FileError('File access ended. Reconnect before creating a folder.',401)
                 try:(item['path']/name).mkdir()
                 except FileExistsError:raise FileError('That folder already exists. Choose another name.',409)
                 return self._describe(item['path']/name,item['root'])
 
-    def begin(self,owner,parent,name,size):
+    def begin(self,owner,parent,name,size,allowed=None):
         name=filename(name)
         if type(size) is not int or not 0<=size<=MAX_FILE:raise FileError('Files can be up to 16 GiB each.')
         with self.lock:
@@ -163,6 +177,7 @@ class FileStore:
             token=secrets.token_hex(24);partial=item['path']/f'.touchhelm-{token}.part';record=self.temporary/f'{token}.json'
             try:
                 if shutil.disk_usage(item['path']).free<size+1024**2:raise FileError('Not enough free space in this PC folder. Choose another drive.',507)
+                if owner in self.denied or allowed and not allowed():raise FileError('File access ended. Reconnect before sending.',401)
                 record.write_text(json.dumps({'partial':str(partial)}),encoding='utf-8')
                 stream=open_local(partial,write=True,create=True)
                 self.uploads[token]={'owner':owner,'item':item,'lease':lease,'stream':stream,'partial':partial,'record':record,'name':name,'size':size,'offset':0}
@@ -211,10 +226,12 @@ class FileStore:
         with self.lock:
             upload=self.uploads.get(identifier)
             if not upload or upload['owner']!=owner:raise FileError('Transfer already ended.',404)
-            try:delete_open_file(upload['stream'],upload['partial'])
+            deleted=False
+            try:delete_open_file(upload['stream'],upload['partial']);deleted=True
             finally:
                 upload['stream'].close();upload['lease'].close();self.uploads.pop(identifier,None)
-                with suppress(OSError):upload['record'].unlink()
+                if deleted:
+                    with suppress(OSError):upload['record'].unlink()
             return {'cancelled':True}
 
     def revoke(self,owner):
@@ -227,7 +244,10 @@ class FileStore:
     def deny(self,owner):
         # Set before queuing disk cleanup, so an already queued write cannot win.
         self.denied[owner]=True
-        if len(self.denied)>256:self.denied.popitem(last=False)
+        if len(self.denied)>256:
+            active={item['owner'] for item in list(self.uploads.values())}
+            for old in list(self.denied):
+                if old not in active:self.denied.pop(old,None);break
 
     def close(self):
         with self.lock:

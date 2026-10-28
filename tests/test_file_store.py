@@ -79,3 +79,64 @@ class FileStoreTests(unittest.TestCase):
         uploads=[self.store.begin('phone',self.location,f'{i}.bin',1024**2+1) for i in range(2)]
         with self.assertRaises(self.Error):self.store.begin('phone',self.location,'third',1)
         with self.assertRaises(self.Error):self.store.append('phone',uploads[0]['id'],0,bytes(1024**2+1))
+
+    def test_recovery_keeps_journal_when_drive_is_temporarily_unavailable(self):
+        from unittest.mock import patch
+        upload=self.store.begin('phone',self.location,'abandoned.bin',1)
+        record=self.store.uploads[upload['id']]['record']
+        self.assertTrue(record.exists())
+        with patch('server.file_store.DirectoryLease',side_effect=PermissionError('Drive unavailable')):self.store._recover()
+        self.assertTrue(record.exists(),'Keep cleanup intent until the offline drive returns')
+
+    def test_directory_name_collision_receives_a_numbered_filename(self):
+        (self.disk/'name.txt').mkdir()
+        upload=self.store.begin('phone',self.location,'name.txt',0)
+        result=self.store.finish('phone',upload['id'])
+        self.assertEqual(result['name'],'name (1).txt')
+
+    def test_cloud_only_entry_is_visible_but_never_opened_or_hydrated(self):
+        from types import SimpleNamespace
+        from unittest.mock import patch
+        import stat
+        info=SimpleNamespace(st_file_attributes=0x400000,st_reparse_tag=0,st_mode=stat.S_IFREG,st_size=100,st_mtime=0)
+        entry=SimpleNamespace(name='Cloud-only.pdf',stat=lambda **kw:info)
+        class Scan:
+            def __enter__(self):return iter([entry])
+            def __exit__(self,*args):pass
+        with patch('server.file_store.os.scandir',return_value=Scan()),patch('server.file_store.open_local') as opening:
+            result=self.store.listing(self.location)
+        self.assertEqual(result['entries'][0]['name'],'Cloud-only.pdf')
+        self.assertIn('offline',result['entries'][0]['unavailable'])
+        self.assertIsNone(result['entries'][0]['id']);opening.assert_not_called()
+
+    def test_disk_full_start_leaves_no_partial_file(self):
+        from unittest.mock import patch
+        from types import SimpleNamespace
+        with patch('server.file_store.shutil.disk_usage',return_value=SimpleNamespace(free=0)):
+            with self.assertRaises(self.Error) as failure:self.store.begin('phone',self.location,'file.bin',100)
+        self.assertEqual(failure.exception.status,507);self.assertEqual(list(self.disk.iterdir()),[])
+
+    def test_startup_recovers_an_abandoned_upload(self):
+        from server.file_store import FileStore
+        upload=self.store.begin('phone',self.location,'abandoned.bin',100)
+        item=self.store.uploads.pop(upload['id']);item['stream'].close();item['lease'].close()
+        recovered=FileStore(roots=[],temporary=self.root/'journal');recovered.close()
+        self.assertEqual(list(self.disk.iterdir()),[])
+        self.assertEqual(list((self.root/'journal').glob('*.json')),[])
+
+    @unittest.skipUnless(os.name=='nt','Windows NTFS junction boundary')
+    def test_a_replaced_parent_junction_is_rejected_even_with_the_same_file_identity(self):
+        import subprocess
+        target=self.disk/'target';target.mkdir();(target/'safe.txt').write_bytes(b'fixture')
+        folder=self.store.listing(self.location)['entries'][0]
+        entry=self.store.listing(folder['id'])['entries'][0]
+        parked=self.disk/'parked';target.rename(parked)
+        outside=self.root/'outside';outside.mkdir();os.link(parked/'safe.txt',outside/'safe.txt')
+        self.assertTrue(target.is_relative_to(self.root) and outside.is_relative_to(self.root))
+        result=subprocess.run(['cmd.exe','/d','/c','mklink','/J',str(target),str(outside)],capture_output=True)
+        if result.returncode:self.skipTest('Junction creation is unavailable on this test filesystem')
+        try:
+            with self.assertRaises((self.Error,PermissionError)):
+                with self.store.open_read(entry['id']):pass
+        finally:
+            self.assertTrue(target.is_junction());target.rmdir()

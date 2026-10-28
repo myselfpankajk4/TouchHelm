@@ -1,10 +1,16 @@
-# TouchHelm Windows installer — Test 7
+# TouchHelm Windows installer — Test 8
 
-Use `TouchHelm-2.2.0-test7-setup-win-x64.exe` for a normal installation on Windows
+Use `TouchHelm-2.2.0-test8-setup-win-x64.exe` for a normal installation on Windows
 10/11 x64. Run setup and choose Install. It installs for the current Windows user,
 creates Start Menu and desktop shortcuts (desktop selected by default), and adds
 TouchHelm to Settings → Apps → Installed apps with an uninstaller. The application
 opens from the finish page. No administrator account is normally required.
+
+Test 8 adds Files and makes pairing, controls, transfers and screen/audio local
+Wi-Fi only. No public tunnel helper is bundled or downloaded. See
+[Local Wi-Fi and Files](LOCAL_WIFI.md) for access permissions, browser format
+support and the distinction between HTTP file/control traffic and encrypted
+WebRTC media. The phone does not need a certificate, VPN or app.
 
 Python, screen/audio libraries, the isolated camera runtime, and camera models
 are included, along with the Microsoft OpenMP DLL required by screen capture.
@@ -49,7 +55,7 @@ MSI does not establish publisher trust.
 Prepare `build/portable-stage` using the existing offline builder, then run:
 
 ```
-.venv\Scripts\python.exe packaging\build_installer.py --iscc path\to\ISCC.exe
+build\portable-stage\runtime\python.exe -B -c "import sys,runpy;sys.path.insert(0,r'packaging');runpy.run_path(r'packaging/build_installer.py',run_name='__main__')"
 ```
 
 The builder copies an allowlist of current app sources and verified feature
@@ -57,7 +63,7 @@ runtimes into a fresh stage, checks models and private-file exclusions, compiles
 the installed launcher, then uses Inno Setup's solid LZMA2 compression. It excludes
 the private browser and package installers; all native dependency licenses remain
 with their distributions. The file size and SHA-256 are in
-`dist/installer-build-manifest.json` and `dist/SHA256SUMS-test7.txt`.
+`dist/installer-build-manifest.json` and `dist/SHA256SUMS-test8.txt`.
 
 ## Verification
 
@@ -67,4 +73,7 @@ the Tk fallback without opening a camera or sending PC input. It uses the same
 installed launcher as the shortcuts. Build-host checks do not substitute for a
 clean Windows VM or a physical Android Chrome test.
 
-Secure local pairing uses temporary browser-only HTTPS and then closes its public helper. All PIN/control/text/settings/artwork traffic uses an encrypted local DataChannel; screen/audio also stay local. There is no public control API or relay fallback. Test 7 distinguishes desktop media permission being off from missing secure transport, and embeds delayed branding assets. Screen/audio remain a separate PC opt-in. The verified helper and Apache license remain bundled. Keep the phone tab open and scan a fresh QR after reload or disconnect. See [Browser link setup and limits](BROWSER_LINK.md).
+Test 8 pairing uses the PC's local HTTP address directly. No public helper is
+included. File access and screen/audio retain separate PC permissions, and PINs
+remain required for those capabilities. Reloading the local page needs no
+internet bootstrap. See [Local Wi-Fi setup and limits](LOCAL_WIFI.md).

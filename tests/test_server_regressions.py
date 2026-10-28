@@ -67,6 +67,24 @@ class AuthenticationFailureTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ServerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_reauthentication_revokes_existing_file_cookie_session(self):
+        self.config.update({'require_pin':True,'pin_code':'5678','files_enabled':True})
+        ws=await self.http.ws_connect('/ws');await ws.receive_json()
+        await ws.send_json({'type':'auth','pin':'5678'})
+        await self.receive_kind(ws,'auth_res')
+        client=self.server.clients[next(iter(self.server.clients))]
+        session={'client':client,'pin':'5678','expires':time.monotonic()+60}
+        self.server.files.sessions['fixture-session']=session
+        await ws.send_json({'type':'auth','pin':'0000'})
+        response=await self.receive_kind(ws,'auth_res')
+        self.assertFalse(response['success'])
+        self.assertTrue(session.get('revoked'))
+        self.assertNotIn('fixture-session',self.server.files.sessions)
+    async def test_phone_settings_cannot_grant_native_file_access(self):
+        self.config.update({'require_pin':True,'pin_code':'5678'})
+        response=await self.http.post('/api/config',json={'files_enabled':True},headers={'X-TouchHelm-Pin':'5678'})
+        self.assertEqual(response.status,400)
+        self.assertFalse(self.config.get('files_enabled'))
     async def test_browser_link_qr_waits_for_verified_public_https_and_stop_cancels_probe(self):
         from types import SimpleNamespace
         self.config.set('require_pin',True)
@@ -85,7 +103,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
         session=AsyncMock();session.__aenter__.return_value=probe
         gateway=Mock();gateway.start=AsyncMock(return_value='http://127.0.0.1:32100');gateway.close=AsyncMock()
         with patch('server.web_server.BrowserLinkGateway',return_value=gateway),patch('server.web_server.ClientSession',return_value=session):
-            await self.server.request_browser_link(True)
+            await self.server._legacy_request_browser_link(True)
             await asyncio.wait_for(entered.wait(),1)
             pending=self.server.browser_link_status()
             self.assertFalse(pending['ready']);self.assertIsNone(pending['pairing_url'])
@@ -96,7 +114,7 @@ class ServerTests(unittest.IsolatedAsyncioTestCase):
             self.assertFalse(self.server.browser_link_status()['ready'])
             gateway.close.assert_awaited()
             entered.clear();release.clear()
-            await self.server.request_browser_link(True)
+            await self.server._legacy_request_browser_link(True)
             await asyncio.wait_for(entered.wait(),1)
             task=self.server._browser_link_task
             await self.server.request_browser_link(False)

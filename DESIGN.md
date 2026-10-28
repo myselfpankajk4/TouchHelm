@@ -96,6 +96,24 @@ components:
 
 # Design System: TouchHelm
 
+## Files — approved 27 October 2026
+
+The seventh destination extends the existing materials with sculpted, locally
+authored SVG folders/files. Keep Files second after Trackpad. A compact bento
+area serves actual locations; folder contents remain readable rows with optional
+grid view, breadcrumbs, search, sorting and pagination. A destination dialog
+precedes uploads, a transfer tray shows real byte progress/cancel/retry, and phone
+previews use native media controls with explicit unsupported-format recovery.
+Desktop File access is separate from screen/audio access. The pairing flow uses
+one local QR and PIN without internet setup or certificate instructions.
+
+The Glass light Files surface uses cloud white, paper, slate and a blue action
+accent from the approved target; other themes retain their semantic colors.
+Dark/light, 320px phone, 393px reference and wide sidebar/preview layouts share
+native semantics, >=44px hit regions, visible focus and reduced-motion support.
+The target and planned adaptations are in
+docs/superpowers/specs/2026-10-27-files-local-design.md.
+
 ## Overview
 
 The approved direction is a compact control console with seven distinct material families. Large usable movement space and readable feedback take priority. The mouse mark and original app branding preserve TouchHelm's identity; controls use system typography and native semantics.

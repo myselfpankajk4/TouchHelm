@@ -354,9 +354,12 @@ class WebViewDesktopApp:
     def _preferences(self):
         try:
             preferences = json.loads(self.preference_path.read_text(encoding='utf-8'))
-            return preferences if isinstance(preferences,dict) else {'connection_mode':'browser_link'}
+            if isinstance(preferences,dict):
+                if preferences.get('connection_mode') in ('browser_link','tailscale','local_ca'):preferences=dict(preferences,connection_mode='http')
+                return preferences
+            return {'connection_mode':'http'}
         except (OSError, ValueError):
-            return {'theme': self.config.get('theme', 'glass'), 'appearance': 'system', 'motion': 'system', 'contrast': 'system','connection_mode':'browser_link'}
+            return {'theme': self.config.get('theme', 'glass'), 'appearance': 'system', 'motion': 'system', 'contrast': 'system','connection_mode':'http'}
 
     def _save_preferences(self, preferences):
         import os

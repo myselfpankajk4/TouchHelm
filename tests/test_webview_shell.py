@@ -11,6 +11,12 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class WebViewShellTests(unittest.TestCase):
+    def test_native_file_access_creates_pin_without_enabling_screen_capture(self):
+        result=self.api.save_settings(self.app.token,{'files_enabled':True})
+        self.assertTrue(result['success'])
+        self.assertTrue(self.config.get('files_enabled'))
+        self.assertTrue(self.config.get('require_pin'))
+        self.assertFalse(self.config.get('remote_enabled'))
     def test_browser_link_commands_require_owned_desktop(self):
         self.app.window.get_current_url.return_value='https://attacker.invalid/'
         for method,args in ((self.api.request_browser_link,(True,)),(self.api.rotate_browser_link,())):
@@ -24,7 +30,9 @@ class WebViewShellTests(unittest.TestCase):
         self.assertFalse(result['success']);self.assertTrue(self.config.get('require_pin'))
 
     def test_browser_link_preferences_preserve_saved_http(self):
-        self.assertEqual(self.app._preferences()['connection_mode'],'browser_link')
+        self.assertEqual(self.app._preferences()['connection_mode'],'http')
+        self.app.preference_path.write_text('{"connection_mode":"browser_link","theme":"glass"}')
+        self.assertEqual(self.app._preferences(),{'connection_mode':'http','theme':'glass'})
         self.app.preference_path.write_text('{"connection_mode":"http"}')
         self.assertEqual(self.app._preferences()['connection_mode'],'http')
 

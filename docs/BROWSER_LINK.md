@@ -1,4 +1,8 @@
-# Local encrypted browser pairing — Test 7
+# Historical: local encrypted browser pairing — Test 7
+
+**Test 8 replaces this flow with local-only pairing and Files.** Public browser
+pairing is no longer offered or started by the normal app. Use the current
+[Local Wi-Fi guide](LOCAL_WIFI.md). The following is retained as Test 7 history.
 
 On the desktop choose **Pair your phone → Browser link → Start browser link**.
 Keep the PC and Android Chrome on the same local network. Internet is needed

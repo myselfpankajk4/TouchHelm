@@ -114,18 +114,19 @@ class RemoteService:
         if mode=='audio':audio=True
         return mode, quality, audio
 
-    async def request(self, client, data, secure=False):
+    async def request(self, client, data, secure=False,local=False):
         kind = data.get('type')
         try:
+            local=bool(local and getattr(client,'local_lan',False))
             caps=self.capabilities()
             if kind=='remote_query':
                 return {'type':'remote_capabilities','success':True,**caps,
                     'enabled':bool(self.config.get('remote_enabled')),
-                    'pin_required':True,'secure':bool(secure), **await self.displays()}
+                    'pin_required':True,'secure':bool(secure),'local':local, **await self.displays()}
             if not (client.authenticated and not client.ws.closed and self.config.get('require_pin')):
                 raise PermissionError('Connect and authenticate with the PC pairing PIN before starting screen or audio sharing.')
-            if not secure:
-                raise PermissionError('Use trusted HTTPS or the secure local Wi-Fi pairing link before starting screen or audio sharing.')
+            if not (secure or local):
+                raise PermissionError('Connect directly to this PC on the same local Wi-Fi before starting screen or audio sharing.')
             if not self.config.get('remote_enabled'):
                 raise PermissionError('Screen and audio access is off on this PC. Open TouchHelm on the PC → Pair your phone → Screen and audio access → Enable.')
             if kind=='remote_start':
@@ -158,7 +159,8 @@ class RemoteService:
                             self.state,self.message=state,message; self._publish()
                     loop.call_soon_threadsafe(apply)
                 try:
-                    self.worker=self.worker_factory(on_state=event)
+                    options={'local_peer':client.remote_ip} if local else {}
+                    self.worker=self.worker_factory(on_state=event,**options)
                     # Release preexisting app input before granting exclusive control.
                     self.release(client)
                     if mode=='control' and self.before_control:self.before_control()

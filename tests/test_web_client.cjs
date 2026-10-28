@@ -204,17 +204,12 @@ test('v2 unknown hardware readback never displays an invented percentage',async 
   assert.match(await page.locator('#lblBrightLevel').textContent(),/unknown|unavailable/i);
   assert.equal(await page.locator('#sliderVol').isDisabled(),true);assert.equal(await page.locator('#sliderBright').isDisabled(),true);
 });
-test('v2 certificate download uses authenticated headers and handoff preserves theme preferences',async page=>{
-  await page.route('**/api/pairing',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({enabled:true,fingerprint_sha256:'fixture fingerprint',https_port:8766})}));
-  await page.route('**/api/pairing/certificate',route=>route.fulfill({contentType:'application/pkix-cert',body:'Public fixture certificate'}));
-  await page.route('**/api/pairing/handoff',route=>route.fulfill({status:503,contentType:'application/json',body:'{}'}));
+test('local settings need no certificate/handoff and preserve the draft and theme',async page=>{
+  const pairing=[];page.on('request',request=>{if(new URL(request.url()).pathname.startsWith('/api/pairing'))pairing.push(request.url());});
   await page.evaluate(()=>{window.touchhelm.authPin='5678';window.touchhelm.typeInput.value='keep\nthis';});
-  await page.locator('#btnSettings').click();await page.locator('#btnSecurePairing').click();
-  await page.getByText('Advanced methods · phone setup required',{exact:true}).click();
-  const request=page.waitForRequest('**/api/pairing/certificate');await page.getByRole('button',{name:'Download local public certificate',exact:true}).click();
-  assert.equal((await request).headers()['x-touchhelm-pin'],'5678');
-  const handoff=page.waitForRequest('**/api/pairing/handoff');await page.getByRole('button',{name:'Continue with local HTTPS',exact:true}).click();const data=(await handoff).postDataJSON();
-  assert.equal(data.draft,'keep\nthis');assert.equal(data.preferences.theme,'glass');assert.ok(data.preferences.appearance&&data.preferences.motion&&data.preferences.contrast);assert.equal(data.preferences.pin_code,undefined);
+  await page.locator('#btnSettings').click();assert.equal(await page.locator('#btnSecurePairing').isVisible(),false);
+  assert.match(await page.locator('#secureCapabilities').innerText(),/local Wi-Fi/i);
+  assert.deepEqual(pairing,[]);assert.equal(await page.evaluate(()=>TouchHelmThemes.state.id),'glass');
   assert.equal(await page.locator('#typeInput').inputValue(),'keep\nthis');
 });
 test('living Presenter navigation never overlaps monitor controls at narrow sizes',async page=>{
@@ -384,8 +379,8 @@ async function assertDialogFocus(page, id) {
 test('navigation exposes selected tabs and keyboard theme choices are native controls', async page => {
   assert.equal(await page.locator('#statusPill').evaluate(el => el.tagName), 'BUTTON');
   const tabs = page.locator('.nav-tab');
-  assert.equal(await tabs.count(), 6);
-  for (let i = 0; i < 6; i++) {
+  assert.equal(await tabs.count(), 7);
+  for (let i = 0; i < 7; i++) {
     const tab = tabs.nth(i), view = await tab.getAttribute('data-view');
     assert.equal(await tab.getAttribute('role'), 'tab');
     assert.equal(await tab.getAttribute('aria-controls'), view);
@@ -695,7 +690,8 @@ test('failed wake lock cannot leave an active button or a dummy playback loop', 
     }});
     HTMLMediaElement.prototype.play = () => Promise.reject(new Error('Unsupported media'));
   });
-  await page.locator('#btnWakeLock').click();
+  assert.equal(await page.locator('#btnWakeLock').isVisible(),false,'Local mode hides unsupported browser controls');
+  await page.evaluate(()=>touchhelm.toggleWakeLock());
   await page.waitForTimeout(30);
   assert.equal(await page.evaluate(() => window.touchhelm.wakeLockRequested), false);
   assert.equal(await page.locator('video:not(#remoteVideo)').count(), 0, 'failed wake lock must not create dummy media');
@@ -1058,14 +1054,19 @@ test('living visual matrix covers every theme, appearance, phone size and deskto
   await desktop.close();assert.deepEqual(issues,[],'full living theme/layout matrix');
 },true);
 
-test('Remote keeps a browser-only casting guide and refuses insecure streaming',async page=>{
+test('Remote keeps its casting guide and refuses an unverified media route',async page=>{
   await page.locator('#tabRemote').click();
   await page.locator('[data-remote-mode="control"]').click();
-  assert.match(await page.locator('#remoteStatus').textContent(),/trusted HTTPS/i);
+  assert.match(await page.locator('#remoteStatus').textContent(),/local Wi-Fi/i);
   assert.equal(await page.evaluate(()=>__packets.filter(p=>p.type==='remote_start').length),0);
   await page.locator('#remoteCastOpen').click();
   assert.ok(await page.locator('#remoteCastGuide').isVisible());
   assert.match(await page.locator('#remoteCastGuide').textContent(),/Google Cast|Miracast/);
+});
+
+test('verified local media capability is ready without an HTTPS setup prompt',async page=>{
+  await page.evaluate(()=>touchhelm.remote.handle({type:'remote_capabilities',enabled:true,local:true,secure:false,audio:true,video:true,displays:[]}));
+  assert.match(await page.locator('#remoteStatus').textContent(),/ready.*local Wi-Fi/i);
 });
 
 async function fakeRemote(page,mode='control'){
@@ -1250,15 +1251,14 @@ test('Two-way typing coalesces edits, waits for acknowledgement and preserves IM
   assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').at(-1).text),'abc\n\n🙂');
 });
 
-test('Desktop connection selection reveals an actionable setup guide beside the QR',async(page,context)=>{
+test('Desktop pairing only offers local Wi-Fi and explains access beside the QR',async(page,context)=>{
   const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
   await desktop.waitForFunction(()=>window.TouchHelmDesktopPreview);
-  await desktop.locator('#connectionMode').selectOption('tailscale');
-  assert.equal(await desktop.locator('#connectionSetupGuide').getAttribute('data-mode'),'tailscale');
-  assert.match(await desktop.locator('#connectionSetupGuide').innerText(),/same account/i);
-  assert.match(await desktop.locator('#connectionSetupGuide').innerText(),/8443|private HTTPS/i);
-  await desktop.locator('#connectionMode').selectOption('local_ca');
-  assert.match(await desktop.locator('#connectionSetupGuide').innerText(),/CA certificate/);
+  assert.equal(await desktop.locator('#connectionMode').inputValue(),'http');
+  assert.equal(await desktop.locator('#connectionMode option').count(),1);
+  assert.equal(await desktop.locator('#connectionSetupGuide').isVisible(),false);
+  await desktop.locator('#pairingFilesHelp summary').click();
+  assert.match(await desktop.locator('#pairingFilesHelp').innerText(),/local drives|local phones/i);
   await desktop.close();
 });
 

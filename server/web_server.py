@@ -192,7 +192,7 @@ class TouchHelmServer:
     async def _remote_request(self, client, data, secure):
         if self.aircontrol.owns_input and data.get('type') in ('remote_start','remote_config') and data.get('mode',self.remote.mode)=='control':
             await client.ws.send_json({'type':'remote_result','success':False,'message':'AirControl owns PC input. Switch to Phone mode on the desktop to take control.'});return
-        result = await self.remote.request(client, data, secure)
+        result = await self.remote.request(client, data, secure,local=getattr(client,'local_lan',False))
         if client.authenticated and not client.ws.closed:
             with suppress(ConnectionError, RuntimeError): await client.ws.send_json(result)
 
@@ -211,6 +211,10 @@ class TouchHelmServer:
         return status
 
     async def request_browser_link(self, enabled):
+        if enabled:raise ValueError('Internet pairing was removed. Scan the Local Wi-Fi QR on this PC.')
+        return await self._legacy_request_browser_link(False)
+
+    async def _legacy_request_browser_link(self, enabled):
         """Return promptly to the desktop; helper preparation runs on this loop."""
         if enabled:
             if not self.config.get('require_pin'):
@@ -653,7 +657,7 @@ class TouchHelmServer:
                 data = await request.json()
                 if not isinstance(data, dict):
                     raise ValueError("Settings must be an object")
-                if any(key in data for key in ('port','https_port','https_enabled','tailscale_enabled','tailscale_owned_host','remote_enabled')):
+                if any(key in data for key in ('port','https_port','https_enabled','tailscale_enabled','tailscale_owned_host','remote_enabled','files_enabled')):
                     raise ValueError("Changing the port requires a server restart")
                 if data.get('require_pin') is False and self.browser_link_status()['state'] in ('preparing','starting','ready','connected'):
                     raise ValueError('Stop the browser link on the desktop before disabling its PIN.')
@@ -733,6 +737,7 @@ class TouchHelmServer:
                         client.device_name = str(data.get("device_name", "TouchHelm Client"))[:40]
                         authorized = not self.config.get("require_pin", False) or self._pin_matches(data.get("pin"))
                         if not authorized:
+                            self.files.revoke(client)
                             self._cancel_text_request(client)
                             if self.remote.owner is client: await self.remote.stop('Authentication revoked.')
                             self._cancel_desktop_requests(client)
@@ -1083,6 +1088,8 @@ class TouchHelmServer:
 
     @web.middleware
     async def _private_transport(self, request, handler):
+        from server.local_network import local_request
+        if not local_request(request):return web.Response(status=403,text='Connect directly to the PC on your local Wi-Fi.')
         local = request.transport.get_extra_info('sockname') if request.transport else None
         if local and local[1]==8767:
             if (not self.tailscale_origin or self.request_origin(request)!=self.tailscale_origin
@@ -1252,8 +1259,7 @@ class TouchHelmServer:
         await self.runner.setup()
         self.site = web.TCPSite(self.runner, "0.0.0.0", port)
         await self.site.start()
-        if self.config.get('https_enabled',False):await self.enable_https()
-        if self.config.get('tailscale_enabled',False):await self.refresh_tailscale(True)
+        # Saved legacy preferences never start HTTPS helpers or internet pairing.
         self.volume_monitor_task = asyncio.create_task(self._volume_monitor_loop())
         self.desktop_monitor_task = asyncio.create_task(self._desktop_monitor_loop())
         print(f"TouchHelm Server listening on port {port}")
