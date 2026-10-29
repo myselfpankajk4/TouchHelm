@@ -29,12 +29,8 @@ DEFAULT_CONFIG = {
     "laser_color": "red",
     "theme": "aurora",
     "haptics_enabled": True,
-    "https_enabled": False,
-    "https_port": 8766,
-    "tailscale_enabled": False,
     "remote_enabled": False,
-    "files_enabled": False,
-    "tailscale_owned_host": ""
+    "files_enabled": False
 }
 
 
@@ -105,13 +101,10 @@ class ConfigManager:
         if key in numeric:
             low, high = numeric[key]
             valid = type(value) in (int, float) and low <= value <= high and math.isfinite(value)
-        elif key in ("port","https_port"):
+        elif key == "port":
             valid = type(value) is int and 1 <= value <= 65535
-        elif key in ("require_pin", "invert_scroll", "haptics_enabled","https_enabled","tailscale_enabled","remote_enabled","files_enabled"):
+        elif key in ("require_pin", "invert_scroll", "haptics_enabled","remote_enabled","files_enabled"):
             valid = type(value) is bool
-        elif key == 'tailscale_owned_host':
-            import re
-            valid = value == '' or isinstance(value,str) and bool(re.fullmatch(r'[a-z0-9][a-z0-9.-]*\.ts\.net',value))
         elif key == "pin_code":
             valid = value == "" or cls._valid_pin(value)
         elif key == "laser_color":
@@ -132,8 +125,6 @@ class ConfigManager:
             updated = dict(self.data, **settings)
             if updated["require_pin"] and not self._valid_pin(updated["pin_code"]):
                 raise ValueError("Use a legacy four-digit PIN or an 8–64 character password containing letters and numbers")
-            if updated['tailscale_enabled'] and not updated['require_pin']:
-                raise ValueError('Disable private Tailscale HTTPS before removing the host PIN.')
             if updated['remote_enabled'] and not updated['require_pin']:
                 raise ValueError('Set a host PIN before enabling Remote screen access.')
             if updated['files_enabled'] and not updated['require_pin']:

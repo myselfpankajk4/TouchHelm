@@ -13,7 +13,6 @@ async function main({url}){
   await page.evaluate(()=>{touchhelm.authPin='5678';touchhelm.authenticate();});
   await page.waitForFunction(()=>touchhelm.isConnected&&touchhelm.files?.ready);
   assert.equal(await page.evaluate(()=>isSecureContext),false,'Test must use ordinary LAN HTTP');
-  assert.equal(await page.locator('#btnGyro').isVisible(),false,'Local mode must hide Air Mouse');
   await page.evaluate(()=>TouchHelmThemes.apply('aurora',{appearance:'light',effects:'off'}));
   await page.locator('#tabFiles').click();await page.waitForSelector('.files-location');
   await page.locator('.files-location').filter({hasText:'Downloads'}).first().click();

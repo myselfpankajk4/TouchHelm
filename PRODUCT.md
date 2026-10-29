@@ -1,15 +1,13 @@
 # TouchHelm product context
 
-Current release 2.2.0: local Wi-Fi only, including first page load and pairing. Seven
+Current release 2.2.1: local Wi-Fi only, including first page load and pairing. Seven
 phone tabs are Trackpad, Files, Presenter, Media, Keyboard, Apps and Remote.
 Files provides local drive/known-folder browsing, supported browser previews,
 Send to PC with an explicit destination and Receive through Chrome downloads.
 A separate, initially-off PC File access permission and PIN are required.
 Transfers are bounded, cancellable, revoke with the live client, and never
-overwrite existing files. The normal app no longer starts public browser links
-or Tailscale/manual-CA setup. Ordinary controls/files use local HTTP; screen/audio
-use direct encrypted WebRTC with verified local peers. Air Mouse and automatic
-screen-awake are hidden. See docs/LOCAL_WIFI.md and docs/FILES_LOCAL_VERIFICATION.md.
+overwrite existing files. Ordinary controls/files use local HTTP; screen/audio
+use direct encrypted WebRTC with verified local peers. See docs/LOCAL_WIFI.md and docs/FILES_LOCAL_VERIFICATION.md.
 The earlier release notes below describe the evolution of the retained modules.
 
 TouchHelm lets a person use a phone browser as a Windows remote. Primary tasks are pairing, pointer movement, typing, presentation/media controls, native key chords and registered apps. Python owns the server and WebView2 desktop shell, with a Tk rollback option. The phone uses plain HTML/CSS/JavaScript served by aiohttp.
@@ -22,7 +20,7 @@ Preserve five themes (Aurora, Bloom, Resonance, Constellation, Ink), the mouse m
 
 Provider differences are product truth: PowerPoint exposes rich deck state and direct controls; other supported presenter windows may expose only a title and keyboard fallback. Windows media sessions expose playback metadata where supported, while queue access is adapter-specific. Never invent a playlist, slide count, elapsed value, running certainty, or successful command.
 
-Preserve authentication revocation, PIN backoff, held-input cleanup, catalog validation, bounded slow work and owned-helper shutdown. Browser pairing uses temporary public HTTPS only for static assets and HMAC-bound SDP exchange. The QR binds a strong secret and PC certificate fingerprint; the PIN and every control/text/settings/artwork packet use a directly connected local DTLS DataChannel. The helper shuts down after pairing. No public control APIs/WebSocket, STUN/TURN or automatic relay fallback exist. Validate the selected peer against local private adapter subnets; failed or disconnected local transport releases input. Sessions last at most 30 minutes. Keep the phone tab loaded; rescan after reload/disconnect. Initial hosting/page-code trust remains. Advanced LAN HTTP, manual CA and Tailscale remain explicit alternatives. Setup stays on the owned desktop bridge; no public connection starts automatically. The source launcher restores matching builds and gracefully restarts changed source; versioned browser assets refresh while preserving drafts and synchronization baselines.
+Preserve authentication revocation, PIN backoff, held-input cleanup, catalog validation, bounded slow work and owned-helper shutdown. Pairing is local HTTP with a host PIN; the server validates the selected peer against local private adapter subnets and failed or disconnected transport releases input. The source launcher restores matching builds and gracefully restarts changed source; versioned browser assets refresh while preserving drafts and synchronization baselines.
 
 The sixth Remote tab supports screen control/viewing and a shared audio-only mode
 available from Media. One controller owns both PC-audio toggles; listening alone
@@ -31,11 +29,7 @@ browser allows it and retains exit/Stop controls. New generated PINs use four AS
 digits; actual wrong guesses remain rate limited. Multiline phone Return defaults
 to Shift+Enter on the PC, with an explicit PC Enter action.
 
-The four generative themes render GLSL fragment shaders (`web/theme-scenes.js`, `web/theme-gl.js`); there are no bitmap theme backdrops. Existing logos and provider artwork remain. Desktop one-click trusted
-setup installs missing providers/Tailscale, asks for required Windows/account steps,
-creates private HTTPS, and enables screen/audio access after setup succeeds.
-Phone-side Tailscale installation/sign-in remains necessary; browser-only private
-LAN trust cannot be installed silently. Manual local CA remains an explicit option.
+The four generative themes render GLSL fragment shaders (`web/theme-scenes.js`, `web/theme-gl.js`); there are no bitmap theme backdrops. Existing logos and provider artwork remain.
 
 Trackpad's device-local Two-way PC text setting follows supported focused editable
 Windows controls through an isolated, bounded UI Automation helper. It requires a
@@ -45,8 +39,7 @@ ordinary snapshots do not reopen a dismissed dock. Edits revalidate field identi
 and revision, automatically merge independent edits, and follow PC text for
 overlapping changes or a new field. No manual relink button is required. Lost
 write acknowledgements are reconciled using the requesting client's committed
-write ID. Field contents are never broadcast. Selecting an HTTPS mode on the desktop reveals
-its setup guide beside the QR. See docs/PAIRING.md for installation and limits.
+write ID. Field contents are never broadcast. See docs/PAIRING.md for pairing and limits.
 
 AirControl adds a desktop Phone/AirControl chooser and explicit webcam start.
 Hand, Head & Face and Combined modes share calibration, non-injecting practice,

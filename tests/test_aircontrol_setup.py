@@ -37,7 +37,7 @@ class AirSetupTests(unittest.TestCase):
             logical=Path(folder)/'logical';physical=Path(folder)/'physical';physical.mkdir()
             with patch.object(Path,'resolve',side_effect=[logical,physical]):
                 setup=AirControlSetup(logical)
-                with patch('server.secure_pairing.protect_user_path'),patch.object(setup,'_run',side_effect=RuntimeError('test boundary')) as run:
+                with patch('server.private_storage.protect_user_path'),patch.object(setup,'_run',side_effect=RuntimeError('test boundary')) as run:
                     setup._install()
             self.assertEqual(run.call_args.args[0][-1],str(physical/'runtime'))
             self.assertEqual(setup.python,physical/'runtime/Scripts/python.exe')

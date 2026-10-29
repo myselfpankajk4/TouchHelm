@@ -8,7 +8,7 @@ import statistics
 import time
 
 from .engine import GestureEngine,number,physical_point,tracked
-from .profiles import ProfileStore,default_profile,validate_profile,ACTION_LABELS,GESTURE_LABELS
+from .profiles import ProfileStore,validate_profile,ACTION_LABELS,GESTURE_LABELS
 from .process import CameraWorker
 from .setup import AirControlSetup
 from .expressions import levels,measure,learn

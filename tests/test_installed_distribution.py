@@ -56,7 +56,7 @@ class InstalledDistributionTests(unittest.TestCase):
                      'TOUCHHELM_COMPONENT_ROOT': 'stale-compact-components',
                      'WEBVIEW2_BROWSER_EXECUTABLE_FOLDER': 'stale-offline-browser'}), \
                  patch.dict('sys.modules', {'webview': webview}), \
-                 patch('server.secure_pairing.protect_user_path'):
+                 patch('server.private_storage.protect_user_path'):
                 actual, _ = portable_bootstrap.prepare()
                 self.assertEqual(actual, root)
                 self.assertIsNone(webview.settings['WEBVIEW2_RUNTIME_PATH'])

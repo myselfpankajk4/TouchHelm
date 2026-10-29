@@ -118,7 +118,7 @@ class ProfileStore:
         value=validate_profile(profile)
         profiles=self.all();profiles[value['name']]=value
         self.path.parent.mkdir(parents=True,exist_ok=True)
-        from server.secure_pairing import protect_user_path
+        from server.private_storage import protect_user_path
         protect_user_path(self.path.parent)
         temporary=self.path.with_suffix('.tmp');temporary.write_text(json.dumps({'version':1,'tuning':TUNING,'active':value['name'],'profiles':profiles}),encoding='utf-8')
         protect_user_path(temporary);temporary.replace(self.path)

@@ -55,7 +55,7 @@ def replay():
 async def check():
     from server.aircontrol.service import AirControlService
     from server.aircontrol.setup import AirControlSetup
-    from server.secure_pairing import private_storage_root
+    from server.private_storage import private_storage_root
     setup = AirControlSetup(private_storage_root() / 'aircontrol')
     assert setup.snapshot()['ready'], 'Set up the isolated AirControl runtime first'
     native = Mock()

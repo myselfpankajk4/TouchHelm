@@ -242,7 +242,7 @@ class SavedProfileMigrationTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             store=ProfileStore(Path(folder)/'profile.json')
             profile=default_profile(mode='head');profile['head_stability']=4.
-            with patch('server.secure_pairing.protect_user_path'):store.save(profile)
+            with patch('server.private_storage.protect_user_path'):store.save(profile)
             self.assertEqual(ProfileStore(store.path).read()['head_stability'],4.)
 
     def test_other_old_values_are_not_touched(self):

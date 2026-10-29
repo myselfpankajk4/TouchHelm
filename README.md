@@ -1,8 +1,6 @@
 # TouchHelm
 
-**Your PC, at your fingertips.** TouchHelm 2 adds a shared visual system, dependable composition, and controls driven by actual Windows capabilities.
-
-Turn your phone into a Windows trackpad, keyboard, presentation remote, media controller, app launcher, and live desktop viewer/controller. TouchHelm runs on your PC and serves its controls to a phone browser over your local network or private Tailscale connection. Scan the desktop QR code to connect; no phone APK is needed.
+**Your PC, at your fingertips.** Turn your phone into a Windows trackpad, keyboard, presentation remote, media controller, app launcher, file browser and live desktop viewer/controller. TouchHelm runs on your PC and serves its controls to the phone's browser over your local Wi-Fi. Scan the desktop QR code and enter the PIN; no phone app is needed and no internet is needed after setup.
 
 <p>
   <img src="docs/images/desktop.png" alt="TouchHelm desktop pairing and connected-device panel" width="620">
@@ -11,113 +9,67 @@ Turn your phone into a Windows trackpad, keyboard, presentation remote, media co
 
 *Previews use synthetic QA device data and illustrate the interface rather than an active connection.*
 
-## Windows test installer
+## Install (Windows 10/11 x64)
 
-[Download Test 4 setup](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.4)
-and run `TouchHelm-2.2.0-test4-setup-win-x64.exe` on Windows 10/11 x64.
-The setup download is **160.4 MiB** (about 618 MiB installed), approximately 70%
-smaller than Test 1's offline portable download.
-This is the normal installation: a Windows Installed apps entry, Start Menu
-shortcut, desktop shortcut selected by default, and an uninstaller. Python,
-screen/audio libraries, the isolated camera runtime and models are included.
-**No Python installation, PATH change, pip command, or feature download is needed.**
-Setup reuses Windows' WebView2 and prepares it automatically if missing; only
-that Microsoft runtime may need internet. See [installer details](docs/WINDOWS_INSTALLER.md)
-and [autocomplete fix and verification](docs/AUTOCOMPLETE_FIX.md).
-Test 4 keeps a highlighted PC autocomplete suffix out of ongoing phone edits;
-accepting the suggestion on the PC still syncs its complete value.
+Download the latest `TouchHelm-<version>-setup-win-x64.exe` from the
+[Releases page](https://github.com/myselfpankajk4/TouchHelm/releases/latest) and run it. It installs
+to Installed apps with a Start Menu shortcut, an optional desktop shortcut and an uninstaller.
+Python, the screen/audio libraries and the isolated AirControl camera runtime and models are
+included; no Python, PATH change or pip command is needed. Setup reuses Windows' WebView2 and
+prepares it if missing (only that Microsoft runtime may need internet). Keep one installed copy:
+uninstall an older version before installing a new one. See [installer details](docs/WINDOWS_INSTALLER.md).
 
-This test installer is unsigned, so SmartScreen can still warn or block it.
-Changing the compiler or adding shortcuts does not establish publisher trust.
-Private GitHub releases require repository access; the setup EXE can also be
-shared directly with testers.
+The installer is unsigned, so SmartScreen, firewall and camera prompts can appear.
 
-### Earlier test builds
+## Pairing
 
-[Test 3 installer](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.3)
-and its [runtime verification](docs/WINDOWS_INSTALLER_VERIFICATION.md) remain available.
+1. Keep the phone and PC on the same Wi-Fi (not a guest network with client isolation).
+2. Open TouchHelm on the PC, choose **Pair your phone** and scan the QR code.
+3. Enter the PC's four-digit PIN. The selectable address and **Copy URL** are an alternative to scanning.
+4. Pick a tab and control your PC.
 
-[Download compact Test 2](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.2)
-and open `TouchHelm-2.2.0-test2-compact-win-x64.exe` on Windows 10/11 x64.
-The download is **29.5 MiB**, reduced from 533.2 MiB. Python and the core app are
-included; first launch automatically prepares screen/audio and isolated camera
-components, and installs WebView2 only if missing. **Internet is needed for that
-first preparation.** No developer tools or manual requirements installation are
-needed. Prepared components and settings are reused on later launches.
-
-The desktop now groups QR, phone address and PIN together, with compact navigation,
-native task rows, grouped settings and disclosed advanced setup. See
-[compact setup and testing](docs/COMPACT_TESTING.md) and
-[verification](docs/COMPACT_VERIFICATION.md). The larger
-[offline Test 1](https://github.com/myselfpankajk4/TouchHelm/releases/tag/v2.2.0-test.1)
-remains available.
-
-This EXE is unsigned: Windows publisher, SmartScreen, firewall and camera prompts
-may still appear. See [compact testing and limitations](docs/COMPACT_TESTING.md).
-Private GitHub releases require repository access; the EXE can also be shared
-directly with testers. The source-development requirements below apply when
-running from the checkout.
+Everything runs over local HTTP/WebSocket; Windows Firewall must allow TouchHelm on the private
+network. There is no HTTPS, certificate, VPN or internet relay. See [Local Wi-Fi and Files](docs/LOCAL_WIFI.md)
+and [pairing and text sync](docs/PAIRING.md).
 
 ## Features
 
-**AirControl:** choose **Control via phone** or **AirControl** at desktop startup.
-Head & Face is the fresh-profile default: point with your head, then dwell to
-click, right-click, double-click or drag/drop using the floating action dock.
-Hand pointing/pinches and combined control remain available. Calibration, a
-non-injecting practice cursor, remappable profiles,
-animated guides, a native status HUD and Windows dictation are included. The
-camera starts only on **Start camera**; setup uses a separate checksum-locked
-runtime. Phone viewing/audio stay connected when AirControl takes input ownership.
-[Setup and gesture guide](docs/AIRCONTROL.md) ·
-[Verification and physical-test limits](docs/AIRCONTROL_VERIFICATION.md).
+**AirControl:** choose **Control via phone** or **AirControl** at startup. Head & Face is the
+fresh-profile default; hand pointing uses the knuckle centre, and clicks anchor to where the
+pointer was just before the gesture was recognised. Defaults are pinch, middle pinch, two
+fingers, fist (pause) and palm (resume); extra gestures sit under "More gestures (advanced)".
+Calibration, a practice cursor, remappable profiles, a status HUD and Windows dictation are included.
+The camera starts only on **Start camera**. [Setup guide](docs/AIRCONTROL.md) ·
+[Verification](docs/AIRCONTROL_VERIFICATION.md) · [Accuracy research](docs/AIRCONTROL_ACCURACY_RESEARCH.md).
 
-**Focused PC text and pairing guides:** Trackpad now reads and edits supported
-focused Windows fields in both directions. Sync recovers automatically; overlapping
-edits follow the PC. Selecting a supported PC field opens the phone typing dock,
-and Clear clears that linked field. Password and read-only fields are excluded.
-A host PIN is required. See
-the [mobile certificate and Tailscale guide](docs/PAIRING.md) for setup and limits.
-Selecting an HTTPS mode on the PC reveals its instructions beside the QR.
+**Remote:** Control PC or View PC with live monitor video, trackpad or direct touch, pinch zoom,
+keyboard/numpad, quality presets (Clear 1080p default, 1440p Detail) and optional PC audio over
+WebRTC on the local network. Streaming starts disabled and needs the host PIN. Media can stream
+**PC audio only**. The Cast phone to PC guide uses Windows Wireless Display; desktop Settings has
+its installer. [Remote guide](docs/REMOTE.md).
 
-**Remote (v2.2):** Control PC or View PC with live monitor video, trackpad/direct touch, pinch zoom, keyboard/numpad, quality presets and optional PC audio. Streaming starts disabled and requires a host PIN plus trusted HTTPS. The Cast phone to PC option guides compatible system casting; mobile browsers cannot capture the phone screen. [Setup, limitations and verification](docs/REMOTE.md).
+**Files:** browse, preview and transfer files between phone and PC after enabling File access
+once on the PC. [Details](docs/LOCAL_WIFI.md).
 
-Remote now defaults to Clear 1080p, with a 1440p Detail option. Tab switches keep
-the stream; Stop leaves the rest of TouchHelm connected. Pairing survives refreshes
-in the same browser tab. New setups receive a generated password, and desktop
-Settings provides a Windows Wireless Display installer with installation progress
-and Windows administrator approval. Media can stream **PC audio only**, sharing
-its toggle with Remote while leaving screen capture off. Fullscreen requests
-landscape on supported browsers; measured cursor positions appear over the viewer.
-Generated PINs are four numeric digits. Desktop **Set up trusted pairing** prepares
-private HTTPS through Tailscale without a phone certificate download; sign-in on
-the PC and phone is still required. All seven existing themes use procedural
-CSS/JavaScript/SVG effects rather than the former botanical/robot background images.
-
-<img src="docs/images/remote.png" alt="Remote control tab showing a clearly labeled sample desktop" width="300">
+**Typing:** live typing by default, with two-way sync for supported focused Windows fields
+(password and read-only fields are excluded).
 
 | Tab | What it does |
 | --- | --- |
-| **Trackpad** | Large movement surface, left/middle/right clicks, tap, hold-to-drag, two-finger scrolling, edge scrolling, and optional air mouse. |
-| **Remote** | Live PC viewing/control, monitor selection, zoom, native keys, optional system audio, and a Miracast setup guide. |
-| **Typing dock** | Live typing by default, with optional buffering and two-way sync for supported focused PC fields. Return inserts a newline; PC Enter submits explicitly. Touching the pad dismisses typing and preserves the draft without PC input. |
-| **Presenter** | Previous/next above a large laser surface, monitor selection, independent countdown, and an optional PowerPoint slide/preview/notes drawer. |
-| **Media** | Now Playing with artwork, metadata, stateful Play/Pause, timeline, seeking and supported repeat/shuffle/speed controls. A queue appears only when a provider supplies one. |
-| **Keyboard** | Native press/release, F1–F24, letters, symbols, navigation, left/right modifiers, editing shortcuts, and integrated Numpad. Hold or latch modifiers for chords such as **Ctrl+Shift+A**. |
-| **Apps** | Real Windows icons and verified windows. Pinned apps first, then running/frequently opened apps. Hold or choose Actions for Open, Focus, Pin, Details and normal Close window. Save prompts stay on the PC. |
+| **Trackpad** | Large movement surface, left/middle/right clicks, tap, hold-to-drag, two-finger scrolling and edge scrolling. |
+| **Remote** | Live PC viewing/control, monitor selection, zoom, native keys, optional system audio and a casting guide. |
+| **Files** | Browse the PC, preview, send and receive files. |
+| **Presenter** | Previous/next above a large laser surface, monitor selection, countdown and an optional PowerPoint slide/notes drawer. |
+| **Media** | Now Playing with artwork, metadata, timeline, seeking and supported repeat/shuffle/speed controls. |
+| **Keyboard** | Native press/release, F1-F24, symbols, navigation, modifiers and integrated Numpad. |
+| **Apps** | Real Windows icons and verified windows; open, focus, pin and close. |
 
-Seven complete themes—**Forest & Bloom, Resonance, Companion, Clay, Glass, Soft UI and Ink**—cover phone and desktop. Each supports light/dark appearance, reduced motion and increased contrast. Preferences belong to each device. Optional PIN pairing and trusted HTTPS, desktop device status, and system-tray support are included.
+Five generative themes, **Aurora** (default), **Bloom**, **Resonance**, **Constellation** and
+**Ink**, cover the phone and desktop, each with light/dark appearance, reduced motion and increased
+contrast. Preferences belong to each device. See [Themes](docs/THEMES.md).
 
-**Living controls (v2.1):** Bloom grows vines and flowers around controls, Companion blinks and follows touches, Resonance plucks decorative strings, and Clay reacts with tactile impressions. Choose **Rich / Calm / Off** in Themes; system reduced motion takes priority. Decorations pause around active pointer control and never intercept input.
-
-Live typing starts enabled on new devices and remembers explicit opt-out. Return still adds a newline. Drafts edited offline pause live synchronization until **Send**, so reconnecting cannot replay them. Media uses a shared playback clock for elapsed time, seek thumb and progress; unavailable artwork has an explicit placeholder.
-
-Optional **private Tailscale HTTPS** pairs Windows and Android without installing TouchHelm's CA. Both devices must have Tailscale installed and connected to the same tailnet. Setup lives in the desktop Pairing panel; HTTP and local-certificate HTTPS remain available. See the [living controls and verification record](docs/LIVING_CONTROLS.md).
-
-<img src="docs/images/themes.png" alt="Seven TouchHelm phone and desktop theme previews" width="1100">
-
-<img src="docs/images/living-themes.png" alt="Four living themes with peripheral scenes in simulated phone interfaces" width="1080">
-
-Open **`/preview.html`** on the running host for an interactive preview board with all tabs, desktop panels, themes and simulated states. Preview transport cannot send PC input. [Implementation and acceptance record](docs/TOUCHHELM_V2.md) · [Desktop and HTTPS guide](docs/desktop-v2.md).
+Open **`/preview.html`** on a running host for a preview board of tabs, themes and simulated states
+(it cannot send PC input).
 
 ## Source-development requirements
 
@@ -126,7 +78,7 @@ own Python and application libraries; testers do not need the setup below.
 
 - **Host:** Windows 10/11, Python, Windows PowerShell, WebView2 Runtime and .NET Framework 4.6.2 or later. Python 3.13 is used in this workspace. Tkinter remains available for the classic rollback UI.
 - **Phone:** a modern browser on the same reachable local network as the PC. The UI supports phone, landscape, and desktop browser sizes.
-- **Network:** HTTP/WebSocket **8765**, optional local HTTPS/WSS **8766**, discovery UDP **53317**. Private Tailscale Serve uses **HTTPS 8443** and a loopback-only backend on **8767**. Allow the LAN host through Windows Firewall on your private network if prompted.
+- **Network:** HTTP/WebSocket **8765** and discovery UDP **53317**. Allow the LAN host through Windows Firewall on your private network if prompted.
 
 Node.js is needed only for development tests, not normal app use.
 
@@ -200,13 +152,11 @@ Local settings are saved automatically in `config.json`, which is excluded from 
 | Natural scrolling | Off | On/off |
 | PIN required | Off | Four ASCII digits when enabled |
 | Laser color | Red | Red, green, blue, amber |
-| Theme | Glass | Bloom, Resonance, Companion, Clay, Glass, Soft UI, Ink; device-local |
-| HTTPS | Off, port `8766` | Enable on desktop; manually trust this PC’s public CA on Android |
-| Private Tailscale HTTPS | Off | Desktop setup; same tailnet, host PIN, HTTPS 8443 |
+| Theme | Aurora | Aurora, Bloom, Resonance, Constellation, Ink; device-local |
 | Live typing | On for a new device | Device-local opt-out; offline drafts require explicit Send |
-| Living effects | Rich | Rich / Calm / Off; system reduced motion wins |
+| Theme effects | Rich | Rich / Calm / Off; system reduced motion wins |
 
-The default transport is HTTP/WebSocket for a trusted local network. Optional HTTPS uses a local CA and address-specific server certificate; private keys remain in a restricted user folder outside served assets. Trust installation is manual. An authenticated, short-lived, single-use handoff transfers drafts/preferences between HTTP and HTTPS; authentication is rechecked. See the [Android setup instructions](docs/desktop-v2.md#optional-android-https-setup).
+Traffic uses HTTP/WebSocket on the local Wi-Fi only; screen and audio use encrypted WebRTC between verified local peers. Tokens and settings are kept in a restricted per-user folder outside served assets.
 
 An enabled PIN gates input, context/catalog queries, settings and private artwork/icons. Asset URLs contain opaque IDs; authentication uses headers. App/media commands use registered catalog IDs. The privileged desktop bridge belongs only to the owned local desktop window and has no phone HTTP command route.
 
@@ -255,15 +205,14 @@ server/desktop_bridge.ps1  COM/WinRT providers
 server/osd_overlay.py      Desktop feedback
 server/build_version.py    Content-derived browser versions
 server/instance_control.py Latest-source restore/restart lifecycle
-server/secure_pairing.py   Local CA, LAN certificates and user ACLs
+server/private_storage.py  Restricted per-user storage for tokens and settings
 server/asset_store.py      Bounded opaque artwork/icon cache
-web/                       Phone controls, themes, PWA assets
-android/                   Experimental Android WebView wrapper
+web/                       Phone controls, generative themes, PWA assets
 tests/                     Safe regressions and previews
 docs/images/               README interface previews
 ```
 
-The browser is the supported phone entry point. The Android scaffold has been renamed to `com.touchhelm.app`; no APK build or Android device test is claimed. See [android/README.md](android/README.md).
+The browser is the only phone entry point; there is no phone app.
 
 ## Troubleshooting
 
@@ -271,6 +220,6 @@ The browser is the supported phone entry point. The Android scaffold has been re
 - **Old UI:** launch TouchHelm (Latest) and scan the current QR. Changed source uses the graceful single-instance restart. Quit a pre-v2 host once if it is still running.
 - **No media/presentation details:** open the application on the PC; unavailable fields depend on provider support.
 - **Vibration missing:** use Settings → Test vibration. An accepted API request is not proof of a physical pulse; browser support, user activation and phone settings matter.
-- **Air mouse or keep-awake unavailable:** complete trusted HTTPS pairing and grant browser permission. Other remote controls remain usable; keep-awake can still be released by the OS.
+- **Phone screen turns off:** change the phone's screen timeout; the page cannot keep it awake over plain HTTP.
 
 This is a private development repository. No public release or open-source license is currently declared.

@@ -10,7 +10,6 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
-import urllib.request
 import uuid
 
 import build_portable as base
@@ -43,7 +42,6 @@ def validate_files(stage):
         raise RuntimeError('Installer must use bundled features with system WebView2')
     if not (stage/'runtime/vcomp140.dll').is_file():
         raise RuntimeError('Screen capture requires the bundled Microsoft OpenMP runtime')
-    if (stage/'cloudflared').exists():raise RuntimeError('Local-only builds must not contain an internet pairing helper')
     return files
 
 
@@ -67,7 +65,7 @@ def stage_runtime(source):
         shutil.copy2(ROOT/name, app/name)
     shutil.copy2(ROOT/'packaging/requirements-remote.lock', app/'requirements-remote-portable.txt')
     shutil.copy2(ROOT/'docs/WINDOWS_INSTALLER.md', app/'WINDOWS_INSTALLER.md')
-    for document in ('BROWSER_LINK.md','LOCAL_WIFI.md','FILES_LOCAL_VERIFICATION.md','WINDOWS_TRUST_RESEARCH.md'):
+    for document in ('LOCAL_WIFI.md','FILES_LOCAL_VERIFICATION.md'):
         shutil.copy2(ROOT/'docs'/document,app/document)
     (app/'MICROSOFT_RUNTIME_NOTICE.txt').write_text(
         'Microsoft Visual C++ v14 OpenMP runtime, x64, 14.51.36247.0\n'

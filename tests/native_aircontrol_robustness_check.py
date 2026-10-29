@@ -42,7 +42,7 @@ if __name__=='__main__':
     if '--isolated' in sys.argv:check()
     else:
         from server.aircontrol.setup import AirControlSetup
-        from server.secure_pairing import private_storage_root
+        from server.private_storage import private_storage_root
         setup=AirControlSetup(private_storage_root()/'aircontrol')
         if not setup.snapshot()['ready']:raise RuntimeError('Complete AirControl setup first')
         subprocess.run([str(setup.python),str(Path(__file__).resolve()),'--isolated'],check=True)

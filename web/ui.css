@@ -182,7 +182,6 @@ select { min-height:44px; padding:6px 10px; background:var(--bg-surface); color:
 .capability-settings label { display:flex; align-items:center; min-height:44px; gap:8px; }
 .capability-settings p { font-size:13px; color:var(--text-muted); line-height:1.5; }
 .capability-settings a { display:inline-block; min-height:44px; padding-block:10px; color:var(--primary); }
-#securePairingGuide { overflow-wrap:anywhere; }
 [hidden] { display:none !important; }
 @media (max-height:560px) { .laser-surface { min-height:200px; height:200px; }.typing-dock.expanded .newline-choice { display:none; } }
 .laser-hint { color:var(--text-muted); font-size:12px; padding:14px; text-align:center; }
@@ -319,10 +318,7 @@ body:has(.preview-notice) #app { margin-top:24px;height:calc(var(--viewport-heig
 .pc-text-link .input-hint{flex:1 1 160px;overflow-wrap:anywhere;margin:0}
 .pc-text-link .toggle-label{min-height:44px;flex-shrink:0}
 .pc-text-link button{min-height:44px}
-.pairing-guide-steps{border-top:1px solid var(--th-border);padding:8px 0;margin-top:12px;line-height:1.5}
-.pairing-guide-steps summary{min-height:44px;display:list-item;cursor:pointer;padding:10px 0;font-weight:600}
-.pairing-guide-steps ol{padding-inline-start:24px}.pairing-guide-steps li{margin-bottom:14px;overflow-wrap:anywhere}
-#securePairingGuide{overflow-wrap:anywhere}#securePairingGuide a{display:inline-flex;align-items:center;min-height:44px;padding:4px 8px;color:var(--th-accent)}
+
 .typing-dock.expanded .pc-text-link .input-hint{display:block}
 
 /* A handheld console: space belongs to the pad; detail belongs to the dock. */

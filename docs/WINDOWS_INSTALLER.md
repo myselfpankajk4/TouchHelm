@@ -45,10 +45,7 @@ MSIX distribution is a separate route that uses Microsoft's signing. Newly signe
 direct downloads may still need reputation. See Microsoft's official guidance:
 https://learn.microsoft.com/windows/apps/package-and-deploy/code-signing-options
 
-The [Windows trust research](WINDOWS_TRUST_RESEARCH.md) compares MSI, direct
-signing and Store MSIX distribution, with TouchHelm-specific migration and
-verification requirements. Renaming or repackaging the unsigned installer as an
-MSI does not establish publisher trust.
+Renaming or repackaging the unsigned installer as an MSI does not establish publisher trust.
 
 ## Build
 

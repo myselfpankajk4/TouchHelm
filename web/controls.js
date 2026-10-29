@@ -221,7 +221,6 @@
       if (this.connected && !wasConnected) {
         this.send({type:'get_desktop_state'}); this.requestApps(); this.requestMedia();
         this.send({type:'get_displays'});
-        this.client.experience?.consumeHandoff();
       }
       if(!this.connected){this.client.experience?.clearAssets();this.client.experience?.clearPending();this.client.experience?.cancelCloseChecks();}
     }

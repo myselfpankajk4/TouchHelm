@@ -16,9 +16,7 @@
       id('chkPinchZoom').checked=this.client.pinchZoom;
       id('chkPinchZoom').addEventListener('change',e=>{client.pinchZoom=e.target.checked;save('touchhelm_pinch',client.pinchZoom);});
       id('btnTestHaptics').addEventListener('click',()=>{this.haptics.test();id('hapticsStatus').textContent=this.haptics.description();});
-      id('btnCalibrateGyro').addEventListener('click',()=>{client.lastOrientation=null;client.showFeedback('Air mouse centered. Keep your phone in its neutral position.','info','gyro');});
       id('secureCapabilities').textContent='Everything connects over local Wi-Fi. To keep using the remote longer, adjust your phone’s screen timeout.';
-      for(const name of ['btnGyro','btnCalibrateGyro','btnWakeLock','btnSecurePairing','securePairingGuide'])if(id(name))id(name).hidden=true;
       if(window.TouchHelmThemes){const picker=id('themePicker')||document.querySelector('.theme-grid');if(picker)window.TouchHelmThemes.mountPicker(picker,(theme)=>{client.currentTheme=theme;this.cacheTheme();client.vibrate(22);});}
       if(window.isSecureContext)navigator.serviceWorker?.ready.then(()=>this.cacheTheme()).catch(()=>{});
       this.bindMedia();this.bindPresentation();this.bindApps();this.bindChords();
@@ -26,7 +24,7 @@
       this.playbackFrame=setInterval(()=>this.tickMedia(),500);
       const stop=()=>{this.cancelAppHolds();this.cancelCloseChecks();this.haptics.cancel();this.clearPending();window.TouchHelmThemes?.setInteractionActive(false);};
       window.addEventListener('blur',()=>this.cancelAppHolds());
-      document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});window.addEventListener('pagehide',()=>{stop();client.releaseDragLock();client.stopLaser();client.disableGyro();clearInterval(this.playbackFrame);this.clearAssets();});
+      document.addEventListener('visibilitychange',()=>{if(document.hidden)stop();});window.addEventListener('pagehide',()=>{stop();client.releaseDragLock();client.stopLaser();clearInterval(this.playbackFrame);this.clearAssets();});
     }
     text(name,value){if(id(name))id(name).textContent=value??'';}
     send(message){return this.client.send(message);}
@@ -41,7 +39,7 @@
       const generation=this.assetGeneration;
       try{
         let url=this.assetUrls.get(assetId);
-        if(!url){let request=this.assetRequests.get(assetId);if(!request){request=(async()=>{const response=await this.client.apiFetch(this.api(`/api/assets/${encodeURIComponent(assetId)}`),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});if(!response.ok)throw Error('Artwork unavailable');const blob=await response.blob();if(blob.size>4*1024*1024||!blob.type.startsWith('image/')||generation!==this.assetGeneration)throw Error('Invalid artwork');const value=URL.createObjectURL(blob);if(this.assetUrls.size>=160){const [key,old]=this.assetUrls.entries().next().value;URL.revokeObjectURL(old);this.assetUrls.delete(key);}this.assetUrls.set(assetId,value);return value;})();this.assetRequests.set(assetId,request);}url=await request;}
+        if(!url){let request=this.assetRequests.get(assetId);if(!request){request=(async()=>{const response=await fetch(this.api(`/api/assets/${encodeURIComponent(assetId)}`),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});if(!response.ok)throw Error('Artwork unavailable');const blob=await response.blob();if(blob.size>4*1024*1024||!blob.type.startsWith('image/')||generation!==this.assetGeneration)throw Error('Invalid artwork');const value=URL.createObjectURL(blob);if(this.assetUrls.size>=160){const [key,old]=this.assetUrls.entries().next().value;URL.revokeObjectURL(old);this.assetUrls.delete(key);}this.assetUrls.set(assetId,value);return value;})();this.assetRequests.set(assetId,request);}url=await request;}
         if(generation===this.assetGeneration&&element.dataset.assetId===assetId){
           element.src=url;await element.decode();
           if(generation!==this.assetGeneration||element.dataset.assetId!==assetId)return false;
@@ -52,30 +50,6 @@
       return false;
     }
     clearAssets(){this.assetGeneration++;for(const url of this.assetUrls.values())URL.revokeObjectURL(url);this.assetUrls.clear();this.assetRequests.clear();document.querySelectorAll('img[data-asset-id]').forEach(image=>{image.hidden=true;image.removeAttribute('src');});}
-    async consumeHandoff(){
-      if(this.handoffConsumed||this.handoffInFlight||!this.client.isConnected||location.protocol!=='https:')return;
-      const token=new URLSearchParams(location.hash.slice(1)).get('handoff');if(!token)return;
-      this.handoffInFlight=true;
-      try{
-        const response=await this.client.apiFetch(this.api('/api/pairing/handoff?token='+encodeURIComponent(token)),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});
-        if(!response.ok)throw Error('Secure transfer could not be restored. Reconnect and retry within 60 seconds, or return to the previous connection.');
-        const data=await response.json(),p=data.preferences||{};
-        if(typeof data.draft==='string')this.client.typeInput.value=data.draft;
-        this.client.liveTextValue=typeof data.live_baseline==='string'?data.live_baseline:'';
-        if(typeof p.live_typing==='boolean'){
-          this.client.chkRealtimeTyping.checked=p.live_typing;this.client.liveTypingExplicit=true;save('touchhelm_live_typing',p.live_typing);
-        }
-        if(typeof p.pc_text_sync==='boolean'){
-          id('pcTextSync').checked=p.pc_text_sync;save('touchhelm_pc_text_sync',p.pc_text_sync);this.client.textSync?.reset();
-        }
-        if(p.theme&&window.TouchHelmThemes){const chosen=window.TouchHelmThemes.apply(p.theme,p);this.client.currentTheme=chosen.id;this.cacheTheme();}
-        if(['enter','shift_enter'].includes(p.newline_mode)){this.client.newlineMode=p.newline_mode;id('newlineMode').value=p.newline_mode;save('touchhelm_newline_mode',p.newline_mode);}
-        if(typeof p.haptics==='boolean'){this.client.hapticsEnabled=p.haptics;localStorage.setItem('touchhelm_haptics',String(p.haptics));this.client.chkHaptics.checked=p.haptics;}
-        this.client.liveTypingPaused=this.client.typeInput.value!==this.client.liveTextValue;
-        this.handoffConsumed=true;this.client.updateTypingUi();history.replaceState(null,'',location.pathname+location.search);
-      }catch(error){this.client.showFeedback(error.message,'error','pairing');}
-      finally{this.handoffInFlight=false;}
-    }
     bindMedia(){
       id('mediaSeek')?.addEventListener('input',()=>{this.seeking=true;this.text('seekPreview',clock(Number(id('mediaSeek').value)));});
       id('mediaSeek')?.addEventListener('change',()=>{this.seeking=false;this.mediaAction('seek',Number(id('mediaSeek').value));});
@@ -219,62 +193,6 @@
       if(result.command==='media'){if(!result.success||!this.pendingSeek){this.clearPending();this.text('mediaCommandStatus',result.success?'':result.message||'Player request failed.');}this.send({type:'get_desktop_state'});}
       if(result.command==='app_action'&&result.action==='close'&&this.pendingClose&&!result.success){this.cancelCloseChecks();this.text('appActionDetails',result.message||'Windows could not request this close.');this.syncAppActions();}
       if(['app_action','launch_app'].includes(result.command)){if(result.details)this.text('appActionDetails',Object.entries(result.details).map(([k,v])=>`${k}: ${typeof v==='object'?JSON.stringify(v):v}`).join('\n'));if(!result.success)this.text('appActionDetails',result.message||'App action failed.');this.send({type:'get_apps'});}
-    }
-    async secureSetup(){
-      const guide=id('securePairingGuide');guide.hidden=false;guide.replaceChildren();
-      if(window.TouchHelmBrowserLink?.local){guide.textContent='Control, typing, settings, artwork and media signaling use your encrypted local Wi-Fi connection. The public pairing tunnel closes after connecting. Keep this tab open; reload or reconnect by scanning a fresh PC QR.';return;}
-      try{
-        const response=await this.client.apiFetch(this.api('/api/pairing'),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});
-        if(!response.ok)throw Error('Pairing setup is unavailable. Reconnect and retry.');
-        const info=await response.json(),privateState=info.tailscale||{},privateText=document.createElement('p');
-        const browser=document.createElement('p');
-        browser.textContent=info.browser_link===true?'Secure browser link is active. No phone app or certificate is needed. Keep internet on: controls and typing pass through Cloudflare; screen/audio stay on the same Wi-Fi.':'On your PC, open Pair your phone → Browser link → Start browser link, then scan the new QR. No phone app or certificate is needed. Internet is used only for pairing; control and typing stay encrypted on local Wi-Fi.';
-        guide.append(browser);
-        if(info.browser_link===true)return;
-        const advanced=document.createElement('details'),summary=document.createElement('summary');
-        summary.textContent='Advanced methods · phone setup required';advanced.append(summary);guide.append(advanced);
-        privateText.textContent=privateState.ready?'Private HTTPS is ready. Connect Android to the same Tailscale account/network, then continue.':privateState.message||'Set up private Tailscale HTTPS in the desktop pairing panel. It avoids installing this PC’s certificate on your phone.';
-        advanced.append(privateText);
-        if(privateState.ready&&privateState.url){const button=document.createElement('button');button.textContent='Continue with private HTTPS';button.addEventListener('click',()=>this.secureHandoff(privateState.url));advanced.append(button);}
-        else{const link=document.createElement('a');link.href='https://tailscale.com/download/android';link.textContent='Get Tailscale for Android';link.target='_blank';link.rel='noopener';advanced.append(link);}
-        const p=document.createElement('p');p.textContent=info.enabled?'Local certificate option: install the public CA in Android settings, then use the local HTTPS QR. Fingerprint: '+info.fingerprint_sha256:'Local HTTP and local certificate HTTPS remain available from the desktop pairing panel.';advanced.append(p);
-        if(info.enabled){
-          const addGuide=(title,steps,open=false)=>{
-            if(!Array.isArray(steps)||!steps.length)return;
-            const details=document.createElement('details'),summary=document.createElement('summary'),list=document.createElement('ol');
-            summary.textContent=title;details.open=open;details.className='pairing-guide-steps';
-            for(const step of steps){const item=document.createElement('li');item.textContent=step;list.append(item);}
-            details.append(summary,list);advanced.append(details);
-          };
-          addGuide('Android · install this PC’s CA',info.trust_guide);
-          addGuide('iPhone / iPad · profile and full trust',info.trust_ios);
-          addGuide('Troubleshooting and removal',info.trust_troubleshooting);
-          const references=document.createElement('p');
-          for(const [label,url]of [['Android settings help','https://support.google.com/pixelphone/answer/2844832'],['iPhone trust help','https://support.apple.com/102390']]){
-            const link=document.createElement('a');link.textContent=label+' ↗';link.href=url;link.target='_blank';link.rel='noopener';references.append(link,document.createTextNode(' '));
-          }
-          advanced.append(references);
-          const download=document.createElement('button');download.textContent='Download local public certificate';
-          download.addEventListener('click',async()=>{download.disabled=true;try{
-            const certificate=await this.client.apiFetch(this.api('/api/pairing/certificate'),{headers:{'X-TouchHelm-Pin':this.client.authPin||''},cache:'no-store'});
-            if(!certificate.ok)throw Error('Certificate download failed. Reconnect and retry.');
-            const url=URL.createObjectURL(await certificate.blob()),a=document.createElement('a');a.href=url;a.download='touchhelm-ca.crt';a.click();setTimeout(()=>URL.revokeObjectURL(url),1000);
-          }catch(error){p.textContent=error.message;}finally{download.disabled=false;}});advanced.append(download);
-          const button=document.createElement('button');button.textContent='Continue with local HTTPS';button.addEventListener('click',()=>this.secureHandoff(info.https_url||info.https_port||8766));advanced.append(button);
-        }
-      }catch(error){guide.textContent=error.message;}
-    }
-    async secureHandoff(destination){
-      try{
-        const target=typeof destination==='string'?new URL(destination):new URL(this.client.httpBase());
-        if(typeof destination!=='string'){target.protocol='https:';target.port=String(destination);}
-        if(target.protocol!=='https:'||target.username||target.password)throw Error('Choose a trusted HTTPS pairing address from your PC.');
-        target.pathname='/';target.search='';target.hash='';
-        const response=await this.client.apiFetch(this.api('/api/pairing/handoff'),{method:'POST',headers:{'Content-Type':'application/json','X-TouchHelm-Pin':this.client.authPin||''},body:JSON.stringify({target_origin:target.origin,draft:this.client.typeInput.value,live_baseline:this.client.liveTextValue||'',preferences:{theme:this.client.currentTheme,...window.TouchHelmThemes?.state,newline_mode:this.client.newlineMode,haptics:this.client.hapticsEnabled,live_typing:!!this.client.chkRealtimeTyping?.checked,pc_text_sync:!!id('pcTextSync').checked}})});
-        if(!response.ok)throw Error('Could not transfer your draft. Keep this page open and check the desktop pairing status and PIN.');
-        const data=await response.json();if(typeof data.token!=='string'||data.target_origin&&data.target_origin!==target.origin)throw Error('The pairing destination changed. Keep this page open and retry.');
-        target.hash='handoff='+encodeURIComponent(data.token);location.assign(target.href);
-      }catch(error){this.text('securePairingGuide',error.message);}
     }
   }
   window.TouchHelmExperience=TouchHelmExperience;

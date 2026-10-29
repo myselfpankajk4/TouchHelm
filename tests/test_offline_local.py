@@ -7,11 +7,6 @@ from server.local_network import lan_pair
 
 
 class LocalModeTests(unittest.IsolatedAsyncioTestCase):
-    async def test_public_pairing_cannot_be_started_from_normal_server_api(self):
-        from server.web_server import TouchHelmServer
-        server=TouchHelmServer.__new__(TouchHelmServer)
-        with self.assertRaisesRegex(ValueError,'removed'):
-            await server.request_browser_link(True)
     async def test_verified_local_transport_can_receive_media_without_https(self):
         config={'remote_enabled':True,'require_pin':True}
         client=SimpleNamespace(authenticated=True,ws=SimpleNamespace(closed=False),local_lan=True,remote_ip='192.168.1.20',device_name='Phone')

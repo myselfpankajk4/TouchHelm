@@ -440,7 +440,7 @@ test('Send and Clear restore typing focus for continued phone input', async page
 
 test('disconnected remote controls are disabled while drafts, local timer and navigation remain usable', async page => {
   await disconnect(page);
-  for (const id of ['btnLeftClick', 'btnRightClick', 'btnMiddleClick', 'btnGyro',
+  for (const id of ['btnLeftClick', 'btnRightClick', 'btnMiddleClick',
     'btnKeyViewStart', 'btnSlideNext', 'btnSlidePrev', 'btnSlideStart', 'btnVolUp', 'btnVolMute',
     'btnMediaPlay', 'btnLockPc', 'sliderVol', 'sliderBright', 'sliderSensitivity',
     'sliderAccel', 'sliderScroll', 'chkInvertScroll']) {
@@ -680,26 +680,6 @@ test('server config broadcasts update UI without writing settings back', async p
   assert.equal(await page.locator('#sliderSensitivity').inputValue(), '1.7');
   assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'aurora', 'another device cannot restyle this phone');
   assert.deepEqual(posts, []);
-});
-
-test('failed wake lock cannot leave an active button or a dummy playback loop', async page => {
-  await page.locator('#btnSettings').click();
-  await page.evaluate(() => {
-    Object.defineProperty(navigator, 'wakeLock', {configurable: true, value: {
-      request: () => Promise.reject(new Error('Wake lock unavailable')),
-    }});
-    HTMLMediaElement.prototype.play = () => Promise.reject(new Error('Unsupported media'));
-  });
-  assert.equal(await page.locator('#btnWakeLock').isVisible(),false,'Local mode hides unsupported browser controls');
-  await page.evaluate(()=>touchhelm.toggleWakeLock());
-  await page.waitForTimeout(30);
-  assert.equal(await page.evaluate(() => window.touchhelm.wakeLockRequested), false);
-  assert.equal(await page.locator('video:not(#remoteVideo)').count(), 0, 'failed wake lock must not create dummy media');
-  assert.equal(await page.locator('#remoteVideo').evaluate(video=>video.srcObject), null, 'Remote video remains inactive');
-  assert.equal(await page.evaluate(() => document.querySelector('#btnWakeLock').style.color === 'var(--primary)'), false);
-  assert.ok(await page.locator('#uiFeedback').isVisible(), 'touch users need visible capability feedback');
-  assert.match(await page.locator('#uiFeedback').textContent(), /awake|wake|https|browser/i);
-  assert.equal(await page.evaluate(() => window.touchhelm.isConnected), true);
 });
 
 test('unsupported fullscreen API is handled without a browser exception', async page => {
@@ -1046,10 +1026,9 @@ test('living visual matrix covers every theme, appearance, phone size and deskto
       if(captureScreenshots)await page.screenshot({path:path.join(artifactDir,`living-${theme}-touch.png`)});
     }
   }
-  for(const state of ['seeking','closing','tailscale_ready','tailscale_permission','tailscale_reconnect']){
+  for(const state of ['seeking','closing']){
     await page.bringToFront();
     await page.evaluate(state=>TouchHelmDemo.setState(state),state);await desktop.evaluate(state=>TouchHelmDesktopPreview.setState(state),state);
-    if(state.startsWith('tailscale_')){await desktop.bringToFront();await desktop.locator('[data-panel=pairing]').click();await screenshot(desktop,`living-${state}`);}
   }
   await desktop.close();assert.deepEqual(issues,[],'full living theme/layout matrix');
 },true);
@@ -1324,9 +1303,6 @@ test('Two-way typing coalesces edits, waits for acknowledgement and preserves IM
 test('Desktop pairing only offers local Wi-Fi and explains access beside the QR',async(page,context)=>{
   const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
   await desktop.waitForFunction(()=>window.TouchHelmDesktopPreview);
-  assert.equal(await desktop.locator('#connectionMode').inputValue(),'http');
-  assert.equal(await desktop.locator('#connectionMode option').count(),1);
-  assert.equal(await desktop.locator('#connectionSetupGuide').isVisible(),false);
   await desktop.locator('#pairingFilesHelp summary').click();
   assert.match(await desktop.locator('#pairingFilesHelp').innerText(),/local drives|local phones/i);
   await desktop.close();
@@ -1494,18 +1470,18 @@ test('Text sync and pairing guides visual inspection',async(page,context)=>{
     }
     await desktop.bringToFront();
     await desktop.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off'},false);await TouchHelmThemes.ready;},{theme,appearance});
-    for(const width of [820,1280])for(const mode of ['local_ca','tailscale']){
-      await desktop.setViewportSize({width,height:900});await desktop.locator('#connectionMode').selectOption(mode);
+    for(const width of [820,1280]){
+      await desktop.setViewportSize({width,height:900});await desktop.locator('[data-panel=pairing]').click();
       const errors=await desktop.evaluate(()=>{
         const errors=[];if(document.documentElement.scrollWidth>innerWidth+1)errors.push('horizontal overflow');
-        for(const node of connectionSetupGuide.querySelectorAll('button,select,input')){
+        for(const node of document.querySelectorAll('[data-page=pairing] button,[data-page=pairing] select,[data-page=pairing] input')){
           if(!node.getClientRects().length)continue;const r=node.getBoundingClientRect();
           if(r.width<43.5||r.height<43.5)errors.push(`small target ${node.id}`);
           if(r.right>innerWidth+1)errors.push(`clipped ${node.id}`);
         }
         return errors;
-      });issues.push(...errors.map(x=>`${theme}/${appearance}/desktop${width}/${mode}: ${x}`));
-      if(theme==='aurora'&&appearance==='dark'&&width===1280)await screenshot(desktop,`pairing-guide-${mode}`);
+      });issues.push(...errors.map(x=>`${theme}/${appearance}/desktop${width}: ${x}`));
+      if(theme==='aurora'&&appearance==='dark'&&width===1280)await screenshot(desktop,'pairing-guide');
     }
   }
   await desktop.close();assert.deepEqual(issues,[]);

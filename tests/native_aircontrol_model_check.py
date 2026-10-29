@@ -68,7 +68,7 @@ if __name__=='__main__':
     if args.isolated:check(args.download_reference)
     else:
         from server.aircontrol.setup import AirControlSetup
-        from server.secure_pairing import private_storage_root
+        from server.private_storage import private_storage_root
         setup=AirControlSetup(private_storage_root()/'aircontrol')
         if not setup.snapshot()['ready']:raise RuntimeError('Complete AirControl runtime setup first.')
         command=[str(setup.python),str(Path(__file__).resolve()),'--isolated']

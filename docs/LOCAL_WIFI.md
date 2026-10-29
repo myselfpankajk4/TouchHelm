@@ -84,15 +84,10 @@ authentication, and keeps Files behind a separate native permission. File
 cookies are short lived, HttpOnly and bound to the live authenticated socket;
 writes also require a CSRF token. Native revocation or disconnect ends transfers.
 
-Air Mouse motion and automatic keep-screen-awake are hidden in this mode because
-Chrome restricts those browser APIs. Touchpad movement still works. Set a longer
-phone screen timeout if needed; backgrounding or locking the phone can suspend
-Chrome and interrupt transfers/media. Return to Chrome and reconnect/retry.
+Chrome may suspend the page when the phone locks or the app is backgrounded. Set a longer phone screen timeout if needed; this can interrupt
+transfers/media. Return to Chrome and reconnect/retry.
 
-The app does not need the previously installed TouchHelm phone CA. Remove only
-that matching user certificate using the phone's credential settings if it is
-still installed. Do not clear unrelated certificates. Banking-app warning
-behavior belongs to each app. Windows installer signing is a separate issue.
+No certificate is needed. If an older TouchHelm phone CA is still installed, remove only that
+matching user certificate in the phone's credential settings.
 
-See [verification and limits](FILES_LOCAL_VERIFICATION.md). The former public
-HTTPS bootstrap is documented as history in [Test 7](LOCAL_MEDIA_TEST7_VERIFICATION.md).
+See [verification and limits](FILES_LOCAL_VERIFICATION.md).

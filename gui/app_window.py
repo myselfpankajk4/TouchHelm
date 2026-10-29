@@ -7,7 +7,6 @@ connected Android devices, live activity stream, and sensitivity settings.
 import sys
 import os
 import time
-import socket
 import webbrowser
 import threading
 import queue

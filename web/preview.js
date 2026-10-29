@@ -49,7 +49,7 @@
     byId('previewStatus').textContent=phoneReady&&desktopReady?'Both local fixture interfaces are ready.':'Waiting for the local demo interfaces. Preview commands remain simulated.';
   }
   inputs.forEach(input=>input.addEventListener('change',update));
-  byId('previewState').addEventListener('change',()=>{const tabs={typing:'Trackpad',touch:'Trackpad',held:'Keyboard',menu:'Apps',closing:'Apps',notes:'Presenter',playing:'Media',seeking:'Media',paused:'Media','missing-artwork':'Media'};const target=tabs[byId('previewState').value];if(target)byId('previewTab').value=target;if(byId('previewState').value.startsWith('remote_'))byId('previewTab').value='Remote';if(byId('previewState').value.startsWith('tailscale_'))byId('previewDesktopTab').value='pairing';update();});
+  byId('previewState').addEventListener('change',()=>{const tabs={typing:'Trackpad',touch:'Trackpad',held:'Keyboard',menu:'Apps',closing:'Apps',notes:'Presenter',playing:'Media',seeking:'Media',paused:'Media','missing-artwork':'Media'};const target=tabs[byId('previewState').value];if(target)byId('previewTab').value=target;if(byId('previewState').value.startsWith('remote_'))byId('previewTab').value='Remote';update();});
   phone.addEventListener('load',update);desktop.addEventListener('load',update);update();
   window.addEventListener('resize',update);
 })();

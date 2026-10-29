@@ -17,7 +17,7 @@ async def check(camera,seconds):
     from server.aircontrol.service import AirControlService
     from server.aircontrol.setup import AirControlSetup
     from server.aircontrol.profiles import default_profile
-    from server.secure_pairing import private_storage_root
+    from server.private_storage import private_storage_root
     setup=AirControlSetup(private_storage_root()/'aircontrol')
     if not setup.snapshot()['ready']:raise RuntimeError('Complete AirControl setup first')
     async def displays():return {'displays':[{'id':'observation-only','primary':True,'rect':{'x':0,'y':0,'width':1920,'height':1080}}]}

@@ -13,13 +13,12 @@ import platform
 import secrets
 import threading
 from urllib.parse import unquote, urlsplit
-import webbrowser
 
+import webbrowser
 import qrcode
 
 from server.build_version import get_build_id
-from server.secure_pairing import private_storage_root, protect_user_path
-from server.tailscale_pairing import HELP_URLS
+from server.private_storage import private_storage_root, protect_user_path
 
 ROOT = Path(__file__).resolve().parents[1]
 GUI_WEB = ROOT / 'gui' / 'web'
@@ -30,21 +29,16 @@ def preview_state():
     """Explicitly synthetic desktop fixture; no native queries, keys or listeners."""
     url = 'http://192.168.1.25:8765/'
     output = io.BytesIO(); qrcode.make(url).save(output, format='PNG')
-    trusted_output = io.BytesIO(); qrcode.make('https://sample-pc.example.ts.net:8443/').save(trusted_output, format='PNG')
     return {'preview': True, 'config': {'mouse_sensitivity': 1.3, 'mouse_acceleration': 1.25,
         'scroll_speed': 1.0, 'invert_scroll': False, 'require_pin': True, 'laser_color': 'blue'},
         'pin_code': '5678', 'devices': [{'device': 'Android phone', 'ip': '192.168.1.40', 'authenticated': True, 'ping': 12},
                                       {'device': 'Tablet', 'ip': '192.168.1.41', 'authenticated': False, 'ping': 0}],
         'activity': ['[10:40:12] Android phone: Connected', '[10:40:15] Android phone: Pointer moved'],
-        'pairing': {'http_url': url, 'https_url': None, 'secure_ready': False,
-                    'qr': 'data:image/png;base64,' + base64.b64encode(output.getvalue()).decode(),
-                    'certificate': {}, 'setup_url': url,
-                    'preview_trusted_qr':'data:image/png;base64,'+base64.b64encode(trusted_output.getvalue()).decode(),
-                    'tailscale':{'state':'not_installed','ready':False,'url':None,'message':'Preview: install Tailscale on Windows and Android, then sign in to the same tailnet.'}},
-        'preferences': {'theme': 'aurora', 'appearance': 'dark', 'motion': 'system', 'contrast': 'system','effects':'rich','connection_mode':'http'},
+        'pairing': {'http_url': url,
+                    'qr': 'data:image/png;base64,' + base64.b64encode(output.getvalue()).decode()},
+        'preferences': {'theme': 'aurora', 'appearance': 'dark', 'motion': 'system', 'contrast': 'system','effects':'rich'},
         'diagnostics': {'engine': 'EdgeChromium / WebView2', 'python': 'Preview', 'build': 'Sample build',
-                        'source': 'Sample workspace', 'host': '192.168.1.25', 'http_port': 8765,
-                        'https_port': 8766, 'certificate_trust': 'Manual installation only'}}
+                        'source': 'Sample workspace', 'host': '192.168.1.25', 'http_port': 8765}}
 
 
 def render_preview_html(asset_base='/preview/desktop/'):
@@ -158,10 +152,6 @@ class DesktopAPI:
         app = self._app
         with app._settings_lock:
             try:
-                status=getattr(app.server,'browser_link_status',None)
-                link=status() if callable(status) else {}
-                if settings.get('require_pin') is False and isinstance(link,dict) and link.get('state') in ('preparing','starting','ready','connected'):
-                    raise ValueError('Stop the browser link in Pair your phone before disabling its PIN.')
                 if settings.get('remote_enabled') or settings.get('files_enabled'):
                     # Enabling Remote should not require manually making a PIN first.
                     settings=dict(settings,require_pin=True)
@@ -187,13 +177,12 @@ class DesktopAPI:
 
     def save_preferences(self, token, preferences):
         self._authorize(token)
-        if (not isinstance(preferences, dict) or set(preferences) - {'theme', 'appearance', 'motion', 'contrast','effects','connection_mode'}
+        if (not isinstance(preferences, dict) or set(preferences) - {'theme', 'appearance', 'motion', 'contrast','effects'}
                 or preferences.get('theme') not in THEMES
                 or preferences.get('appearance') not in ('light', 'dark', 'system')
                 or preferences.get('motion') not in ('full', 'reduced', 'system')
                 or preferences.get('contrast') not in ('standard', 'increased', 'system')
-                or preferences.get('effects','rich') not in ('rich','calm','off')
-                or preferences.get('connection_mode','browser_link') not in ('browser_link','http','local_ca','tailscale')):
+                or preferences.get('effects','rich') not in ('rich','calm','off')):
             return {'success': False, 'error': 'Choose valid appearance preferences.'}
         try:
             with self._app._settings_lock:
@@ -202,83 +191,10 @@ class DesktopAPI:
         except Exception as error:
             return {'success': False, 'error': str(error)}
 
-    def request_browser_link(self, token, enabled=True):
+    def open_phone(self, token):
         self._authorize(token)
-        if type(enabled) is not bool:return {'success':False,'error':'Choose start or stop.'}
-        app=self._app
-        with app._settings_lock:
-            try:
-                if enabled and not app.config.get('require_pin'):
-                    from server.config import random_password
-                    app.config.update({'require_pin':True,'pin_code':random_password()})
-                    app._submit(app.server.invalidate_auth_sessions())
-                status=app._submit(app.server.request_browser_link(enabled))
-                return {'success':True,'browser_link':status,'pairing':app._pairing()}
-            except Exception:
-                return {'success':False,'error':'Browser link could not be updated. Check the host and retry.'}
-
-    def rotate_browser_link(self, token):
-        self._authorize(token)
-        status=self._app._submit(self._app.server.rotate_browser_link())
-        return {'success':True,'browser_link':status,'pairing':self._app._pairing()}
-
-    def request_https(self, token, enabled=True):
-        self._authorize(token)
-        if type(enabled) is not bool:
-            return {'success': False, 'error': 'Secure pairing must be enabled or disabled.'}
-        app = self._app
-        previous = app.config.get('https_enabled', False)
-        with app._settings_lock:
-            try:
-                app.config.set('https_enabled', enabled)
-                action = app.server.enable_https if enabled else app.server.disable_https
-                app._submit(action())
-                return {'success': True, 'pairing': app._pairing()}
-            except Exception as error:
-                app.config.set('https_enabled', previous)
-                return {'success': False, 'error': str(error)}
-
-    def open_phone(self, token, secure=False):
-        self._authorize(token)
-        if type(secure) is not bool: raise ValueError('Invalid pairing mode')
-        url = self._app.phone_url(secure)
-        webbrowser.open(url)
+        webbrowser.open(self._app.phone_url())
         return {'success': True}
-
-    def open_pairing(self, token, mode):
-        self._authorize(token)
-        pairing=self._app._pairing()
-        key={'browser_link':'browser_link_url','http':'http_url','local_ca':'https_url','tailscale':'tailscale_url'}.get(mode)
-        if not key or not pairing.get(key):return {'success':False,'error':'This connection is not ready. Complete setup or refresh its status.'}
-        webbrowser.open(pairing[key]);return {'success':True}
-
-    def refresh_tailscale(self, token):
-        self._authorize(token)
-        try:
-            status=self._app._submit(self._app.server.refresh_tailscale(True))
-            return {'success':True,'tailscale':status,'pairing':self._app._pairing()}
-        except Exception as error:return {'success':False,'error':str(error)}
-
-    def request_tailscale(self, token, enabled=True):
-        self._authorize(token)
-        if type(enabled) is not bool:return {'success':False,'error':'Choose enable or disable.'}
-        app=self._app
-        with app._settings_lock:
-            try:
-                if enabled and not app.config.get('require_pin'):
-                    from server.config import random_password
-                    app.config.update({'require_pin':True,'pin_code':app.config.get('pin_code') or random_password()})
-                    app._submit(app.server.invalidate_auth_sessions())
-                app._submit(app.server.enable_tailscale() if enabled else app.server.disable_tailscale())
-                pairing=app._pairing()
-                if enabled and not pairing['tailscale']['ready']:raise RuntimeError(pairing['tailscale']['message'])
-                return {'success':True,'pairing':pairing}
-            except Exception as error:return {'success':False,'error':str(error)}
-
-    def open_tailscale_help(self, token, page):
-        self._authorize(token)
-        if page not in HELP_URLS:return {'success':False,'error':'Unknown setup step.'}
-        webbrowser.open(HELP_URLS[page]);return {'success':True}
 
     def minimize(self, token):
         self._authorize(token)
@@ -302,11 +218,6 @@ class DesktopAPI:
         self._authorize(token)
         self._app.wireless_display.install()
         return {'success':True,'setup':self._app.wireless_display.snapshot()}
-
-    def prepare_trusted_pairing(self, token):
-        self._authorize(token)
-        self._app.trusted_setup.start()
-        return {'success':True,'setup':self._app.trusted_setup.snapshot()}
 
     def generate_password(self, token):
         self._authorize(token)
@@ -337,13 +248,11 @@ class WebViewDesktopApp:
         self.preference_path = Path(preference_path) if preference_path is not None else private_storage_root() / 'desktop-preferences.json'
         from server.wireless_display import WirelessDisplaySetup
         self.wireless_display=WirelessDisplaySetup(private_storage_root()/'wireless-display')
-        from server.trusted_setup import TrustedPairingSetup
-        self.trusted_setup=TrustedPairingSetup(self)
 
     def _submit(self, coroutine):
         if self.server_loop is None or self.server_loop.is_closed() or not self.server_loop.is_running():
             coroutine.close()
-            raise RuntimeError('The host is stopping. Restart TouchHelm before changing secure pairing.')
+            raise RuntimeError('The host is stopping. Restart TouchHelm before changing settings.')
         future = asyncio.run_coroutine_threadsafe(coroutine, self.server_loop)
         try:
             return future.result(timeout=25)
@@ -354,12 +263,10 @@ class WebViewDesktopApp:
     def _preferences(self):
         try:
             preferences = json.loads(self.preference_path.read_text(encoding='utf-8'))
-            if isinstance(preferences,dict):
-                if preferences.get('connection_mode') in ('browser_link','tailscale','local_ca'):preferences=dict(preferences,connection_mode='http')
-                return preferences
-            return {'connection_mode':'http'}
+            if isinstance(preferences,dict):return preferences
+            return {}
         except (OSError, ValueError):
-            return {'theme': self.config.get('theme', 'aurora'), 'appearance': 'system', 'motion': 'system', 'contrast': 'system','connection_mode':'http'}
+            return {'theme': self.config.get('theme', 'aurora'), 'appearance': 'system', 'motion': 'system', 'contrast': 'system'}
 
     def _save_preferences(self, preferences):
         import os
@@ -377,12 +284,9 @@ class WebViewDesktopApp:
             if descriptor is not None: os.close(descriptor)
             if os.path.exists(temporary): os.unlink(temporary)
 
-    def phone_url(self, secure=False):
-        if secure and not getattr(self.server, 'https_site', None):
-            raise RuntimeError('Enable secure pairing first.')
+    def phone_url(self):
         host = f'[{self.primary_ip}]' if ':' in self.primary_ip else self.primary_ip
-        port = self.config.get('https_port', 8766) if secure else self.config.get('port', 8765)
-        return f'{"https" if secure else "http"}://{host}:{port}/?build={get_build_id()}'
+        return f'http://{host}:{self.config.get("port", 8765)}/?build={get_build_id()}'
 
     def _qr(self, url):
         if url not in self._qr_cache:
@@ -392,30 +296,8 @@ class WebViewDesktopApp:
         return self._qr_cache[url]
 
     def _pairing(self):
-        ready = bool(getattr(self.server, 'https_site', None))
-        info = {}
-        manager = getattr(self.server, 'secure_pairing', None)
-        if manager is not None:
-            try:
-                candidate = manager.public_info()
-                if isinstance(candidate, dict): info = candidate
-            except (OSError, RuntimeError): pass
-        http_url = self.phone_url(False)
-        secure_url = self.phone_url(True) if ready else None
-        tailscale=getattr(self.server,'tailscale_status',None)
-        if not isinstance(tailscale,dict):tailscale={'state':'unchecked','ready':False,'url':None,'message':'Check Tailscale to begin private HTTPS setup.'}
-        tailscale_url=tailscale.get('url') if tailscale.get('ready') else None
-        browser=getattr(self.server,'browser_link_status',None)
-        link=browser() if callable(browser) else {}
-        if not isinstance(link,dict):link={}
-        browser_url=link.get('pairing_url') if link.get('ready') else None
-        return {'http_url': http_url, 'https_url': secure_url, 'secure_ready': ready,
-                'qr': self._qr(secure_url or http_url), 'qr_http': self._qr(http_url),
-                'qr_https': self._qr(secure_url) if secure_url else None, 'certificate': info,
-                'setup_url': http_url, 'tailscale':tailscale,'tailscale_url':tailscale_url,
-                'qr_tailscale':self._qr(tailscale_url) if tailscale_url else None,
-                'browser_link':link,'browser_link_url':browser_url,
-                'qr_browser_link':self._qr(browser_url) if browser_url else None}
+        url = self.phone_url()
+        return {'http_url': url, 'qr': self._qr(url)}
 
     def snapshot(self):
         with self._state_lock:
@@ -423,13 +305,13 @@ class WebViewDesktopApp:
         return {'config': self.config.public_data(), 'pin_code': self.config.get('pin_code', '')
                     if self.config.get('require_pin', False) else '',
                 'devices': devices, 'activity': activity, 'pairing': self._pairing(),
-                'remote': self.server.remote.snapshot(), 'wireless_display':self.wireless_display.snapshot(), 'trusted_setup':self.trusted_setup.snapshot(),
+                'remote': self.server.remote.snapshot(), 'wireless_display':self.wireless_display.snapshot(),
                 'aircontrol':self.server.aircontrol.snapshot(),
                 'preferences': self._preferences(),
                 'diagnostics': {'engine': 'EdgeChromium / WebView2', 'python': platform.python_version(),
                     'build': self.build_id, 'source': str(ROOT), 'host': self.primary_ip,
-                    'http_port': self.config.get('port', 8765), 'https_port': self.config.get('https_port', 8766),
-                    'native_input': 'Windows controller', 'certificate_trust': 'Browser link: public HTTPS; manual CA only in advanced local HTTPS'}}
+                    'http_port': self.config.get('port', 8765),
+                    'native_input': 'Windows controller'}}
 
     def log_event(self, event_str):
         with self._state_lock: self._activity.append(str(event_str))

@@ -15,7 +15,7 @@ import tempfile
 import threading
 import time
 
-from .secure_pairing import private_storage_root, protect_user_path
+from .private_storage import private_storage_root, protect_user_path
 
 
 def source_build_id(root):

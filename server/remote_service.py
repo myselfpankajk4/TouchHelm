@@ -21,14 +21,14 @@ def private_sdp(sdp):
         address=fields[4]
         try:
             ip=ipaddress.ip_address(address)
-            allowed=(ip.is_private or ip.is_loopback or ip in ipaddress.ip_network('100.64.0.0/10'))
+            allowed=ip.is_private or ip.is_loopback or ip in ipaddress.ip_network('100.64.0.0/10')  # shared address space used by some routers and hotspots
             allowed=allowed and not (ip.is_multicast or ip.is_unspecified or ip.is_link_local)
         except ValueError:
             allowed=bool(re.fullmatch(r'[a-zA-Z0-9-]{1,63}\.local',address))
         try:port=int(fields[5])
         except ValueError:continue
         if allowed and 1<=port<=65535:lines.append(line);count+=1
-    if not count:raise ValueError('No private WebRTC path is available. Check LAN/Tailscale and browser network permissions.')
+    if not count:raise ValueError('No private WebRTC path is available. Check your Wi-Fi connection and browser network permissions.')
     return '\r\n'.join(lines)+'\r\n'
 
 

@@ -127,7 +127,7 @@ class AirControlSetup:
         try:
             if os.name!='nt' or sys.version_info[:2]!=(3,13) or platform.machine().lower() not in ('amd64','x86_64'):
                 raise RuntimeError('AirControl currently requires Windows x64 and Python 3.13. Phone controls remain available in the existing environment.')
-            from server.secure_pairing import protect_user_path
+            from server.private_storage import protect_user_path
             self.folder.mkdir(parents=True,exist_ok=True)
             # Resolve again after creation: a fresh Store-Python directory may
             # only acquire its physical LocalCache location once it exists.

@@ -61,7 +61,7 @@ class ComponentSetup:
         import msvcrt
         self.component.mkdir(parents=True,exist_ok=True)
         if self.protector is None:
-            from server.secure_pairing import protect_user_path
+            from server.private_storage import protect_user_path
             protect_user_path(self.data/'components')
         else:self.protector(self.component)
         with (self.component/'setup.lock').open('a+b') as lock:

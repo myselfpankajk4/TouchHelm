@@ -560,7 +560,7 @@ html, body {
   flex: 1;
 }
 
-.middle-btn, .start-btn, .gyro-btn {
+.middle-btn, .start-btn {
   width: 50px;
   flex-direction: column;
   gap: 2px;
@@ -575,12 +575,6 @@ html, body {
 .start-btn:active {
   background-color: var(--primary-glow);
   border-color: var(--primary);
-}
-
-.gyro-btn.active {
-  background-color: var(--primary-glow);
-  border-color: var(--primary);
-  color: var(--primary);
 }
 
 .btn-icon {
@@ -1810,4 +1804,3 @@ html, body {
   to { opacity: 1; transform: scale(1); }
 }
 
-.browser-link-pending body>*:not(.browser-link-gate){visibility:hidden!important}.browser-link-gate{position:fixed;inset:0;z-index:99999;display:flex;flex-direction:column;justify-content:center;gap:16px;padding:32px;background:var(--bg-primary,#0b131b);color:var(--text-primary,#eef7fa)}.browser-link-gate h1{font-size:28px;line-height:1.2}.browser-link-gate p{font-size:16px;line-height:1.6;max-width:42ch}

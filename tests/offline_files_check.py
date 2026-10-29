@@ -100,7 +100,6 @@ async def main():
             assert (disk/'phone file (1).bin').read_bytes()==bytes(range(256))*10000
             assert not (disk/'cancel me.bin').exists()
             assert not list(disk.glob('.touchhelm-*.part'))
-            assert not server.browser_link.snapshot()['ready']
             assert any(call.args==('synthetic local file control',) for call in server.input_ctrl.type_text.call_args_list)
         finally:
             await server.stop();capture.stop();audio.stop();matching.stop()

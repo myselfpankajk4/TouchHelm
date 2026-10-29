@@ -56,7 +56,7 @@
     if(!base){base=document.createElement('link');base.id='th-themes-base';base.rel='stylesheet';base.href=assetURL('./themes.css');document.head.appendChild(base);}
     let active=document.getElementById('th-active-theme');
     if(!active){active=document.createElement('link');active.id='th-active-theme';active.rel='stylesheet';document.head.appendChild(active);}
-    const original=assetURL(`./themes/${id}.css`),href=window.TouchHelmBrowserLink?.staticURL?.(original)||original;
+    const original=assetURL(`./themes/${id}.css`),href=original;
     if(active.getAttribute('href')===href||active.href===href)return;
     ready=new Promise(resolve=>{
       active.onload=()=>{resolve(true);window.TouchHelmEffects?.synchronize();};

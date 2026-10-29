@@ -34,7 +34,7 @@ def prepare():
     # pywebview's Windows backend detection checks this setting before it ever
     # creates WebView2; the Microsoft environment variable alone is insufficient.
     webview.settings['WEBVIEW2_RUNTIME_PATH'] = None if system_browser else str(root/'webview2')
-    from server.secure_pairing import protect_user_path
+    from server.private_storage import protect_user_path
     protect_user_path(data)
     return root, data
 
