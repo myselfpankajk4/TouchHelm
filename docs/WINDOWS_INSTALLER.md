@@ -1,6 +1,6 @@
 # TouchHelm Windows installer
 
-Use `TouchHelm-2.2.2-setup-win-x64.exe` for a normal installation on Windows
+Use `TouchHelm-2.2.3-setup-win-x64.exe` for a normal installation on Windows
 10/11 x64. Run setup and choose Install. It installs for the current Windows user,
 creates Start Menu and desktop shortcuts (desktop selected by default), and adds
 TouchHelm to Settings → Apps → Installed apps with an uninstaller. The application
