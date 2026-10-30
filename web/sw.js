@@ -13,6 +13,7 @@ const ASSETS = [
   "/text-sync.js?v=__TOUCHHELM_BUILD__",
   "/remote.js?v=__TOUCHHELM_BUILD__",
   "/remote.css?v=__TOUCHHELM_BUILD__",
+  "/screens.css?v=__TOUCHHELM_BUILD__",
   "/controls.js",
   "/controls.js?v=__TOUCHHELM_BUILD__",
   "/themes.css?v=__TOUCHHELM_BUILD__",

@@ -232,3 +232,33 @@ body[data-surface=desktop] .air-panel .air-section .button-row button{min-height
 @media(max-height:560px) and (min-width:701px){body[data-surface=desktop] .air-panel .air-workspace{flex-basis:244px}}
 body[data-surface=desktop] .air-panel>:is(.air-heading,.air-status-strip,.air-tabs,#airSetupChoices,.air-progress-row){flex-shrink:0}
 body[data-surface=desktop] .air-panel .air-section:is([data-air-content=settings],[data-air-content=diagnostics])>h2{position:absolute;width:1px;height:1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap}
+/* Redesign: one hierarchy for the compact page. Heading, then a segmented tab bar, then the stage as the hero surface. */
+:root[data-theme] body[data-surface=desktop] .air-panel .air-heading{border-bottom-color:var(--th-line);padding-bottom:var(--th-space-2)}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-heading h1{font-family:var(--th-font-display);font-size:var(--th-fs-xl);font-weight:650;letter-spacing:var(--th-track-tight);margin:0}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-state{padding:5px 12px 5px 10px;border:1px solid var(--th-line);border-radius:999px;background:var(--th-level-2);color:var(--th-text);font-weight:600;font-variant-numeric:tabular-nums;transition-property:background-color,border-color;transition-duration:var(--th-dur-state);transition-timing-function:var(--th-ease)}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-state[data-state=active]{border-color:color-mix(in srgb,var(--th-success) 45%,transparent);background:var(--th-success-soft)}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-state[data-state=tracking_lost]{border-color:color-mix(in srgb,var(--th-warning) 45%,transparent);background:var(--th-warning-soft)}
+/* Tabs: a segmented bar that matches the nav's accent-soft language for "current" */
+:root[data-theme] body[data-surface=desktop] .air-panel .air-tabs{align-self:flex-start;max-width:100%;gap:2px;padding:3px;border:1px solid var(--th-line);border-radius:13px;background:var(--th-level-1)}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-tabs button{min-height:40px;border:0;border-radius:10px;padding:4px 16px;color:var(--th-muted);font-weight:550;background:transparent;transition-property:background-color,color;transition-duration:var(--th-dur-state);transition-timing-function:var(--th-ease)}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-tabs button:not([aria-selected=true]):hover{background:var(--th-level-2);color:var(--th-text)}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-tabs button[aria-selected=true]{background:var(--th-accent-soft);color:var(--th-text);font-weight:650}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-tabs button[aria-selected=true]::after{display:none}
+:root[data-contrast=increased] body[data-surface=desktop] .air-panel .air-tabs button[aria-selected=true]{box-shadow:inset 0 0 0 2px var(--th-accent)}
+/* Stage: the hero surface; coach and section sit on the same quiet plane */
+:root[data-theme] body[data-surface=desktop] .air-panel .air-stage{border:1px solid var(--th-line);border-radius:14px}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-coach{border-left-color:var(--th-line)}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-coach h2{font-family:var(--th-font-display);font-size:var(--th-fs-lg);font-weight:620;letter-spacing:var(--th-track-snug)}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-section{border:1px solid var(--th-line);border-radius:14px;background:var(--th-level-1);box-shadow:none}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-section h2{font-family:var(--th-font-display);font-weight:620;letter-spacing:var(--th-track-snug)}
+/* Mode chips: tinted fill and accent hairline instead of the inset bar */
+:root[data-theme] body[data-surface=desktop] .air-panel .air-mode-row button{border:1px solid var(--th-line-strong);border-radius:10px;background:var(--th-level-2);color:var(--th-text);font-weight:600;transition-property:background-color,border-color,color;transition-duration:var(--th-dur-state);transition-timing-function:var(--th-ease)}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-mode-row button:not([aria-pressed=true]):hover{border-color:var(--th-accent-line)}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-mode-row button[aria-pressed=true]{border-color:var(--th-accent-line);background:var(--th-accent-soft);box-shadow:none;color:var(--th-text)}
+:root[data-theme] body[data-surface=desktop] .air-panel .air-mode-row button[aria-pressed=true] svg{color:var(--th-accent)}
+:root[data-contrast=increased] body[data-surface=desktop] .air-panel .air-mode-row button[aria-pressed=true]{box-shadow:inset 0 0 0 2px var(--th-accent)}
+#airSetupChoices .air-selectors label{font-size:var(--th-fs-xs);font-weight:600}
+@media(max-width:700px){:root[data-theme] body[data-surface=desktop] .air-panel .air-tabs{align-self:stretch;overflow-x:auto}}
+/* Motion: a tab's content cross-fades in place (opacity only) so the compact page never shifts. */
+@keyframes air-section-in{from{opacity:0}to{opacity:1}}
+:root[data-theme] body[data-surface=desktop] .air-panel [data-air-content]:not([hidden]){animation:air-section-in var(--th-dur-state) var(--th-ease) backwards}

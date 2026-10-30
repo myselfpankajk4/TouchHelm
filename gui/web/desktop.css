@@ -88,3 +88,70 @@ summary:hover{color:var(--th-accent)}
 :root[data-theme] body[data-surface=desktop] input:not([type=checkbox]):not([type=range]):focus,:root[data-theme] body[data-surface=desktop] select:focus{border-bottom-color:var(--th-accent)}
 .host-status.offline{color:var(--th-danger)}
 .air-tabs button{flex:none}
+/* Redesign: shared type scale, calmer surfaces, one accent-soft language for "current". */
+:root[data-theme] body[data-surface=desktop]{font-family:var(--th-font);font-size:var(--th-fs-sm);line-height:var(--th-lh-body)}
+:root[data-theme] body[data-surface=desktop] h1{font-family:var(--th-font-display);font-size:var(--th-fs-3xl);font-weight:650;line-height:var(--th-lh-tight);letter-spacing:var(--th-track-tight);margin:0 0 var(--th-space-2)}
+:root[data-theme] body[data-surface=desktop] h2,:root[data-theme] body[data-surface=desktop] .control-group legend{font-family:var(--th-font-display);font-size:var(--th-fs-lg);font-weight:620;line-height:var(--th-lh-snug);letter-spacing:var(--th-track-snug)}
+:root[data-theme] body[data-surface=desktop] h3{font-size:var(--th-fs-md);font-weight:620}
+:root[data-theme] body[data-surface=desktop] .lead{font-size:var(--th-fs-md);line-height:var(--th-lh-body);max-width:68ch;margin-bottom:var(--th-space-8)}
+:root[data-theme] body[data-surface=desktop] .muted{font-size:var(--th-fs-xs)}
+/* Header and brand */
+:root[data-theme] body[data-surface=desktop] .desktop-header{min-height:64px;padding:var(--th-space-2) var(--th-space-5)}
+.desktop-brand{gap:var(--th-space-3)}.desktop-brand img{border-radius:10px}.desktop-brand strong{font-family:var(--th-font-display);font-size:var(--th-fs-md);letter-spacing:var(--th-track-snug)}
+.host-status{position:relative;isolation:isolate;padding:6px 12px;font-variant-numeric:tabular-nums}.host-status::before{content:"";position:absolute;inset:4px 0;z-index:-1;border-radius:999px;background:var(--th-level-2);border:1px solid var(--th-line)}
+/* Navigation: accent-soft fill for the current page, keeping the indicator bar */
+:root[data-theme] body[data-surface=desktop] .desktop-nav{width:216px;gap:2px;padding:var(--th-space-3) var(--th-space-3) var(--th-space-4)}
+:root[data-theme] body[data-surface=desktop] .desktop-nav button{border-radius:10px;padding:10px 14px;font-size:var(--th-fs-sm);font-weight:550}
+:root[data-theme] body[data-surface=desktop] .desktop-nav button:not([aria-current=page]):hover{background:var(--th-level-2)}
+:root[data-theme] body[data-surface=desktop] .desktop-nav button[aria-current=page]{background:var(--th-accent-soft);color:var(--th-text);font-weight:650}
+:root[data-theme] body[data-surface=desktop] .desktop-nav button[aria-current=page] svg{color:var(--th-accent)}
+:root[data-contrast=increased] body[data-surface=desktop] .desktop-nav button[aria-current=page]{box-shadow:inset 0 0 0 2px var(--th-accent)}
+.nav-note{margin-inline:14px}
+/* Workspace and grouped surfaces */
+:root[data-theme] body[data-surface=desktop] .desktop-content{padding:var(--th-space-8) var(--th-space-10) var(--th-space-10);border-radius:16px 0 0 0;border-top:1px solid var(--th-line);border-left:1px solid var(--th-line)}
+:root[data-theme] body[data-surface=desktop] .surface,:root[data-theme] body[data-surface=desktop] .control-group,:root[data-theme] body[data-surface=desktop] .pairing-panel{border:1px solid var(--th-line);border-radius:14px;background:var(--th-level-1)}
+:root[data-theme] body[data-surface=desktop] .surface{padding:var(--th-space-6)}
+:root[data-theme] body[data-surface=desktop] .pairing-panel{border-radius:16px;padding:var(--th-space-8)}
+:root[data-theme] body[data-surface=desktop] .control-group{padding:var(--th-space-2) var(--th-space-6) var(--th-space-1);margin-bottom:var(--th-space-6)}
+:root[data-theme] body[data-surface=desktop] .control-group legend{float:left;width:100%;padding:var(--th-space-4) 0 var(--th-space-2);margin:0}
+:root[data-theme] body[data-surface=desktop] .control-group legend+*{clear:both}
+:root[data-theme] body[data-surface=desktop] .setting-row{border-bottom-color:var(--th-line);min-height:72px}
+:root[data-theme] body[data-surface=desktop] .setting-row>label,:root[data-theme] body[data-surface=desktop] .setting-row>div>label{font-size:var(--th-fs-sm);font-weight:600}
+.qr-wrap{border-radius:12px}:root[data-theme] body[data-surface=desktop] .pairing-security{border-top-color:var(--th-line)}
+:root[data-theme] body[data-surface=desktop] .pairing-security .pin-code{font-family:var(--th-font-display);font-size:40px;font-weight:650;letter-spacing:.14em}
+:root[data-theme] body[data-surface=desktop] .pairing-help{border-bottom-color:var(--th-line)}
+/* Controls */
+:root[data-theme] body[data-surface=desktop] :is(.primary-button,.secondary-button,.quiet-button){border-radius:10px;padding:9px 16px;font-size:var(--th-fs-sm)}
+:root[data-theme] body[data-surface=desktop] .primary-button{font-weight:650}
+:root[data-theme] body[data-surface=desktop] .secondary-button{background:var(--th-level-2);border-color:var(--th-line-strong)}
+:root[data-theme] body[data-surface=desktop] input:not([type=checkbox]):not([type=range]),:root[data-theme] body[data-surface=desktop] select{border-radius:10px;border-color:var(--th-line-strong);border-bottom-color:var(--th-line-strong);background:var(--th-level-2);padding:10px 14px;transition-property:border-color,box-shadow;transition-duration:var(--th-dur-state,200ms);transition-timing-function:var(--th-ease)}
+:root[data-theme] body[data-surface=desktop] input:not([type=checkbox]):not([type=range]):focus,:root[data-theme] body[data-surface=desktop] select:focus{border-color:var(--th-accent);box-shadow:0 0 0 3px var(--th-accent-soft)}
+details code{border-radius:10px}
+/* Headings with counts, tables and lists */
+:root[data-theme] body[data-surface=desktop] .desktop-panel>.section-heading:first-child{margin-bottom:var(--th-space-6)}
+:root[data-theme] body[data-surface=desktop] #deviceCount{padding:4px 12px;border-radius:999px;background:var(--th-accent-soft);color:var(--th-text);font-weight:600;font-variant-numeric:tabular-nums}
+:root[data-theme] body[data-surface=desktop] .device-table th{font-size:var(--th-fs-xs);font-weight:600}
+:root[data-theme] body[data-surface=desktop] :is(.device-table th,.device-table td,.diagnostic-list dt,.diagnostic-list dd){border-bottom-color:var(--th-line)}
+:root[data-theme] body[data-surface=desktop] .device-table tbody tr:hover{background:var(--th-level-2)}
+.device-table td,.diagnostic-list dd{font-variant-numeric:tabular-nums}
+/* Callouts: tinted fill and a hairline, no thick side stripe */
+:root[data-theme] body[data-surface=desktop] :is(.desktop-feedback,.save-error,.connection-notice){border:1px solid color-mix(in srgb,var(--th-danger) 45%,transparent);border-radius:12px;background:var(--th-danger-soft);color:var(--th-text);padding:12px 16px}
+:root[data-theme] body[data-surface=desktop] .desktop-feedback[data-kind=success]{border-color:color-mix(in srgb,var(--th-success) 45%,transparent);background:var(--th-success-soft)}
+:root[data-theme] body[data-surface=desktop] .connection-notice{border-color:var(--th-accent-line);background:var(--th-accent-soft)}
+:root[data-theme] body[data-surface=desktop] .settings-save-bar{border-radius:12px;border-color:var(--th-line);background:var(--th-level-2);box-shadow:var(--th-elev-1)}
+:root[data-theme] body[data-surface=desktop] .settings-save-bar[data-dirty=true]{border-color:var(--th-accent-line);box-shadow:var(--th-elev-2)}
+:root[data-theme] body[data-surface=desktop] .preview-banner{background:var(--th-level-1);border-bottom:1px solid var(--th-line)}
+/* Browser surfaces */
+:root[data-theme] body[data-surface=desktop] ::selection{background:var(--th-accent-soft);color:var(--th-text)}
+:root[data-theme] body[data-surface=desktop] input,:root[data-theme] body[data-surface=desktop] textarea{caret-color:var(--th-accent)}
+:root[data-theme] body[data-surface=desktop] .desktop-content{scrollbar-color:var(--th-line-strong) transparent}
+@media(max-width:980px){:root[data-theme] body[data-surface=desktop] .desktop-nav{width:76px}:root[data-theme] body[data-surface=desktop] .desktop-nav button{padding:10px}:root[data-theme] body[data-surface=desktop] .desktop-content{padding:var(--th-space-6)}:root[data-theme] body[data-surface=desktop] .pairing-panel{padding:var(--th-space-5)}}
+@media(max-width:700px){:root[data-theme] body[data-surface=desktop] .desktop-nav{width:100%;padding:var(--th-space-1) var(--th-space-2)}:root[data-theme] body[data-surface=desktop] .desktop-content{padding:var(--th-space-5) var(--th-space-4);border-radius:0;border-left:0}:root[data-theme] body[data-surface=desktop] h1{font-size:var(--th-fs-2xl)}:root[data-theme] body[data-surface=desktop] .pairing-panel{padding:var(--th-space-5)}:root[data-theme] body[data-surface=desktop] .surface{padding:var(--th-space-5)}:root[data-theme] body[data-surface=desktop] .control-group{padding-inline:var(--th-space-4)}:root[data-theme] body[data-surface=desktop] .pairing-security .pin-code{font-size:32px}}
+@media(min-width:701px) and (max-height:700px){:root[data-theme] body[data-surface=desktop] .desktop-content{padding-top:var(--th-space-5)}:root[data-theme] body[data-surface=desktop] .pairing-panel{padding:var(--th-space-4)}:root[data-theme] body[data-surface=desktop] .lead{margin-bottom:var(--th-space-4)}}
+/* Motion: a panel enters from the direction of its nav item; disclosures open downward. Reduced motion is stopped by the global rule above. */
+@keyframes th-panel-in{from{opacity:0;transform:translateY(var(--th-nav-y,0))}to{opacity:1;transform:none}}
+@keyframes th-reveal-in{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+.desktop-content[data-nav-dir=forward]{--th-nav-y:14px}
+.desktop-content[data-nav-dir=back]{--th-nav-y:-14px}
+:root[data-theme] body[data-surface=desktop] .desktop-content[data-nav-dir] .desktop-panel:not([hidden]){animation:th-panel-in var(--th-dur-view) var(--th-ease) backwards}
+:root[data-theme] body[data-surface=desktop] details[open]>:not(summary){animation:th-reveal-in var(--th-dur-state) var(--th-ease) backwards}

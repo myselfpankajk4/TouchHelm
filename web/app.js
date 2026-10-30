@@ -1032,6 +1032,10 @@ class TouchHelmClient {
     if(this.experience?.seeking){this.experience.seeking=false;this.experience.text('seekPreview','');this.experience.tickMedia();}
     this.releaseDragLock();
     this.controls?.onViewChange(viewId);
+    // Entrance direction follows the bottom-nav order so a view slides in from the side its tab sits on.
+    const order = [...this.navTabs].map((tab) => tab.getAttribute("data-view"));
+    const from = order.indexOf([...this.views].find((v) => v.classList.contains("active"))?.id), to = order.indexOf(viewId);
+    if (from !== to) document.querySelector?.(".main-content")?.setAttribute("data-nav-dir", to < from ? "back" : "forward");
     this.navTabs.forEach((tab) => {
       const selected = tab.getAttribute("data-view") === viewId;
       tab.classList.toggle("active", selected);
