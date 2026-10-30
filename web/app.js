@@ -702,6 +702,7 @@ class TouchHelmClient {
     }
     if (this.elStatusDot) this.elStatusDot.className = `status-dot ${state}`;
     if (this.elStatusLabel) this.elStatusLabel.textContent = label;
+    window.TouchHelmMotion?.connection(state, this.elStatusPill);
     if (state !== "connected" && this.elStatusPing) {
       this.elStatusPing.textContent = "--ms";
     }

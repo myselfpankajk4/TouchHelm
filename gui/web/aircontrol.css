@@ -151,8 +151,8 @@ body[data-surface=desktop] .air-panel .air-session-actions button{min-height:44p
 .air-status-strip #airReadiness:empty{display:none}
 body[data-surface=desktop] .air-panel .air-tabs{position:static;margin:0;gap:0}
 body[data-surface=desktop] .air-panel .air-tabs button{min-height:44px;padding:4px 14px;font-size:13px}
-body[data-surface=desktop] .air-panel .air-workspace{flex:1 1 240px;min-height:244px;grid-template-columns:minmax(0,1fr) 224px;grid-template-rows:minmax(0,1fr);gap:14px;align-items:stretch}
-body[data-surface=desktop] .air-panel .air-camera-column{display:flex;flex-direction:column;gap:6px;min-height:0;min-width:0}
+body[data-surface=desktop] .air-panel .air-workspace{flex:1 1 240px;min-height:auto;grid-template-columns:minmax(0,1fr) 224px;grid-template-rows:minmax(auto,1fr);gap:14px;align-items:stretch}
+body[data-surface=desktop] .air-panel .air-camera-column{display:flex;flex-direction:column;gap:6px;min-height:auto;min-width:0}
 body[data-surface=desktop] .air-panel .air-stage{flex:1 1 auto;height:auto;min-height:244px}
 body[data-surface=desktop] .air-panel .air-tools{display:flex;flex-wrap:wrap;align-items:center;gap:6px;margin:0}
 body[data-surface=desktop] .air-panel .air-tools button{min-height:44px;padding:4px 12px;font-size:12px}

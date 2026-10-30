@@ -7,9 +7,11 @@
   <link id="th-themes-base" rel="stylesheet" href="__DESKTOP_ASSET_BASE__themes.css">
   <link rel="stylesheet" href="__DESKTOP_ASSET_BASE__desktop.css">
   <link rel="stylesheet" href="__DESKTOP_ASSET_BASE__theme-gl.css">
+  <link rel="stylesheet" href="__DESKTOP_ASSET_BASE__motion.css">
   <script defer src="__DESKTOP_ASSET_BASE__themes.js"></script>
   <script defer src="__DESKTOP_ASSET_BASE__theme-scenes.js"></script>
   <script defer src="__DESKTOP_ASSET_BASE__theme-gl.js"></script>
+  <script defer src="__DESKTOP_ASSET_BASE__motion.js"></script>
   <script defer src="__DESKTOP_ASSET_BASE__desktop.js"></script>
   <link rel="stylesheet" href="__DESKTOP_ASSET_BASE__aircontrol.css">
   <script defer src="__DESKTOP_ASSET_BASE__aircontrol-view.js"></script>
@@ -20,7 +22,7 @@
 <div class="desktop-shell">
   <header class="desktop-header">
     <div class="desktop-brand"><img src="__DESKTOP_ASSET_BASE__icons/icon.svg" alt="" width="48" height="48"><div><strong>TouchHelm</strong><span>Control center</span></div></div>
-    <div class="host-status"><span class="status-dot" aria-hidden="true"></span><span id="hostStatus">Starting host…</span></div>
+    <div class="host-status"><span class="status-dot" aria-hidden="true"></span><span id="hostStatus" role="status" aria-live="polite">Starting host…</span></div>
     <button id="minimize" class="quiet-button" type="button"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M5 12h14"/></svg><span>Minimize to tray</span></button>
     <button id="switchControlMode" class="quiet-button" type="button">Change mode</button>
   </header>

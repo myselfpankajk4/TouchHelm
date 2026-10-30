@@ -72,7 +72,7 @@ button:has(> .ui-icon) { display:inline-flex; align-items:center; justify-conten
 .drag-lock-badge { top:12px; right:12px; font-size:12px; background:var(--primary); color:var(--primary-contrast); border-radius:6px; }
 .scroll-strip { width:36px; border:1px solid var(--border-color); border-radius:12px; background:var(--bg-card); box-shadow:none; }
 .scroll-handle { height:40px; width:4px; border-radius:2px; background:var(--text-muted); }
-.trackpad-bottom-bar { height:44px; min-height:44px; display:grid; grid-template-columns:1.25fr 1fr 1fr 1.25fr; gap:4px; flex-shrink:0; }
+.trackpad-bottom-bar { height:44px; min-height:44px; display:grid; grid-template-columns:1.25fr 1fr 1.25fr; gap:4px; flex-shrink:0; }
 .trackpad-btn { min-height:44px; width:auto; min-width:0; flex-direction:row; border:0; border-radius:8px; font-size:12px; font-weight:500; color:var(--text-main); background:var(--bg-card); box-shadow:none; gap:4px; }
 .trackpad-btn:hover { background:var(--bg-card-hover); }
 .trackpad-btn.active { color:var(--primary); background:var(--bg-surface); }
@@ -358,7 +358,6 @@ h1,h2,h3 { text-wrap:balance; }
 #pcTextStatus[data-state="linked"]::before { background:var(--success); }
 .bottom-nav { padding-block:5px; }
 .nav-tab { border-radius:9px; gap:4px; }
-.nav-tab.active { box-shadow:inset 0 -2px var(--primary); }
 .nav-label { font-weight:550; }
 .nav-tab:not(.active) .nav-label { color:var(--text-main); }
 .desktop-context { padding-bottom:18px; border-bottom:1px solid var(--border-color); }
@@ -389,6 +388,24 @@ h1,h2,h3 { text-wrap:balance; }
 .modal-card { overscroll-behavior:contain; }
 select { color:var(--text-main); background-color:var(--bg-surface); }
 :is(.tool-btn,.send-btn,.quick-clear-btn,.dock-done,.macro-btn,.shortcut-btn,.native-key,.text-button):not(:disabled):hover { filter:brightness(1.08); }
+/* Interaction states. Colour feedback is instant and survives reduced motion;
+   movement (press scale, ripple, view slides) comes from motion.js. */
+.nav-tab { position:relative; transition-property:color,background-color; transition-duration:var(--th-dur-state,200ms); transition-timing-function:var(--th-ease,ease); }
+.nav-tab::after { content:""; position:absolute; left:50%; bottom:2px; width:20px; height:3px; border-radius:3px; background:var(--th-accent,var(--primary)); translate:-50% 0; scale:0 1; opacity:0; transition-property:scale,opacity; transition-duration:var(--th-dur-view,280ms); transition-timing-function:var(--th-ease,ease); }
+.nav-tab.active::after { scale:1 1; opacity:1; }
+.nav-tab:active:not(.active) { background:color-mix(in srgb,var(--th-surface-a,var(--bg-surface)) 70%,transparent); }
+.status-pill { transition:background-color var(--th-dur-state,200ms) var(--th-ease,ease); }
+.status-pill[data-state="connecting"] .status-label { color:var(--text-muted); }
+.status-pill[data-state="disconnected"] .status-label { color:var(--th-danger,var(--danger)); }
+:is(button,[role="button"],summary):not(:disabled):active { filter:brightness(.92); }
+:root[data-appearance="light"] :is(button,[role="button"],summary):not(:disabled):active { filter:brightness(.95); }
+:is(button,select):disabled { cursor:not-allowed; }
+@media (hover:hover) {
+  .nav-tab:not(.active):hover { background:color-mix(in srgb,var(--th-surface-a,var(--bg-surface)) 60%,transparent); color:var(--text-main); }
+  :is(.btn-primary,.btn-sm,.btn-next,.send-btn):not(:disabled):hover { filter:brightness(1.08); }
+  :is(.trackpad-btn,.slide-btn,.media-action-btn,.type-btn,.key-btn,.num-btn,.win-start-bar-btn,.btn-prev):not(:disabled):hover { border-color:color-mix(in srgb,var(--th-accent,var(--primary)) 45%,var(--border-color)); }
+}
+@media (hover:none) { .status-pill:hover,.icon-btn:not([aria-pressed="true"]):hover { background:transparent; } .icon-btn:not([aria-pressed="true"]):hover { color:var(--text-muted); } }
 @media (min-width:700px) {
   #viewTrackpad { padding:20px; gap:12px; }
   .pad-heading h1 { font-size:23px; }

@@ -16,7 +16,14 @@
     if(!ready){$('phoneURL').value='';$('copyURL').disabled=$('openURL').disabled=true;$('pairingQR').hidden=true;$('pinCode').hidden=true;document.querySelector('.qr-wrap').classList.add('qr-placeholder');document.querySelector('.qr-wrap').dataset.placeholder=loading?'Loading your connection…':'Reconnect to refresh your QR code';$('enablePairingRemote').disabled=true;$('deviceStatus').textContent=loading?'Loading devices…':'Device status unavailable';$('noDevices').hidden=true;}
   }
   function message(text,kind='error'){$('feedback').textContent=text;$('feedback').dataset.kind=kind;$('feedback').hidden=!text;if(text)window.TouchHelmEffects?.react($('feedback'),{kind});}
-  async function invoke(method,...args){
+  // Commands started by a button show busy, then success or error, on that button.
+  // Polling, preference writes and settings saves report their own state elsewhere.
+  const untracked=new Set(['get_state','save_preferences','save_settings']);
+  function invoke(method,...args){
+    const pending=call(method,...args),trigger=untracked.has(method)?null:window.TouchHelmMotion?.recentTrigger();
+    return trigger?window.TouchHelmMotion.track(trigger,pending):pending;
+  }
+  async function call(method,...args){
     if(preview){if(method==='get_state')return state||fixture();if(method==='save_settings'){state.config={...state.config,...args[0]};state.pin_code=args[0].pin_code;return {success:true,config:state.config};}if(method==='save_preferences')return {success:true};return {success:false,error:'Native commands are disabled in the interface preview.'};}
     const api=window.pywebview?.api;if(!api||typeof api[method]!=='function')throw new Error('The desktop connection is not ready. Restart TouchHelm if this continues.');
     return api[method](token,...args);
@@ -50,7 +57,7 @@
     $('desktopStopRemote').disabled=!remote.device;
     $('desktopRemoteBanner').hidden=!remote.device;
     $('desktopRemoteBannerText').textContent=$('desktopRemoteStatus').textContent;
-    state=next;const offline=next.connection_state==='disconnected';$('hostStatus').textContent=offline?'Host disconnected':next.connection_state==='loading'?'Loading host…':'Host running';document.querySelector('.host-status').classList.toggle('offline',offline);
+    state=next;const offline=next.connection_state==='disconnected';$('hostStatus').textContent=offline?'Host disconnected':next.connection_state==='loading'?'Loading host…':'Host running';document.querySelector('.host-status').classList.toggle('offline',offline);window.TouchHelmMotion?.connection(offline?'disconnected':next.connection_state==='loading'?'connecting':'connected',document.querySelector('.host-status'));
     $('previewBanner').hidden=!preview;
     const pairing=next.pairing||{},url=hostReady?pairing.http_url:null,qr=url?pairing.qr:null;
     $('pairingRemoteStatus').textContent=next.config.remote_enabled?'Screen and audio access enabled. Start a session from your phone.':'Screen and audio access is off.';$('enablePairingRemote').hidden=!!next.config.remote_enabled;$('enablePairingRemote').disabled=!hostReady;

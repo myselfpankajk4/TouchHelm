@@ -906,7 +906,7 @@ class TouchHelmServer:
         if relative=='index.html':
             from gui.webview_window import render_preview_html
             return web.Response(text=render_preview_html(),content_type='text/html')
-        if relative.startswith(('themes/','icons/')) or relative in ('themes.js','themes.css','theme-scenes.js','theme-gl.js','theme-gl.css'):
+        if relative.startswith(('themes/','icons/')) or relative in ('themes.js','themes.css','theme-scenes.js','theme-gl.js','theme-gl.css','motion.js','motion.css'):
             root=Path(WEB_DIR)
         candidate=(root/relative).resolve()
         if not candidate.is_relative_to(root.resolve()) or candidate.suffix not in ('.html','.js','.css','.svg','.png','.webp'):return web.Response(status=404)

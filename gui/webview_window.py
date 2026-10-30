@@ -65,7 +65,7 @@ class DesktopAssetServer:
             return None
         if relative in ('index.html', 'desktop.css', 'desktop.js','aircontrol.js','aircontrol.css','aircontrol-view.js'):
             return GUI_WEB / relative
-        if relative in ('themes.js', 'themes.css', 'theme-scenes.js', 'theme-gl.js', 'theme-gl.css'):
+        if relative in ('themes.js', 'themes.css', 'theme-scenes.js', 'theme-gl.js', 'theme-gl.css', 'motion.js', 'motion.css'):
             return ROOT / 'web' / relative
         if relative.startswith(('themes/', 'assets/', 'icons/')) and Path(relative).suffix.lower() in ('.css', '.svg', '.png', '.webp', '.jpg', '.woff2'):
             candidate = (ROOT / 'web' / relative).resolve()

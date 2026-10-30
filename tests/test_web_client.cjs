@@ -1008,7 +1008,7 @@ test('living visual matrix covers every theme, appearance, phone size and deskto
     for(const width of [820,1280]){
       await desktop.setViewportSize({width,height:820});
       for(const panel of ['pairing','devices','settings','diagnostics']){
-        await desktop.locator(`[data-panel="${panel}"]`).click();
+        await desktop.locator(`.desktop-nav [data-panel="${panel}"]`).click();
         const errors=await desktop.evaluate(()=>{const scope=document.querySelector('[data-page]:not([hidden])'),issues=[];if(document.documentElement.scrollWidth>innerWidth+1)issues.push('horizontal overflow');for(const b of scope.querySelectorAll('button,select,input:not([type=checkbox]):not([type=range])')){if(!b.getClientRects().length)continue;const r=b.getBoundingClientRect();if(r.width<43.5||r.height<43.5)issues.push(`small target ${b.id}: ${r.width}x${r.height}`);if(r.left<0||r.right>innerWidth+1)issues.push(`clipped ${b.id}`);}return issues;});
         issues.push(...errors.map(error=>`${theme}/${appearance}/desktop${width}/${panel}: ${error}`));
         if(width===1280&&panel==='pairing')await screenshot(desktop,`living-${theme}-${appearance}-desktop`);
@@ -1471,7 +1471,7 @@ test('Text sync and pairing guides visual inspection',async(page,context)=>{
     await desktop.bringToFront();
     await desktop.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off'},false);await TouchHelmThemes.ready;},{theme,appearance});
     for(const width of [820,1280]){
-      await desktop.setViewportSize({width,height:900});await desktop.locator('[data-panel=pairing]').click();
+      await desktop.setViewportSize({width,height:900});await desktop.locator('.desktop-nav [data-panel=pairing]').click();
       const errors=await desktop.evaluate(()=>{
         const errors=[];if(document.documentElement.scrollWidth>innerWidth+1)errors.push('horizontal overflow');
         for(const node of document.querySelectorAll('[data-page=pairing] button,[data-page=pairing] select,[data-page=pairing] input')){
