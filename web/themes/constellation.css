@@ -1,0 +1,19 @@
+/* Constellation: a drifting star network that links to the finger. Thin lines, precise geometry. */
+:root[data-theme="constellation"][data-appearance="dark"] {
+  --th-bg:#070b16; --th-panel:#0f1626; --th-surface:#172138; --th-hover:#212e4d;
+  --th-text:#eef2ff; --th-muted:#b5c1de; --th-accent:#8fb2ff; --th-on-accent:#07122b;
+  --th-border:#61729a; --th-danger:#ffa8b8; --th-success:#8fe8c8;
+  --th-gl-a:#6a9bff; --th-gl-b:#b087ff; --th-gl-c:#5af0d0;
+}
+:root[data-theme="constellation"][data-appearance="light"] {
+  --th-bg:#eef1fa; --th-panel:#e2e7f5; --th-surface:#d3dbef; --th-hover:#c3cde8;
+  --th-text:#121a33; --th-muted:#425071; --th-accent:#2a52c9; --th-on-accent:#ffffff;
+  --th-border:#6f7fa8; --th-danger:#a32843; --th-success:#11745e;
+  --th-gl-a:#4a78e8; --th-gl-b:#8f63e8; --th-gl-c:#14a98a;
+}
+:root[data-theme="constellation"] { --th-radius:12px; --th-key-radius:8px; --th-pad-radius:18px; }
+:root[data-theme="constellation"] :is(.touch-surface,.laser-surface) { border:1px solid color-mix(in srgb,var(--th-accent) 45%,transparent); }
+:root[data-theme="constellation"] :is(.trackpad-btn,.tool-btn,.native-key,.macro-btn,.shortcut-btn,.media-btn) { background:var(--th-panel-a); border:1px solid var(--th-border); transition:transform .1s ease,border-color .1s ease; }
+:root[data-theme="constellation"] :is(.trackpad-btn,.tool-btn,.native-key,.macro-btn,.shortcut-btn,.media-btn):active { transform:scale(.96); border-color:var(--th-accent); }
+:root[data-theme="constellation"] .nav-tab.active { box-shadow:inset 0 -2px var(--th-accent); border-radius:8px 8px 4px 4px; }
+:root[data-theme="constellation"] .trackpad-hints { text-shadow:0 0 12px var(--th-bg),0 0 3px var(--th-bg); }

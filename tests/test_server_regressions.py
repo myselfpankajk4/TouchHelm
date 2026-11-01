@@ -67,6 +67,24 @@ class AuthenticationFailureTests(unittest.IsolatedAsyncioTestCase):
 
 
 class ServerTests(unittest.IsolatedAsyncioTestCase):
+    async def test_failed_reauthentication_revokes_existing_file_cookie_session(self):
+        self.config.update({'require_pin':True,'pin_code':'5678','files_enabled':True})
+        ws=await self.http.ws_connect('/ws');await ws.receive_json()
+        await ws.send_json({'type':'auth','pin':'5678'})
+        await self.receive_kind(ws,'auth_res')
+        client=self.server.clients[next(iter(self.server.clients))]
+        session={'client':client,'pin':'5678','expires':time.monotonic()+60}
+        self.server.files.sessions['fixture-session']=session
+        await ws.send_json({'type':'auth','pin':'0000'})
+        response=await self.receive_kind(ws,'auth_res')
+        self.assertFalse(response['success'])
+        self.assertTrue(session.get('revoked'))
+        self.assertNotIn('fixture-session',self.server.files.sessions)
+    async def test_phone_settings_cannot_grant_native_file_access(self):
+        self.config.update({'require_pin':True,'pin_code':'5678'})
+        response=await self.http.post('/api/config',json={'files_enabled':True},headers={'X-TouchHelm-Pin':'5678'})
+        self.assertEqual(response.status,400)
+        self.assertFalse(self.config.get('files_enabled'))
     async def asyncSetUp(self):
         self.folder = tempfile.TemporaryDirectory()
         self.config = ConfigManager(os.path.join(self.folder.name, 'config.json'))

@@ -11,6 +11,27 @@ from concurrent.futures import ThreadPoolExecutor
 
 from .remote_service import QUALITIES, private_sdp
 
+
+def media_peer_matches(pc,peer):
+    """Pinned aiortc/aioice seam: all selected RTP transports reach this phone."""
+    import ipaddress
+    try:
+        expected=ipaddress.ip_address(peer);allowed={str(expected)}
+        from .discovery import get_local_ip_addresses
+        local=get_local_ip_addresses()
+        if expected.is_loopback or str(expected) in local:
+            # A browser on this PC may nominate its other actual NIC. This never
+            # broadens the allowed address set of an external phone.
+            allowed.update(local)
+        hosts=[]
+        for transceiver in pc.getTransceivers():
+            connection=transceiver.sender.transport.transport._connection
+            pairs=list(connection._nominated.values())
+            if not pairs:return False
+            hosts.extend(pair.remote_candidate.host for pair in pairs)
+        return bool(hosts) and all(str(ipaddress.ip_address(host)) in allowed for host in hosts)
+    except (AttributeError,ValueError,TypeError):return False
+
 def configure_video_encoding(quality):
     """aiortc 1.15's stock camera budgets blur desktop text. Retain REMB."""
     from aiortc.codecs import h264, vpx
@@ -69,8 +90,9 @@ def unlocked_desktop():
 
 
 class MediaWorker:
-    def __init__(self, *, on_state):
+    def __init__(self, *, on_state,local_peer=None):
         self.on_state=on_state
+        self.local_peer=local_peer;self.media_ready=None;self.audio_requested=False;self.peer_monitor=None
         self.loop=asyncio.new_event_loop()
         self.capture_pool=ThreadPoolExecutor(max_workers=1,thread_name_prefix='TouchHelm capture')
         self.thread=threading.Thread(target=self._run,name='TouchHelm remote media',daemon=True)
@@ -99,15 +121,17 @@ class MediaWorker:
         from aiortc import RTCPeerConnection, RTCConfiguration
         configure_video_encoding(quality)
         self.pc=RTCPeerConnection(RTCConfiguration(iceServers=[]))
+        self.media_ready=asyncio.Event();self.audio_requested=audio
+        if not self.local_peer:self.media_ready.set()
         self.video_sender=None
         if display is not None:
-            self.video=DesktopTrack(display,quality,self.on_state,self.capture_pool)
-            await self.loop.run_in_executor(self.capture_pool,self.video.capture.open)
+            self.video=DesktopTrack(display,quality,self.on_state,self.capture_pool,self.media_ready)
+            if not self.local_peer:await self.loop.run_in_executor(self.capture_pool,self.video.capture.open)
             self.video_sender=self.pc.addTrack(self.video.track)
         # Always negotiate an audio transceiver; capture is opt-in, silence otherwise.
         if capabilities()['audio']:
-            self.audio=AudioSource(self.on_state)
-            if audio:
+            self.audio=AudioSource(self.on_state,self.media_ready)
+            if audio and not self.local_peer:
                 try:await asyncio.to_thread(self.audio.enable,True)
                 except Exception as error:
                     self.audio.close();self.on_state('audio_unavailable','PC audio unavailable: '+str(error)[:160])
@@ -116,9 +140,22 @@ class MediaWorker:
         @self.pc.on('connectionstatechange')
         async def connection():
             state=self.pc.connectionState
-            if state=='connected':self.on_state('live','Desktop stream connected.')
+            if state=='connected':
+                if self.local_peer:
+                    try:
+                        if not media_peer_matches(self.pc,self.local_peer):raise RuntimeError('The media route is not the paired local phone.')
+                        if self.video:await self.loop.run_in_executor(self.capture_pool,self.video.capture.open)
+                        if self.audio and self.audio_requested:
+                            try:await asyncio.to_thread(self.audio.enable,True)
+                            except Exception:
+                                self.audio.close();self.on_state('audio_unavailable','PC audio could not start. Check the Windows output device.')
+                                if not self.video:raise
+                        self.media_ready.set();self.peer_monitor=asyncio.create_task(self._watch_peer())
+                    except Exception:
+                        self.on_state('failed','A direct local media connection could not be verified. Reconnect on the same Wi-Fi.');return
+                self.on_state('live','Desktop stream connected on local Wi-Fi.')
             elif state=='connecting':self.on_state('connecting','Connecting desktop media…')
-            elif state=='failed':self.on_state('failed','WebRTC media could not reach the PC. Check Windows Firewall and tailnet/LAN reachability.')
+            elif state=='failed':self.on_state('failed','WebRTC media could not reach the PC. Check Windows Firewall and local Wi-Fi.')
             elif state=='closed' and not self.closed:self.on_state('stopped','Desktop media stopped.')
 
     async def offer(self, sdp):
@@ -139,6 +176,8 @@ class MediaWorker:
         return await self._call(self._configure(display,quality,audio))
 
     async def _configure(self,display,quality,audio):
+        self.audio_requested=audio
+        if self.local_peer and not self.media_ready.is_set():raise RuntimeError('Wait for the local media connection.')
         if self.video:await self.loop.run_in_executor(self.capture_pool,self.video.capture.configure,display,quality)
         budget=configure_video_encoding(quality)
         # Pinned aiortc exposes no public encoder policy. Keep this compatibility
@@ -158,6 +197,7 @@ class MediaWorker:
         self.closed=True
         async def cleanup():
             try:
+                if self.peer_monitor:self.peer_monitor.cancel()
                 if self.pc:await asyncio.wait_for(self.pc.close(),3)
             finally:
                 try:
@@ -171,6 +211,12 @@ class MediaWorker:
         future.add_done_callback(finished)
         await asyncio.shield(asyncio.wrap_future(future))
         await asyncio.to_thread(self.thread.join,3)
+
+    async def _watch_peer(self):
+        while not self.closed:
+            await asyncio.sleep(.5)
+            if self.pc.connectionState!='connected' or not media_peer_matches(self.pc,self.local_peer):
+                self.media_ready.clear();self.on_state('failed','Local media connection ended. Reconnect on the same Wi-Fi.');return
 
 
 class DesktopCapture:
@@ -245,7 +291,7 @@ class DesktopCapture:
 
 
 class DesktopTrack:
-    def __init__(self,display,quality,on_state,capture_pool):
+    def __init__(self,display,quality,on_state,capture_pool,ready=None):
         from aiortc import VideoStreamTrack
         from av import VideoFrame
         self.capture=DesktopCapture(display,quality)
@@ -253,6 +299,7 @@ class DesktopTrack:
         class Track(VideoStreamTrack):
             def __init__(self):super().__init__();self.origin=time.monotonic();self.next=self.origin;self.cursor_at=0
             async def recv(self):
+                if ready:await ready.wait()
                 height,fps=QUALITIES[source.capture.quality]
                 await asyncio.sleep(max(0,self.next-time.monotonic()))
                 self.next=max(self.next+1/fps,time.monotonic())
@@ -277,7 +324,7 @@ class DesktopTrack:
 
 
 class AudioSource:
-    def __init__(self,on_state):
+    def __init__(self,on_state,ready=None):
         from aiortc import AudioStreamTrack
         self.api=self.stream=None;self.lock=threading.RLock();self.on_state=on_state
         self.channels=2;self.rate=48000;self.device=None;self.checked=0
@@ -285,6 +332,7 @@ class AudioSource:
         class Track(AudioStreamTrack):
             def __init__(self):super().__init__();self.pts=0;self.next=time.monotonic();self.normalizer=AudioNormalizer()
             async def recv(self):
+                if ready:await ready.wait()
                 await asyncio.sleep(max(0,self.next-time.monotonic()));self.next=max(self.next+.02,time.monotonic())
                 raw,rate,channels=await asyncio.to_thread(source.read)
                 try:frame=self.normalizer.frame(raw,rate,channels)

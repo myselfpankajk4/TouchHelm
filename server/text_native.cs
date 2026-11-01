@@ -96,8 +96,33 @@ public static class TouchHelmFocusedText {
     public static Dictionary<string,object> Read() {
         var e=Focused();string text;ValuePattern value;TextPattern pattern;
         if(e==null || !Content(e,out text,out value,out pattern))return Missing("Focus an editable PC text field. Protected, read-only and unsupported fields are excluded.");
-        return new Dictionary<string,object>{{"available",true},{"field_id",Identity(e)},
+        var state=new Dictionary<string,object>{{"available",true},{"field_id",Identity(e)},
             {"revision",Hash(text)},{"text",Normalize(text)},{"editable",true},{"message","PC field linked · two-way text"}};
+        Selection(e,text,pattern,state);
+        return state;
+    }
+    static void Selection(AutomationElement e,string text,TextPattern pattern,Dictionary<string,object> state) {
+        try {
+            // ValuePattern controls (including Chromium's address bar) can also
+            // expose TextPattern. Selection is optional; never guess offsets.
+            object p;
+            if(pattern==null && e.TryGetCurrentPattern(TextPattern.Pattern,out p))pattern=(TextPattern)p;
+            if(pattern==null || pattern.SupportedTextSelection==SupportedTextSelection.None)return;
+            var selected=pattern.GetSelection();
+            if(selected==null || selected.Length!=1)return;
+            var document=pattern.DocumentRange;
+            var prefix=document.Clone();
+            prefix.MoveEndpointByRange(TextPatternRangeEndpoint.End,selected[0],TextPatternRangeEndpoint.Start);
+            var suffix=document.Clone();
+            suffix.MoveEndpointByRange(TextPatternRangeEndpoint.Start,selected[0],TextPatternRangeEndpoint.End);
+            string before=prefix.GetText(10001),within=selected[0].GetText(10001),after=suffix.GetText(10001);
+            // A changed value or a provider-specific document/value mismatch
+            // cannot safely describe a selection in this snapshot.
+            string verify;ValuePattern v;TextPattern t;
+            if(before+within+after!=text || !Content(e,out verify,out v,out t) || verify!=text)return;
+            state["selection_start"]=Normalize(before).Length;
+            state["selection_end"]=Normalize(before+within).Length;
+        } catch(InvalidOperationException) {} catch(ElementNotAvailableException) {} catch(NotSupportedException) {}
     }
     static void Key(List<INPUT> list, ushort vk, ushort scan, uint flags) {
         list.Add(new INPUT{type=1,u=new UNION{key=new KEYBOARD{vk=vk,scan=scan,flags=flags}}});

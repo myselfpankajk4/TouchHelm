@@ -47,7 +47,7 @@ const server = http.createServer((req, res) => {
   let relative = `web${name === '/' ? '/index.html' : name}`;
   if(name.startsWith('/preview/desktop/')){
     const file=name.slice('/preview/desktop/'.length)||'index.html';
-    relative=['index.html','desktop.js','desktop.css','aircontrol.js','aircontrol.css'].includes(file)?`gui/web/${file}`:`web/${file}`;
+    relative=['index.html','desktop.js','desktop.css','aircontrol.js','aircontrol.css','aircontrol-view.js'].includes(file)?`gui/web/${file}`:`web/${file}`;
   }
   const filename = path.resolve(root, relative);
   if (![path.join(root,'web'),path.join(root,'gui','web')].some(folder=>filename.startsWith(folder+path.sep))) {
@@ -204,16 +204,12 @@ test('v2 unknown hardware readback never displays an invented percentage',async 
   assert.match(await page.locator('#lblBrightLevel').textContent(),/unknown|unavailable/i);
   assert.equal(await page.locator('#sliderVol').isDisabled(),true);assert.equal(await page.locator('#sliderBright').isDisabled(),true);
 });
-test('v2 certificate download uses authenticated headers and handoff preserves theme preferences',async page=>{
-  await page.route('**/api/pairing',route=>route.fulfill({contentType:'application/json',body:JSON.stringify({enabled:true,fingerprint_sha256:'fixture fingerprint',https_port:8766})}));
-  await page.route('**/api/pairing/certificate',route=>route.fulfill({contentType:'application/pkix-cert',body:'Public fixture certificate'}));
-  await page.route('**/api/pairing/handoff',route=>route.fulfill({status:503,contentType:'application/json',body:'{}'}));
+test('local settings need no certificate/handoff and preserve the draft and theme',async page=>{
+  const pairing=[];page.on('request',request=>{if(new URL(request.url()).pathname.startsWith('/api/pairing'))pairing.push(request.url());});
   await page.evaluate(()=>{window.touchhelm.authPin='5678';window.touchhelm.typeInput.value='keep\nthis';});
-  await page.locator('#btnSettings').click();await page.locator('#btnSecurePairing').click();
-  const request=page.waitForRequest('**/api/pairing/certificate');await page.getByRole('button',{name:'Download local public certificate',exact:true}).click();
-  assert.equal((await request).headers()['x-touchhelm-pin'],'5678');
-  const handoff=page.waitForRequest('**/api/pairing/handoff');await page.getByRole('button',{name:'Continue with local HTTPS',exact:true}).click();const data=(await handoff).postDataJSON();
-  assert.equal(data.draft,'keep\nthis');assert.equal(data.preferences.theme,'glass');assert.ok(data.preferences.appearance&&data.preferences.motion&&data.preferences.contrast);assert.equal(data.preferences.pin_code,undefined);
+  await page.locator('#btnSettings').click();assert.equal(await page.locator('#btnSecurePairing').isVisible(),false);
+  assert.match(await page.locator('#secureCapabilities').innerText(),/local Wi-Fi/i);
+  assert.deepEqual(pairing,[]);assert.equal(await page.evaluate(()=>TouchHelmThemes.state.id),'aurora');
   assert.equal(await page.locator('#typeInput').inputValue(),'keep\nthis');
 });
 test('living Presenter navigation never overlaps monitor controls at narrow sizes',async page=>{
@@ -277,9 +273,9 @@ test('living scrub cancellation sends nothing and rejected seeking restores actu
 });
 
 test('living real pad permits peripheral reactions while keeping labels and input intact',async page=>{
-  await page.evaluate(async()=>{TouchHelmThemes.apply('companion',{effects:'rich',motion:'system'},false);await TouchHelmThemes.ready;});
-  const result=await page.evaluate(()=>{const c=touchhelm,source=document.getElementById('touchSurface');TouchHelmEffects.synchronize();const accepted=TouchHelmEffects.react(source,{kind:'press',x:40,y:550});return {accepted,scenes:document.querySelectorAll('.th-effect-scene:not([hidden])').length,events:getComputedStyle(document.querySelector('.th-effects-stage')).pointerEvents};});
-  assert.equal(result.accepted,true);assert.ok(result.scenes>0);assert.equal(result.events,'none');assert.deepEqual(await packets(page),[]);
+  await page.evaluate(async()=>{TouchHelmThemes.apply('aurora',{effects:'rich',motion:'system'},false);await TouchHelmThemes.ready;});
+  const result=await page.evaluate(()=>{const source=document.getElementById('touchSurface');TouchHelmEffects.synchronize();const accepted=TouchHelmEffects.react(source,{kind:'press',x:40,y:550});const canvas=document.getElementById('th-gl');return {accepted,gl:document.documentElement.dataset.gl,events:getComputedStyle(canvas).pointerEvents,hidden:canvas.getAttribute('aria-hidden')};});
+  assert.equal(result.gl,'on');assert.equal(result.accepted,true);assert.equal(result.events,'none');assert.equal(result.hidden,'true');assert.deepEqual(await packets(page),[]);
 });
 test('living artwork decodes authenticated bytes, reuses valid art, and clears changed media',async page=>{
   const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jmk0AAAAASUVORK5CYII=','base64');let reads=0;
@@ -383,8 +379,8 @@ async function assertDialogFocus(page, id) {
 test('navigation exposes selected tabs and keyboard theme choices are native controls', async page => {
   assert.equal(await page.locator('#statusPill').evaluate(el => el.tagName), 'BUTTON');
   const tabs = page.locator('.nav-tab');
-  assert.equal(await tabs.count(), 6);
-  for (let i = 0; i < 6; i++) {
+  assert.equal(await tabs.count(), 7);
+  for (let i = 0; i < 7; i++) {
     const tab = tabs.nth(i), view = await tab.getAttribute('data-view');
     assert.equal(await tab.getAttribute('role'), 'tab');
     assert.equal(await tab.getAttribute('aria-controls'), view);
@@ -394,10 +390,10 @@ test('navigation exposes selected tabs and keyboard theme choices are native con
     assert.ok(await page.locator(`#${view}`).isVisible());
   }
   await openTheme(page);
-  const choice = page.locator('.th-theme-choice[data-theme-id="clay"]');
+  const choice = page.locator('.th-theme-choice[data-theme-id="constellation"]');
   assert.equal(await choice.evaluate(el => el.tagName), 'BUTTON');
   await choice.focus(); await page.keyboard.press('Space');
-  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'clay');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'constellation');
   assert.equal(await choice.getAttribute('aria-pressed'), 'true');
   await page.keyboard.press('Escape');
   assert.equal(await page.locator('#themeModal').isVisible(), false);
@@ -444,7 +440,7 @@ test('Send and Clear restore typing focus for continued phone input', async page
 
 test('disconnected remote controls are disabled while drafts, local timer and navigation remain usable', async page => {
   await disconnect(page);
-  for (const id of ['btnLeftClick', 'btnRightClick', 'btnMiddleClick', 'btnGyro',
+  for (const id of ['btnLeftClick', 'btnRightClick', 'btnMiddleClick',
     'btnKeyViewStart', 'btnSlideNext', 'btnSlidePrev', 'btnSlideStart', 'btnVolUp', 'btnVolMute',
     'btnMediaPlay', 'btnLockPc', 'sliderVol', 'sliderBright', 'sliderSensitivity',
     'sliderAccel', 'sliderScroll', 'chkInvertScroll']) {
@@ -624,7 +620,7 @@ test('offline Send preserves drafts and Return still creates a local newline', a
 test('startup reads server settings without posting phone defaults', async page => {
   assert.deepEqual(posts, [], 'startup must not write /api/config');
   assert.equal(await page.evaluate(() => window.touchhelm.sensitivity), serverConfig.mouse_sensitivity);
-  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'glass', 'host settings do not replace the device theme');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'aurora', 'host settings do not replace the device theme');
 });
 
 test('stale socket callbacks cannot mark a newer socket offline or reconnect it', async page => {
@@ -682,27 +678,8 @@ test('server config broadcasts update UI without writing settings back', async p
   })}));
   assert.equal(await page.evaluate(() => window.touchhelm.sensitivity), 1.7);
   assert.equal(await page.locator('#sliderSensitivity').inputValue(), '1.7');
-  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'glass', 'another device cannot restyle this phone');
+  assert.equal(await page.evaluate(() => document.documentElement.dataset.theme), 'aurora', 'another device cannot restyle this phone');
   assert.deepEqual(posts, []);
-});
-
-test('failed wake lock cannot leave an active button or a dummy playback loop', async page => {
-  await page.locator('#btnSettings').click();
-  await page.evaluate(() => {
-    Object.defineProperty(navigator, 'wakeLock', {configurable: true, value: {
-      request: () => Promise.reject(new Error('Wake lock unavailable')),
-    }});
-    HTMLMediaElement.prototype.play = () => Promise.reject(new Error('Unsupported media'));
-  });
-  await page.locator('#btnWakeLock').click();
-  await page.waitForTimeout(30);
-  assert.equal(await page.evaluate(() => window.touchhelm.wakeLockRequested), false);
-  assert.equal(await page.locator('video:not(#remoteVideo)').count(), 0, 'failed wake lock must not create dummy media');
-  assert.equal(await page.locator('#remoteVideo').evaluate(video=>video.srcObject), null, 'Remote video remains inactive');
-  assert.equal(await page.evaluate(() => document.querySelector('#btnWakeLock').style.color === 'var(--primary)'), false);
-  assert.ok(await page.locator('#uiFeedback').isVisible(), 'touch users need visible capability feedback');
-  assert.match(await page.locator('#uiFeedback').textContent(), /awake|wake|https|browser/i);
-  assert.equal(await page.evaluate(() => window.touchhelm.isConnected), true);
 });
 
 test('unsupported fullscreen API is handled without a browser exception', async page => {
@@ -974,7 +951,7 @@ for (const [width, height] of [[360, 640], [390, 844], [844, 390], [320, 568], [
 
 test('all seven themes keep control text readable on every remote view and settings dialog', async page => {
   const issues = [];
-  for (const theme of ['bloom', 'resonance', 'companion', 'clay', 'glass', 'soft', 'ink']) {
+  for (const theme of ['aurora', 'bloom', 'resonance', 'constellation', 'ink']) {
     for(const appearance of ['light','dark']) {
     await openTheme(page);
     await page.locator(`.th-theme-choice[data-theme-id="${theme}"]`).click();
@@ -997,7 +974,7 @@ test('all seven themes keep control text readable on every remote view and setti
 }, true);
 
 test('living visual matrix covers every theme, appearance, phone size and desktop panel',async(page,context)=>{
-  const issues=[],themes=['bloom','companion','resonance','clay','glass','soft','ink'];
+  const issues=[],themes=['aurora','bloom','resonance','constellation','ink'];
   await page.goto(origin+'/index.html?preview=1');
   await page.waitForFunction(()=>window.touchhelm?.isConnected&&window.TouchHelmEffects);
   const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
@@ -1031,17 +1008,17 @@ test('living visual matrix covers every theme, appearance, phone size and deskto
     for(const width of [820,1280]){
       await desktop.setViewportSize({width,height:820});
       for(const panel of ['pairing','devices','settings','diagnostics']){
-        await desktop.locator(`[data-panel="${panel}"]`).click();
+        await desktop.locator(`.desktop-nav [data-panel="${panel}"]`).click();
         const errors=await desktop.evaluate(()=>{const scope=document.querySelector('[data-page]:not([hidden])'),issues=[];if(document.documentElement.scrollWidth>innerWidth+1)issues.push('horizontal overflow');for(const b of scope.querySelectorAll('button,select,input:not([type=checkbox]):not([type=range])')){if(!b.getClientRects().length)continue;const r=b.getBoundingClientRect();if(r.width<43.5||r.height<43.5)issues.push(`small target ${b.id}: ${r.width}x${r.height}`);if(r.left<0||r.right>innerWidth+1)issues.push(`clipped ${b.id}`);}return issues;});
         issues.push(...errors.map(error=>`${theme}/${appearance}/desktop${width}/${panel}: ${error}`));
         if(width===1280&&panel==='pairing')await screenshot(desktop,`living-${theme}-${appearance}-desktop`);
       }
     }
-    if(['bloom','companion','resonance','clay'].includes(theme)&&appearance==='dark'){
+    if(['aurora','bloom','resonance','constellation'].includes(theme)&&appearance==='dark'){
       await page.bringToFront();
       await page.setViewportSize({width:390,height:844});await page.locator('#tabTrackpad').click();
       await page.evaluate(()=>{TouchHelmThemes.apply(TouchHelmThemes.state.id,{effects:'rich',motion:'system'},false);TouchHelmEffects.reset();});
-      await page.waitForFunction(()=>TouchHelmEffects.diagnostics.idle>0,{timeout:4000});
+      await page.waitForFunction(()=>TouchHelmEffects.diagnostics.running,{timeout:4000});
       await page.waitForTimeout(900);
       if(captureScreenshots){fs.mkdirSync(artifactDir,{recursive:true});await page.screenshot({path:path.join(artifactDir,`living-${theme}-idle.png`)});}
       await page.evaluate(()=>TouchHelmEffects.react(document.querySelector('#btnLeftClick'),{kind:'press'}));
@@ -1049,22 +1026,26 @@ test('living visual matrix covers every theme, appearance, phone size and deskto
       if(captureScreenshots)await page.screenshot({path:path.join(artifactDir,`living-${theme}-touch.png`)});
     }
   }
-  for(const state of ['seeking','closing','tailscale_ready','tailscale_permission','tailscale_reconnect']){
+  for(const state of ['seeking','closing']){
     await page.bringToFront();
     await page.evaluate(state=>TouchHelmDemo.setState(state),state);await desktop.evaluate(state=>TouchHelmDesktopPreview.setState(state),state);
-    if(state.startsWith('tailscale_')){await desktop.bringToFront();await desktop.locator('[data-panel=pairing]').click();await screenshot(desktop,`living-${state}`);}
   }
   await desktop.close();assert.deepEqual(issues,[],'full living theme/layout matrix');
 },true);
 
-test('Remote keeps a browser-only casting guide and refuses insecure streaming',async page=>{
+test('Remote keeps its casting guide and refuses an unverified media route',async page=>{
   await page.locator('#tabRemote').click();
   await page.locator('[data-remote-mode="control"]').click();
-  assert.match(await page.locator('#remoteStatus').textContent(),/trusted HTTPS/i);
+  assert.match(await page.locator('#remoteStatus').textContent(),/local Wi-Fi/i);
   assert.equal(await page.evaluate(()=>__packets.filter(p=>p.type==='remote_start').length),0);
   await page.locator('#remoteCastOpen').click();
   assert.ok(await page.locator('#remoteCastGuide').isVisible());
   assert.match(await page.locator('#remoteCastGuide').textContent(),/Google Cast|Miracast/);
+});
+
+test('verified local media capability is ready without an HTTPS setup prompt',async page=>{
+  await page.evaluate(()=>touchhelm.remote.handle({type:'remote_capabilities',enabled:true,local:true,secure:false,audio:true,video:true,displays:[]}));
+  assert.match(await page.locator('#remoteStatus').textContent(),/ready.*local Wi-Fi/i);
 });
 
 async function fakeRemote(page,mode='control'){
@@ -1096,6 +1077,81 @@ test('Media and Remote share pending audio state and rollback failures',async pa
   await page.evaluate(()=>touchhelm.remote.handle({type:'remote_result',success:false,request:'remote_config',message:'Audio device unavailable'}));
   assert.equal(await page.locator('#mediaPcAudio').isChecked(),false);
   assert.equal(await page.locator('#remoteAudio').isChecked(),false);
+});
+
+test('desktop media permission being off is explained on Media without a false HTTPS error',async page=>{
+  await page.evaluate(()=>{touchhelm.remote.caps={audio:true,video:true,enabled:false,secure:true};touchhelm.remote.state='stopped';touchhelm.remote.mode='control';touchhelm.remote.audioConfirmed=false;touchhelm.remote.render();});
+  await page.locator('#tabMedia').click();await page.locator('#mediaPcAudio').click();
+  assert.equal(await page.locator('#mediaPcAudio').isChecked(),false);
+  assert.match(await page.locator('#mediaPcAudioStatus').innerText(),/off.*PC|PC.*off/i);
+  assert.match(await page.locator('#mediaPcAudioStatus').innerText(),/Pair your phone/);
+  assert.doesNotMatch(await page.locator('#mediaPcAudioStatus').innerText(),/HTTPS/);
+  assert.equal(await page.evaluate(()=>__packets.filter(packet=>packet.type==='remote_start').length),0);
+});
+
+test('PC audio switch starts audible playback after host confirmation',async page=>{
+  await fakeRemote(page);
+  await page.evaluate(()=>{const r=touchhelm.remote;r.caps={audio:true};r.pc={close(){}};r.video.play=async()=>{};r.render();});
+  await page.locator('#tabMedia').click();await page.locator('#mediaPcAudio').check();
+  assert.equal(await page.evaluate(()=>remoteVideo.muted),true,'Wait for PC permission and audio confirmation');
+  await page.evaluate(()=>touchhelm.remote.handle({type:'remote_state',success:true,session_id:'fixture',revision:'geometry1',mode:'control',state:'live',audio:true,quality:'clear'}));
+  await page.waitForFunction(()=>!remoteVideo.muted);
+  assert.equal(await page.locator('#mediaPcAudioUnmute').isVisible(),false);
+});
+
+test('blocked PC audio offers a working playback retry',async page=>{
+  await fakeRemote(page);
+  await page.evaluate(()=>{const r=touchhelm.remote;r.caps={audio:true};r.pc={close(){}};r.video.play=async()=>{throw new DOMException('Playback needs a tap','NotAllowedError');};r.render();});
+  await page.locator('#tabMedia').click();await page.locator('#mediaPcAudio').check();
+  await page.evaluate(()=>touchhelm.remote.handle({type:'remote_state',success:true,session_id:'fixture',revision:'geometry1',mode:'control',state:'live',audio:true,quality:'clear'}));
+  await page.waitForFunction(()=>remoteVideo.muted);
+  assert.equal(await page.locator('#mediaPcAudioUnmute').isVisible(),true);
+  await page.evaluate(()=>{remoteVideo.play=async()=>{};});await page.locator('#mediaPcAudioUnmute').click();
+  await page.waitForFunction(()=>!remoteVideo.muted);
+});
+
+test('PDF preview has one Chrome open action without embedded viewer controls',async page=>{
+  await page.locator('#tabFiles').click();
+  await page.evaluate(()=>touchhelm.files.preview({id:'fixture-pdf',name:'Travel guide.pdf',preview:'pdf',mime:'application/pdf',size:500}));
+  assert.equal(await page.locator('#filesPreview iframe').count(),0);
+  assert.equal(await page.locator('#filesOpenExternal').textContent(),'Open PDF in Chrome');
+  assert.equal(await page.locator('#filesOpenExternal').getAttribute('href'),'/api/files/content/fixture-pdf');
+  assert.equal(await page.locator('#filesOpenExternal').getAttribute('target'),'_blank');
+  assert.equal(await page.locator('#filesPreviewReceive').isVisible(),true);
+  await screenshot(page,'test9-pdf-preview');
+});
+
+test('Files transfers show only a mini progress strip until expanded',async page=>{
+  await page.locator('#tabFiles').click();
+  await page.evaluate(()=>{const files=touchhelm.files;files.transfers=[{id:'compact-transfer',name:'Video.mp4',size:1000,sent:250,direction:'send',state:'sending',destination:'Downloads'}];files.drawTransfers();filesTransfers.querySelector('details').open=false;});
+  assert.equal(await page.locator('#filesTransfers .files-transfer:visible').count(),0);
+  assert.ok((await page.locator('#filesTransfers').boundingBox()).height<=72);
+  assert.equal(await page.locator('#filesTransferProgress').isVisible(),true);
+  assert.equal(await page.locator('#filesTransferProgress').getAttribute('value'),'250');
+  await page.locator('#filesTransferSummary').click();assert.equal(await page.getByRole('button',{name:'Cancel Video.mp4',exact:true}).isVisible(),true);
+  await page.evaluate(()=>{touchhelm.files.transfers[0].sent=500;touchhelm.files.drawTransfers();});
+  assert.equal(await page.locator('#filesTransfers details').getAttribute('open'),'');
+  await page.locator('#filesTransferSummary').click();
+  await page.evaluate(()=>{touchhelm.files.transfers[0].state='complete';touchhelm.files.drawTransfers();});
+  assert.equal(await page.locator('#filesTransfers .files-transfer:visible').count(),0);
+  await screenshot(page,'test10-transfers-collapsed');
+});
+
+test('Files mini progress prioritizes active transfer over a pending Chrome download',async page=>{
+  await page.locator('#tabFiles').click();
+  await page.evaluate(()=>{touchhelm.files.transfers=[{id:'pending-download',name:'Download.mp4',size:1000,sent:0,direction:'receive',state:'browser'},{id:'active-upload',name:'Upload.mp4',size:1000,sent:500,direction:'send',state:'sending',destination:'Downloads'}];touchhelm.files.drawTransfers();});
+  assert.equal(await page.locator('#filesTransferProgress').getAttribute('value'),'500');
+  assert.match(await page.locator('#filesTransferLabel').textContent(),/in progress/);
+});
+
+test('Files video refits when transfer history expands and collapses',async page=>{
+  await page.locator('#tabFiles').click();
+  await page.evaluate(()=>{const files=touchhelm.files;files.transfers=Array.from({length:4},(_,i)=>({id:'history'+i,name:'Saved '+i+'.mp4',size:1000,sent:1000,direction:'send',state:'complete',destination:'Downloads'}));files.drawTransfers();files.preview({id:'fixture-video',name:'Portrait.mp4',preview:'video'});const video=filesPreviewBody.querySelector('video');video.width=360;video.height=640;files.fitPreviewVideo();});
+  const before=await page.locator('#filesPreview video').evaluate(video=>video.getBoundingClientRect().height);
+  await page.locator('#filesTransferSummary').click();
+  await page.waitForFunction(before=>document.querySelector('#filesPreview video').getBoundingClientRect().height<before-10,before);
+  await page.locator('#filesTransferSummary').click();
+  await page.waitForFunction(before=>document.querySelector('#filesPreview video').getBoundingClientRect().height>=before-1,before);
 });
 
 test('Hidden viewer stays connected on incoming packets when mobile stops decoding',async page=>{
@@ -1136,14 +1192,19 @@ test('Phone Return twice remains a draft and uses safe PC line breaks',async pag
   assert.ok(packets.filter(p=>p.type==='text'&&p.text.includes('\n')).every(p=>p.newline_mode==='shift_enter'));
 });
 
-test('Existing seven themes generate bounded procedural reactions without background photos',async page=>{
-  for(const theme of ['bloom','companion','resonance','clay','glass','soft','ink']){
-    await page.evaluate(async theme=>{touchhelm.switchView('viewTrackpad');TouchHelmThemes.apply(theme,{appearance:'dark',effects:'rich',motion:'full'},false);await TouchHelmThemes.ready;TouchHelmEffects.reset();},theme);
-    await page.waitForFunction(theme=>TouchHelmEffects.diagnostics.theme===theme,theme);
-    assert.equal(await page.evaluate(()=>TouchHelmEffects.react(document.querySelector('#btnLeftClick'),{kind:'press'})),true);
-    const info=await page.evaluate(()=>({count:document.querySelectorAll('.th-effect:not([hidden])').length,procedural:TouchHelmEffects.diagnostics.procedural,background:getComputedStyle(touchSurface,'::before').backgroundImage}));
-    assert.ok(info.count>0&&info.count<=8);assert.equal(info.procedural,true);assert.equal(info.background.includes('.webp'),false);
+test('Generative themes render a bounded WebGL backdrop and Ink stays plain',async page=>{
+  for(const theme of ['aurora','bloom','resonance','constellation']){
+    for(const appearance of ['dark','light']){
+      await page.evaluate(async({theme,appearance})=>{touchhelm.switchView('viewTrackpad');TouchHelmThemes.apply(theme,{appearance,effects:'rich',motion:'full'},false);await TouchHelmThemes.ready;TouchHelmEffects.reset();},{theme,appearance});
+      await page.waitForFunction(theme=>TouchHelmEffects.diagnostics.scene===theme,theme);
+      assert.equal(await page.evaluate(()=>TouchHelmEffects.react(document.querySelector('#btnLeftClick'),{kind:'press'})),true,`${theme} ${appearance} reacts`);
+      const info=await page.evaluate(()=>({d:TouchHelmEffects.diagnostics,gl:document.documentElement.dataset.gl,background:getComputedStyle(touchSurface,'::before').backgroundImage}));
+      assert.equal(info.gl,'on');assert.ok(info.d.stamps>0&&info.d.stamps<=info.d.stampSlots);assert.ok(info.d.width*info.d.height<=600000);assert.equal(info.background.includes('.webp'),false);
+    }
   }
+  await page.evaluate(async()=>{TouchHelmThemes.apply('ink',{appearance:'dark',effects:'rich',motion:'full'},false);await TouchHelmThemes.ready;TouchHelmEffects.synchronize();});
+  assert.equal(await page.evaluate(()=>document.documentElement.dataset.gl),'off');
+  assert.equal(await page.evaluate(()=>TouchHelmEffects.diagnostics.scheduled),false);
 });
 
 test('Remote view mode cannot send input and direct coordinates stay scoped',async page=>{
@@ -1209,8 +1270,9 @@ test('Wireless Display setup shows real progress, approval and completion states
   await desktop.close();
 });
 
-test('Focused PC text updates the phone without echo and protects concurrent drafts',async page=>{
+test('Focused PC text updates the phone without echo and follows PC changes automatically',async page=>{
   await page.evaluate(()=>{
+    clearInterval(touchhelm.textSync.timer);
     touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'Typed on PC',editable:true});
   });
   assert.equal(await page.locator('#typeInput').inputValue(),'Typed on PC');
@@ -1220,12 +1282,12 @@ test('Focused PC text updates the phone without echo and protects concurrent dra
   await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:false,message:'PC text changed. Review the PC text.'}));
   assert.equal(await page.locator('#typeInput').inputValue(),'Phone edit');
   await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r2',text:'Concurrent PC edit',editable:true}));
-  assert.equal(await page.locator('#typeInput').inputValue(),'Phone edit');
-  await page.locator('#usePCText').click();
   assert.equal(await page.locator('#typeInput').inputValue(),'Concurrent PC edit');
+  assert.equal(await page.locator('#usePCText').count(),0);
 });
 
 test('Two-way typing coalesces edits, waits for acknowledgement and preserves IME',async page=>{
+  await page.evaluate(()=>clearInterval(touchhelm.textSync.timer));
   await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'',editable:true}));
   await page.locator('#typeInput').fill('a');await page.locator('#typeInput').fill('abc');
   assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').length),1);
@@ -1238,15 +1300,11 @@ test('Two-way typing coalesces edits, waits for acknowledgement and preserves IM
   assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').at(-1).text),'abc\n\n🙂');
 });
 
-test('Desktop connection selection reveals an actionable setup guide beside the QR',async(page,context)=>{
+test('Desktop pairing only offers local Wi-Fi and explains access beside the QR',async(page,context)=>{
   const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
   await desktop.waitForFunction(()=>window.TouchHelmDesktopPreview);
-  await desktop.locator('#connectionMode').selectOption('tailscale');
-  assert.equal(await desktop.locator('#connectionSetupGuide').getAttribute('data-mode'),'tailscale');
-  assert.match(await desktop.locator('#connectionSetupGuide').innerText(),/same account/i);
-  assert.match(await desktop.locator('#connectionSetupGuide').innerText(),/8443|private HTTPS/i);
-  await desktop.locator('#connectionMode').selectOption('local_ca');
-  assert.match(await desktop.locator('#connectionSetupGuide').innerText(),/CA certificate/);
+  await desktop.locator('#pairingFilesHelp summary').click();
+  assert.match(await desktop.locator('#pairingFilesHelp').innerText(),/local drives|local phones/i);
   await desktop.close();
 });
 
@@ -1255,7 +1313,7 @@ test('PC text snapshots cannot erase typing that happened during a read',async p
   await page.locator('#typeInput').fill('New phone edit');
   await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',request_id:touchhelm.textSync.pending.request_id,available:true,field_id:'field',revision:'before',text:'',editable:true}));
   assert.equal(await page.locator('#typeInput').inputValue(),'New phone edit');
-  assert.equal(await page.evaluate(()=>touchhelm.textSync.field),null);
+  assert.equal(await page.evaluate(()=>touchhelm.textSync.conflict),false);
 });
 
 test('Buffered edits to a linked PC field send only after explicit Send',async page=>{
@@ -1289,41 +1347,274 @@ test('Buffered Send waiting on a read preserves its draft if the PC field change
   await page.locator('#chkRealtimeTyping').uncheck();await page.locator('#typeInput').fill('Keep this phone draft');
   await page.locator('#btnSendText').click();
   await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',request_id:touchhelm.textSync.pending.request_id,available:true,field_id:'other-field',revision:'r2',text:'Different PC text',editable:true}));
-  assert.equal(await page.locator('#typeInput').inputValue(),'Keep this phone draft');
+  assert.equal(await page.locator('#typeInput').inputValue(),'Different PC text');
   assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write'||p.type==='text'||p.type==='key').length),0);
-  assert.equal(await page.evaluate(()=>touchhelm.textSync.conflict),true);
+  assert.equal(await page.evaluate(()=>touchhelm.textSync.conflict),false);
+});
+
+test('Text recovery follows PC changes without a relink button',async page=>{
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;clearInterval(sync.timer);sync.reset();
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'PC original'});
+    sync.receive({type:'text_state',available:false,message:'PC focus moved'});
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r2',text:'PC revised'});
+  });
+  assert.equal(await page.locator('#typeInput').inputValue(),'PC revised');
+  assert.equal(await page.evaluate(()=>touchhelm.textSync.conflict),false);
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:false,message:'PC focus moved'}));
+  await page.locator('#typeInput').fill('Keep phone draft');
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r3',text:'PC changed again'}));
+  assert.equal(await page.locator('#typeInput').inputValue(),'PC changed again');
+  assert.equal(await page.locator('#usePCText').count(),0);
+});
+
+test('Text recovery accepts an acknowledgement during phone composition',async page=>{
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;clearInterval(sync.timer);sync.reset();
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:''});
+  });
+  await page.locator('#typeInput').fill('a');
+  await page.locator('#typeInput').evaluate(el=>{
+    el.dispatchEvent(new CompositionEvent('compositionstart'));el.value='a日本';
+    el.dispatchEvent(new InputEvent('input',{isComposing:true}));
+    const sync=touchhelm.textSync;
+    sync.receive({type:'text_state',request_id:sync.pending.request_id,available:true,field_id:'field',revision:'r2',text:'a'});
+    el.dispatchEvent(new CompositionEvent('compositionend'));
+  });
+  assert.equal(await page.locator('#typeInput').inputValue(),'a日本');
+  const last=await page.evaluate(()=>__packets.filter(packet=>packet.action==='write').at(-1));
+  assert.equal(last.revision,'r2');assert.equal(last.text,'a日本');
+});
+
+test('Text recovery Send resumes a saved linked draft without submitting the PC field',async page=>{
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;clearInterval(sync.timer);sync.reset();
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'PC original'});
+    touchhelm.typeInput.value='Saved phone edit';touchhelm.liveTypingPaused=true;touchhelm.updateTypingUi();
+  });
+  await page.locator('#typeInput').focus();await page.locator('#btnSendText').click();
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;
+    sync.receive({type:'text_state',request_id:sync.pending.request_id,available:true,field_id:'field',revision:'r2',text:'Saved phone edit'});
+  });
+  assert.equal(await page.evaluate(()=>touchhelm.liveTypingPaused),false);
+  assert.equal(await page.locator('#typeInput').inputValue(),'');
+  assert.equal(await page.evaluate(()=>__packets.filter(packet=>packet.type==='key'&&packet.key==='enter').length),0);
+});
+
+test('PC focus opens the typing dock automatically and a later PC click reopens it',async page=>{
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;clearInterval(sync.timer);sync.reset();
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'PC text'});
+  });
+  assert.equal(await page.locator('#typingDock').evaluate(el=>el.classList.contains('expanded')),true);
+  assert.equal(await page.locator('#typeInput').evaluate(el=>el===document.activeElement),true);
+  await page.locator('#btnTypingDone').click();
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r2',text:'PC updated'}));
+  assert.equal(await page.locator('#typingDock').evaluate(el=>el.classList.contains('expanded')),false);
+  await page.locator('#btnLeftClick').click();
+  await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'field',revision:'r2',text:'PC updated'}));
+  assert.equal(await page.locator('#typingDock').evaluate(el=>el.classList.contains('expanded')),true);
+  assert.equal(await page.locator('#usePCText').count(),0);
+});
+
+test('Text recovery never duplicates a committed phone edit after a lost acknowledgement',async page=>{
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;clearInterval(sync.timer);sync.reset();
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:''});
+  });
+  await page.locator('#typeInput').fill('a');await page.locator('#typeInput').fill('ab');
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync,request=sync.pending.request_id;
+    sync.suspend();sync.poll();
+    sync.receive({type:'text_state',request_id:sync.pending.request_id,available:true,field_id:'field',revision:'r2',text:'a PC',acknowledged_write:request});
+  });
+  assert.equal(await page.locator('#typeInput').inputValue(),'a PCb');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').at(-1).text),'a PCb');
+});
+
+test('Clear clears the linked PC field without the next snapshot restoring its text',async page=>{
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;clearInterval(sync.timer);sync.reset();
+    sync.receive({type:'text_state',available:true,field_id:'field',revision:'r1',text:'PC text to clear'});
+    __packets.length=0;
+  });
+  await page.locator('#btnClearText').click();
+  assert.equal(await page.locator('#typeInput').inputValue(),'');
+  const write=await page.evaluate(()=>__packets.filter(p=>p.action==='write').at(-1));
+  assert.equal(write.text,'');assert.equal(write.revision,'r1');
+  assert.equal(await page.evaluate(()=>touchhelm.liveTextValue),'PC text to clear');
+  await page.evaluate(()=>{
+    const sync=touchhelm.textSync;
+    sync.receive({type:'text_state',request_id:sync.pending.request_id,available:true,field_id:'field',revision:'r2',text:''});
+    sync.poll();
+    sync.receive({type:'text_state',request_id:sync.pending.request_id,available:true,field_id:'field',revision:'r2',text:''});
+  });
+  assert.equal(await page.locator('#typeInput').inputValue(),'');
+  assert.equal(await page.locator('#typeInput').evaluate(el=>document.activeElement===el),true);
+  await page.locator('#typeInput').fill('Next text');
+  assert.equal(await page.evaluate(()=>__packets.filter(p=>p.action==='write').at(-1).text),'Next text');
 });
 
 test('Text sync and pairing guides visual inspection',async(page,context)=>{
   const issues=[],desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
   await desktop.waitForFunction(()=>window.TouchHelmDesktopPreview);
-  for(const theme of ['bloom','companion','resonance','clay','glass','soft','ink'])for(const appearance of ['light','dark']){
+  for(const theme of ['aurora','bloom','resonance','constellation','ink'])for(const appearance of ['light','dark']){
     await page.bringToFront();
     await page.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off'},false);await TouchHelmThemes.ready;},{theme,appearance});
     for(const [width,height]of [[320,568],[360,640],[390,844],[844,390],[390,420]]){
       await page.setViewportSize({width,height});await page.locator('#typeInput').focus();
       await page.evaluate(()=>touchhelm.textSync.receive({type:'text_state',available:true,field_id:'sample',revision:'r1',text:'Sample PC text\nContinued on the phone',editable:true}));
       issues.push(...await inspectUsability(page,`${theme}/${appearance}/${width}x${height}/sync`));
-      if(theme==='glass'&&appearance==='dark'&&width===390&&height===844)await screenshot(page,'text-sync-phone');
+      if(theme==='aurora'&&appearance==='dark'&&width===390&&height===844)await screenshot(page,'text-sync-phone');
     }
     await desktop.bringToFront();
     await desktop.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off'},false);await TouchHelmThemes.ready;},{theme,appearance});
-    for(const width of [820,1280])for(const mode of ['local_ca','tailscale']){
-      await desktop.setViewportSize({width,height:900});await desktop.locator('#connectionMode').selectOption(mode);
+    for(const width of [820,1280]){
+      await desktop.setViewportSize({width,height:900});await desktop.locator('.desktop-nav [data-panel=pairing]').click();
       const errors=await desktop.evaluate(()=>{
         const errors=[];if(document.documentElement.scrollWidth>innerWidth+1)errors.push('horizontal overflow');
-        for(const node of connectionSetupGuide.querySelectorAll('button,select,input')){
+        for(const node of document.querySelectorAll('[data-page=pairing] button,[data-page=pairing] select,[data-page=pairing] input')){
           if(!node.getClientRects().length)continue;const r=node.getBoundingClientRect();
           if(r.width<43.5||r.height<43.5)errors.push(`small target ${node.id}`);
           if(r.right>innerWidth+1)errors.push(`clipped ${node.id}`);
         }
         return errors;
-      });issues.push(...errors.map(x=>`${theme}/${appearance}/desktop${width}/${mode}: ${x}`));
-      if(theme==='glass'&&appearance==='dark'&&width===1280)await screenshot(desktop,`pairing-guide-${mode}`);
+      });issues.push(...errors.map(x=>`${theme}/${appearance}/desktop${width}: ${x}`));
+      if(theme==='aurora'&&appearance==='dark'&&width===1280)await screenshot(desktop,'pairing-guide');
     }
   }
   await desktop.close();assert.deepEqual(issues,[]);
 },true);
+
+test('AirControl daily workspace keeps the stage visible and readiness authoritative',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:820,height:620});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('practicing');});
+  const visible=await desktop.locator('#airStage').evaluate(n=>{const r=n.getBoundingClientRect();return Math.min(innerHeight,r.bottom)-Math.max(0,r.top);});
+  assert.ok(visible>=240,`stage has ${visible}px visible`);
+  await desktop.evaluate(()=>TouchHelmAir.render({...TouchHelmAir.state,activation:{ready:false,code:'release_gesture',message:'Relax your expression before enabling.'}}));
+  assert.equal(await desktop.locator('#airEnable').isDisabled(),true);
+  assert.match(await desktop.locator('#airReadiness').innerText(),/Relax your expression/);
+  await screenshot(desktop,'aircontrol-daily-workspace-small');await desktop.close();
+});
+
+test('AirControl exercise controls and head scrolling stay explicit',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:1120,height:800});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('active');});
+  await desktop.locator('[data-air-tab=practice]').click();
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.owns_input),true);
+  await desktop.locator('#airExercise').selectOption('click');await desktop.locator('#airExerciseStart').click();
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.state),'practicing');
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.owns_input),false);
+  assert.equal(await desktop.locator('.air-task-target').count(),3);
+  await screenshot(desktop,'aircontrol-daily-practice');
+  await desktop.locator('[data-air-tab=controls]').click();
+  await desktop.locator('#airScroll').click();assert.equal(await desktop.locator('#airScrollDone').isVisible(),true);
+  await desktop.locator('#airScrollDone').click();assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.head_scroll),false);
+  await desktop.close();
+});
+
+test('AirControl scroll practice says what to do and shows the button filling',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:1120,height:800});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('active');});
+  await desktop.locator('[data-air-tab=practice]').click();
+  await desktop.locator('#airExercise').selectOption('scroll');await desktop.locator('#airExerciseStart').click();
+  const show=(point,progress)=>desktop.evaluate(([point,progress])=>{
+    const air=TouchHelmAir,s=air.state,w=640,h=480,top=h-148;
+    const rect=(x,y,width)=>[x/w,y/h,(x+width)/w,(y+44)/h];
+    air.state={...s,point,progress,head_scroll:true,profile:{...s.profile,mode:'head'},
+      scroll_regions:[{action:'scroll_up',label:'Up',rect:rect(8,top,(w-20)/2)},{action:'scroll_down',label:'Down',rect:rect((w+4)/2,top,(w-20)/2)},
+        {action:'scroll_done',label:'Done',rect:rect(8,top+48,w-16)}]};
+    air.renderPractice(air.state);
+    return {prompt:document.getElementById('airTaskPrompt').textContent,help:document.getElementById('airScrollHelp').textContent,
+      hot:[...document.querySelectorAll('#airPracticeDock button.is-hot')].map(b=>b.dataset.action),
+      fill:document.querySelector('#airPracticeDock button[data-action=scroll_down]').style.getPropertyValue('--fill'),
+      labels:[...document.querySelectorAll('#airPracticeDock button')].map(b=>b.textContent)};
+  },[point,progress]);
+  const away=await show([.5,.3],0);
+  assert.match(away.prompt,/Move the pointer onto the Scroll down button/);assert.deepEqual(away.hot,[]);
+  assert.match(away.help,/wait for it to fill/);assert.deepEqual(away.labels,['▲ Scroll up','▼ Scroll down','Done scrolling']);
+  const filling=await show([.75,.73],.5);
+  assert.deepEqual(filling.hot,['scroll_down']);assert.equal(filling.fill,'0.5');assert.match(filling.prompt,/Keep resting on Scroll down/);
+  const scrolling=await show([.75,.73],1);assert.match(scrolling.prompt,/Scrolling down. Slide the pointer off/);
+  const leaving=await show([.5,.84],.4);assert.deepEqual(leaving.hot,['scroll_done']);assert.match(leaving.prompt,/Resting here will leave scrolling/);
+  await screenshot(desktop,'aircontrol-scroll-practice');await desktop.close();
+});
+
+test('AirControl keyboard tabs and 200 percent equivalent reflow retain escape controls',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:410,height:620});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('active');});
+  await desktop.locator('[data-air-tab=controls]').focus();await desktop.keyboard.press('ArrowRight');
+  assert.equal(await desktop.locator('[data-air-tab=mappings]').getAttribute('aria-selected'),'true');
+  const relation=await desktop.locator('[data-air-tab=mappings]').getAttribute('aria-controls');
+  assert.equal(await desktop.locator('#'+relation).getAttribute('aria-labelledby'),'air-tab-mappings');
+  assert.equal(await desktop.evaluate(()=>document.documentElement.scrollWidth<=innerWidth+1),true);
+  await desktop.locator('[data-air-tab=controls]').click();
+  for(const id of ['airPause','airStop']){const r=await desktop.locator('#'+id).boundingBox();assert.ok(r&&r.x>=0&&r.x+r.width<=410&&r.height>=44);}
+  await screenshot(desktop,'aircontrol-daily-reflow');await desktop.close();
+});
+
+test('AirControl viewport reload resynchronizes revisions before showing exercise targets',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{
+    TouchHelmDesktop.showPanel('aircontrol');const air=TouchHelmAir;
+    air.setPreview('practicing');air.previewAction('practice_start',{name:'click'});air.tab('practice');
+    clearInterval(air.frameTimer);air.viewportObserver.disconnect();air.viewportQueued=false;
+    air.viewportKey='';air.viewportRevision=0;TouchHelmDesktop.preview=false;
+    window.__viewportCalls=[];
+    const retained={...structuredClone(air.state),practice:{...structuredClone(air.state.practice),viewport_revision:40,viewport:[640,480]}};
+    TouchHelmDesktop.invoke=async(method,action,data)=>{
+      if(action!=='practice_viewport')return {success:true,aircontrol:retained};
+      __viewportCalls.push(data);
+      if(__viewportCalls.length===1)return {success:true,aircontrol:retained};
+      return new Promise(resolve=>window.__ackViewport=()=>resolve({success:true,aircontrol:{...retained,practice:{...retained.practice,status:'paused',viewport_revision:data.revision,viewport:[data.width,data.height]}}}));
+    };
+    air.queueViewport();
+  });
+  await desktop.waitForFunction(()=>__viewportCalls.length>=1&&TouchHelmAir.viewportQueued===false);
+  await desktop.waitForTimeout(80);
+  assert.ok(await desktop.evaluate(()=>__viewportCalls.length>=2),'stale acknowledgement must trigger a newer revision');
+  assert.equal(await desktop.locator('#airExerciseStart').isDisabled(),true);
+  assert.equal(await desktop.locator('.air-task-target').first().isVisible(),false);
+  await desktop.evaluate(()=>__ackViewport());
+  await desktop.waitForFunction(()=>TouchHelmAir.viewportPending===0);
+  const result=await desktop.evaluate(()=>({sent:__viewportCalls.at(-1),practice:TouchHelmAir.state.practice}));
+  assert.ok(result.sent.revision>40);assert.equal(result.practice.viewport_revision,result.sent.revision);
+  assert.deepEqual(result.practice.viewport,[result.sent.width,result.sent.height]);
+  assert.equal(await desktop.locator('.air-task-target').first().isVisible(),true);
+  await desktop.close();
+});
+
+test('AirControl repeated snapshots do not repeat live status announcements',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmAir);
+  const mutations=await desktop.evaluate(async()=>{
+    TouchHelmAir.setPreview('practicing');let count=0;
+    const observer=new MutationObserver(records=>count+=records.length);
+    observer.observe(document.getElementById('airMessage'),{childList:true,subtree:true,characterData:true});
+    for(let i=0;i<10;i++)TouchHelmAir.render(TouchHelmAir.state);
+    await Promise.resolve();observer.disconnect();return count;
+  });
+  assert.equal(mutations,0);await desktop.close();
+});
+
+test('AirControl diagnostics show unknown values and export only on request',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
+  await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('practicing');TouchHelmAir.tab('diagnostics');});
+  assert.match(await desktop.locator('#airDiagnostics').innerText(),/Not measured/);
+  const downloadPromise=desktop.waitForEvent('download');await desktop.locator('#airExportReport').click();
+  const download=await downloadPromise;assert.match(download.suggestedFilename(),/aircontrol.*json/);
+  await desktop.locator('#airResetMeasurements').click();
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.camera_active),true);
+  assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.calibrated),true);
+  await desktop.close();
+});
 
 test('AirControl chooser opens dedicated modes without starting a camera',async(page,context)=>{
   const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
@@ -1362,10 +1653,12 @@ test('AirControl practice, mapping validation and animated guide reflect explici
   await desktop.locator('[data-panel="aircontrol"]').click();
   await desktop.evaluate(()=>TouchHelmAir.setPreview('practicing'));
   assert.equal(await desktop.locator('#airEnable').isEnabled(),true);
+  await desktop.locator('#airGuideDisclosure summary').click();
   await desktop.locator('#airGuideSelect').selectOption('pinch_index');
   assert.equal(await desktop.locator('#airGuideArt').getAttribute('data-gesture'),'pinch_index');
   await desktop.locator('[data-air-tab="mappings"]').click();
   assert.equal(await desktop.locator('[data-air-gesture="closed_fist"]').isDisabled(),true);
+  await desktop.locator('#airMappingMore>summary').click();
   await desktop.locator('[data-air-gesture="thumb_up"]').selectOption('right_click');
   await desktop.locator('#airSaveMappings').click();
   assert.match(await desktop.locator('#airMappingError').innerText(),/only one|already|duplicate/i);
@@ -1396,12 +1689,12 @@ test('AirControl calibration shows a live finger and keeps its next action besid
   await desktop.locator('[data-panel="aircontrol"]').click();
   await desktop.evaluate(()=>{
     TouchHelmAir.profile.mode='hand';TouchHelmAir.setPreview('calibrating');
-    const hand=Array.from({length:21},()=>[.5,.5]);hand[8]=[.63,.28];
+    const hand=Array.from({length:21},()=>[.5,.5]);for(const i of [5,9,13,17])hand[i]=[.63,.28];
     const state={...TouchHelmAir.state,tracking:true,hand_points:hand,
       tracking_sources:{hand:true,face:false,hand_enabled:true,face_enabled:false}};
     TouchHelmAir.render(state);TouchHelmAir.draw(state);
   });
-  assert.equal(await desktop.locator('.air-camera-column #airCaptureTarget').count(),1);
+  assert.equal(await desktop.locator('.air-coach #airCaptureTarget').count(),1);
   assert.match(await desktop.locator('#airCalibrationStep').innerText(),/1 of 1/);
   await desktop.locator('#airFineCalibration').check();
   assert.match(await desktop.locator('#airCalibrationStep').innerText(),/1 of 5/);
@@ -1414,6 +1707,7 @@ test('AirControl calibration shows a live finger and keeps its next action besid
   await desktop.locator('[data-air-tab="settings"]').click();
   await desktop.locator('#airShowLandmarks').uncheck();
   await desktop.evaluate(()=>TouchHelmAir.draw({...TouchHelmAir.state,hand_points:Array.from({length:21},()=>[.7,.4])}));
+  await desktop.locator('[data-air-tab="controls"]').click();
   assert.equal(await desktop.locator('#airTrackedPointer').isVisible(),true);
   await desktop.evaluate(()=>TouchHelmAir.render({...TouchHelmAir.state,tracking:false,tracking_sources:{hand:false,face:false,hand_enabled:true,face_enabled:false}}));
   assert.equal(await desktop.locator('#airTrackedPointer').isVisible(),false);
@@ -1447,6 +1741,8 @@ test('AirControl personal face calibration exposes activation and applies a test
   await desktop.evaluate(()=>TouchHelmAir.draw({...TouchHelmAir.state,tracking_sources:{face:true,hand:false,face_enabled:true,hand_enabled:false}}));
   assert.equal(await desktop.locator('#airTrackedPointer').isVisible(),true);
   assert.match(await desktop.locator('#airTrackedPointer').innerText(),/Head pointer/);
+  await desktop.locator('[data-air-tab=settings]').click();
+  await desktop.locator('#airExpressionDetails>summary').click();
   await desktop.locator('#airExpressionNeutral').click();
   assert.match(await desktop.locator('#airExpressionResult').innerText(),/relaxed.*captured/i);
   await desktop.locator('#airExpressionSelect').selectOption('smile');
@@ -1457,6 +1753,21 @@ test('AirControl personal face calibration exposes activation and applies a test
   assert.match(await desktop.locator('#airExpressionResult').innerText(),/threshold|practice/i);
   await screenshot(desktop,'aircontrol-personal-face-calibration');
   await desktop.close();
+});
+
+test('AirControl practice keeps calibration feedback visible and separates readiness guidance',async(page,context)=>{
+  const desktop=await context.newPage();await desktop.setViewportSize({width:820,height:620});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>{
+    TouchHelmDesktop.showPanel('aircontrol');TouchHelmAir.setPreview('practicing');
+    TouchHelmAir.render({...TouchHelmAir.state,message:'Relaxed face captured. Hold your selected expression, then capture it.',practice_ready:false});
+  });
+  assert.match(await desktop.locator('#airMessage').innerText(),/Relaxed face captured/);
+  assert.match(await desktop.locator('#airPracticeResult').textContent(),/Windows input is off/);
+  await desktop.evaluate(()=>TouchHelmAir.render({...TouchHelmAir.state,message:'Personal expression threshold captured. Choose its action and test it in practice.',practice_ready:true,practice_frames:20,practice_actions:1}));
+  assert.match(await desktop.locator('#airMessage').innerText(),/threshold captured/);
+  assert.match(await desktop.locator('#airPracticeResult').textContent(),/Enable PC control/);
+  await screenshot(desktop,'aircontrol-practice-feedback');await desktop.close();
 });
 
 test('AirControl Head is default and its action dock explains drag and releases it in practice',async(page,context)=>{
@@ -1475,6 +1786,7 @@ test('AirControl Head is default and its action dock explains drag and releases 
   await desktop.locator('#airReleaseDrag').click();
   assert.equal(await desktop.evaluate(()=>TouchHelmAir.state.dragging),false);
   await screenshot(desktop,'aircontrol-head-actions');
+  await desktop.locator('#airChangeSetup').click();
   await desktop.locator('[data-air-mode=hand]').click();
   assert.equal(await desktop.locator('#airHeadActions').isVisible(),false);
   await desktop.close();
@@ -1484,7 +1796,7 @@ test('AirControl theme and desktop scaling visual matrix',async(page,context)=>{
   const desktop=await context.newPage();await desktop.goto(origin+'/preview/desktop/?preview=1');
   await desktop.waitForFunction(()=>window.TouchHelmAir);
   const issues=[];
-  for(const theme of ['bloom','companion','resonance','clay','glass','soft','ink'])for(const appearance of ['light','dark']){
+  for(const theme of ['aurora','bloom','resonance','constellation','ink'])for(const appearance of ['light','dark']){
     await desktop.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off',motion:'reduced'},false);await TouchHelmThemes.ready;},{theme,appearance});
     for(const [width,height]of [[820,620],[1120,800],[1440,900]]){
       await desktop.setViewportSize({width,height});
@@ -1503,7 +1815,7 @@ test('AirControl theme and desktop scaling visual matrix',async(page,context)=>{
             }
             return result;
           });issues.push(...errors.map(x=>`${theme}/${appearance}/${width}/${tab}: ${x}`));
-          if(theme==='glass'&&appearance==='dark'&&width===1120)await screenshot(desktop,'aircontrol-'+tab);
+          if(theme==='aurora'&&appearance==='dark'&&width===1120)await screenshot(desktop,'aircontrol-'+tab);
         }
       }
     }
@@ -1518,6 +1830,31 @@ test('AirControl theme and desktop scaling visual matrix',async(page,context)=>{
   await desktop.close();assert.deepEqual(issues,[]);
 },true);
 
+test('AirControl accessibility covers session states and all theme appearances',async(page,context)=>{
+  const AxeBuilder=require('@axe-core/playwright').default;
+  const desktop=await context.newPage();await desktop.setViewportSize({width:1120,height:800});
+  await desktop.goto(origin+'/preview/desktop/?preview=1');await desktop.waitForFunction(()=>window.TouchHelmAir);
+  await desktop.evaluate(()=>TouchHelmDesktop.showPanel('aircontrol'));
+  const issues=[],reports=[];
+  async function scan(label){
+    const result=await new AxeBuilder({page:desktop}).include('[data-page=aircontrol]').analyze();
+    reports.push({label,violations:result.violations});
+    for(const issue of result.violations.filter(x=>['critical','serious'].includes(x.impact))){
+      issues.push({label,id:issue.id,impact:issue.impact,targets:issue.nodes.map(n=>n.target)});
+    }
+  }
+  for(const state of ['ready','calibrating','practicing','active','paused','tracking_lost','unavailable']){
+    await desktop.evaluate(state=>{TouchHelmAir.setPreview(state);TouchHelmAir.tab('controls');},state);await scan(state);
+  }
+  await desktop.evaluate(()=>{TouchHelmAir.setPreview('active');TouchHelmAir.render({...TouchHelmAir.state,head_scroll:true});});await scan('scrolling');
+  for(const theme of ['aurora','bloom','resonance','constellation','ink'])for(const appearance of ['light','dark']){
+    await desktop.evaluate(async({theme,appearance})=>{TouchHelmThemes.apply(theme,{appearance,effects:'off'},false);await TouchHelmThemes.ready;TouchHelmAir.setPreview('practicing');TouchHelmAir.tab('practice');},{theme,appearance});
+    await scan(theme+'/'+appearance);
+  }
+  fs.mkdirSync(artifactDir,{recursive:true});fs.writeFileSync(path.join(artifactDir,'aircontrol-accessibility.json'),JSON.stringify(reports,null,2));
+  await desktop.close();assert.deepEqual(issues,[]);
+},true);
+
 (async () => {
   await new Promise(resolve => server.listen(0, '127.0.0.1', resolve));
   origin = `http://127.0.0.1:${server.address().port}`;
@@ -1528,7 +1865,7 @@ test('AirControl theme and desktop scaling visual matrix',async(page,context)=>{
   try {
     const executablePath = process.env.CHROMIUM_EXECUTABLE ||
       (fs.existsSync(chromium.executablePath()) ? chromium.executablePath() : 'C:/Program Files/Google/Chrome/Application/chrome.exe');
-    browser = await chromium.launch({executablePath, headless: true});
+    browser = await chromium.launch({executablePath, headless: true, args: ['--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist']});
     for (const {name, run} of selectedTests) {
       posts.length = 0;
       let context;

@@ -17,6 +17,38 @@ def tracked(source):
     # Older synthetic/provider observations remain compatible during migration.
     return number(source.get('confidence'))>=.65
 
+# Hand landmarks are noisy at 10-15 camera frames per second. A low resting
+# cutoff steadies a held finger; beta opens the filter quickly for deliberate
+# movement so tracking does not feel dragged behind the finger.
+HAND_BETA=9.
+# Head pose is steadied the same way. 0.12 Hz is the resting cutoff at
+# maximum smoothing; it widens as Smoothing is lowered. The reference range is
+# the default head_range, so a tighter range or higher sensitivity steadies more.
+HEAD_CUTOFF=.12
+HEAD_BETA=16.
+# Head pose speed below this (about 3.6 deg/s at the default range) is treated as
+# tracking noise and does not open the filter.
+HEAD_FLOOR=.1
+HEAD_RANGE_REFERENCE=18.
+HEAD_SPIKE=1.5
+HEAD_ADAPT=3.
+HEAD_ADAPT_TAU=1.5
+# Turning the head all the way to a screen edge is tiring and tracking is noisiest
+# there, so the outer part of the screen is reached with less turn: past EDGE_START
+# (a share of the screen width from the center) the gain rises smoothly to EDGE_GAIN
+# and the pointer is pinned at the edge, which is perfectly steady, a little early.
+# Nodding is also a smaller movement than turning, so pitch gets VERTICAL_GAIN.
+EDGE_START=.25
+EDGE_GAIN=2.
+VERTICAL_GAIN=1.25
+# A click starts a moment before it is recognised: the fingers drift together (hand) or the
+# face moves (head) while the gesture builds. The pointer is pinned to where it was this long
+# before recognition so the click lands where the user was aiming, not where the closing hand
+# dragged it. Positions older than TRAIL_SECONDS are not kept.
+HAND_LOOKBACK=.15
+HEAD_LOOKBACK=.15
+TRAIL_SECONDS=.5
+
 class GestureEngine:
     def __init__(self,profile):
         self.profile=validate_profile(profile);self.held=False;self.lost=True
@@ -25,20 +57,135 @@ class GestureEngine:
         self.dwell_exit=None;self.last_action=-10.;self.progress=0.;self.confidence=0.
         self.sequence_time=-1.
         self.pinch_anchor=None;self.pinch_origin=None
+        self.hand_rebase=None;self.trail=[]
         self.dwell_action='left_click';self.drag_latched=False;self.hud_regions=[];self.dwell_target=None
-        self.steady_point=None
+        self.steady_point=None;self.pose_accepted=None;self.pose_suspect=None;self.pose_speed=(0.,0.);self.jitter=0.;self.jitter_from=None;self.jitter_time=None
         self.hud_blocked=False
+        self.head_scroll=False;self.scroll_target='';self.scroll_since=0.;self.scroll_last=None
+        self.scroll_expression_blocked=False;self.local_gain=[1.,1.]
         smoothing=self.profile['smoothing'];head=self.profile['mode']!='hand'
-        self.filters=[OneEuro((.3 if head else 1.)+(1-smoothing)*(1.4 if head else 2.),6.) for _ in range(2)]
+        self.filters=[OneEuro(self._cutoff(1.),HAND_BETA if not head else HEAD_BETA) for _ in range(2)]
 
-    def reset(self):
+    def _hand_gain(self,axis):
+        # A smaller calibrated hand range, a smaller head range or higher
+        # sensitivity magnifies tracking noise on screen, so steady it in proportion.
+        if self.profile['mode']!='hand':return max(1.,self.profile['sensitivity']*HEAD_RANGE_REFERENCE/self.profile['head_range'])*self.local_gain[axis]
+        bounds=self.profile['calibration']['hand_bounds'];span=(bounds[2]-bounds[0],bounds[3]-bounds[1])[axis]
+        return max(1.,self.profile['sensitivity']*.7/max(span,.05))
+
+    def _lookback(self,t,seconds):
+        # Pointer position nearest to `seconds` before now, from frames before this one.
+        if not self.trail:return None
+        return min(self.trail,key=lambda entry:abs(entry[0]-(t-seconds)))[1]
+
+    def _reach(self,offset,axis):
+        # offset is the signed distance from the screen center in screen widths (0.5 is the
+        # edge). Returns the mapped offset and how much it magnifies pose noise there.
+        offset*=VERTICAL_GAIN if axis else 1.
+        size=abs(offset)-EDGE_START;gain=VERTICAL_GAIN if axis else 1.
+        if size<=0:return offset,gain
+        ramp=(.5-EDGE_START)*2/(1+EDGE_GAIN);size=min(size,ramp)
+        mapped=EDGE_START+size+(EDGE_GAIN-1)*size*size/(2*ramp)
+        if abs(offset)-EDGE_START>=ramp:mapped=.5
+        return math.copysign(min(mapped,.5),offset),gain*(1+(EDGE_GAIN-1)*size/ramp)
+
+    def _map_pose(self,pose):
+        yaw,pitch=self.profile['calibration']['head_neutral'];span=self.profile['head_range']*2;sensitivity=self.profile['sensitivity']
+        mapped=[self._reach((v-n)/span*sensitivity,axis) for axis,(v,n) in enumerate(zip(pose,(yaw,pitch)))]
+        return tuple(clamp(.5+m[0]) for m in mapped),[m[1] for m in mapped]
+
+    def _cutoff(self,resolution,axis=0):
+        smoothing=self.profile['smoothing']
+        if self.profile['mode']=='hand':return (.15+(1-smoothing)*.65)/self._hand_gain(axis)
+        return (HEAD_CUTOFF+(1-smoothing)*HEAD_CUTOFF*4.6)/resolution/self._hand_gain(axis)
+
+    def _pose_gate(self,pose,t):
+        # Face tracking sometimes glitches for one frame (a blink or a lost landmark).
+        # A jump over HEAD_SPIKE degrees waits one frame: if the next frame is back near
+        # the last good pose the glitch is dropped, otherwise the move was real and the
+        # delayed frame is replayed so the filter ends up exactly where it would have.
+        # Returns (pose to use, delayed pose to replay first, hold the filters this frame).
+        accepted,suspect=self.pose_accepted,self.pose_suspect
+        def far(a,b,at):
+            # A fast sweep keeps moving, so judge a jump against where the last real
+            # step was heading, not against where the head used to be.
+            lead=at-b[2];px,py=b[0]+self.pose_speed[0]*lead,b[1]+self.pose_speed[1]*lead
+            return math.hypot(a[0]-px,a[1]-py)>HEAD_SPIKE
+        if accepted is None or t-accepted[2]>.25:
+            self.pose_accepted=(*pose,t);self.pose_suspect=None;self.pose_speed=(0.,0.);return pose,None,False
+        if suspect is None:
+            if not far(pose,accepted,t):self.pose_accepted=self._advance(pose,t,accepted);return pose,None,False
+            self.pose_suspect=(*pose,t);return accepted[:2],None,True
+        self.pose_suspect=None
+        if t-suspect[2]>.25 or not far(pose,accepted,t):
+            self.pose_accepted=self._advance(pose,t,accepted);return pose,None,False
+        self.pose_speed=(0.,0.);self.pose_accepted=self._advance(pose,t,suspect);return pose,suspect,False
+
+    def _advance(self,pose,t,before):
+        # Remember the speed only for a clearly deliberate step; small steps are tracking noise.
+        step=(pose[0]-before[0],pose[1]-before[1]);elapsed=t-before[2]
+        self.pose_speed=(step[0]/elapsed,step[1]/elapsed) if elapsed>0 and math.hypot(*step)>HEAD_SPIKE else (0.,0.)
+        return (*pose,t)
+
+    def _noisy_radius(self,filtered,scale,radius,t,dwell_cap):
+        # How far the filtered pose moves between frames is the noise a hold must absorb
+        # when the head is meant to be still; widen the hold in proportion, but keep it
+        # inside the dwell radius so dwell clicking still works.
+        if self.jitter_from is not None and t>self.jitter_time:
+            moved=math.hypot(*((filtered[i]-self.jitter_from[i])*scale[i] for i in range(2)))
+            weight=1-math.exp(-(t-self.jitter_time)/HEAD_ADAPT_TAU)
+            if moved<=radius:self.jitter+=weight*(moved-self.jitter)
+        self.jitter_from=filtered;self.jitter_time=t
+        return min(max(radius,radius+HEAD_ADAPT*self.jitter),max(radius,min(2*radius,.8*dwell_cap)))
+
+    def reset(self,*,consume_dwell=False):
+        point=self.point if consume_dwell else None
+        blocked=consume_dwell and bool(self.gesture)
+        neutral_required=(self.scroll_expression_blocked or self.head_scroll or
+            self.profile['mode']!='hand' and self.gesture in ('smile','wink_left','wink_right','brows_up','conflict'))
         events=[{'kind':'button','action':'up','button':'left'}] if self.held else []
         self.held=False;self.gesture='';self.fired=False;self.lock='';self.scroll_y=None
         self.dwell_anchor=None;self.dwell_fired=False;self.dwell_exit=None;self.point=None;self.progress=0.
         self.pinch_anchor=None;self.pinch_origin=None
-        self.dwell_action='left_click';self.drag_latched=False;self.dwell_target=None;self.steady_point=None
+        self.dwell_action='left_click';self.drag_latched=False;self.dwell_target=None;self.steady_point=None;self.pose_accepted=None;self.pose_suspect=None;self.pose_speed=(0.,0.);self.jitter=0.;self.jitter_from=None;self.jitter_time=None;self.local_gain=[1.,1.]
+        self.hand_rebase=None;self.trail=[]
+        self.head_scroll=False;self.scroll_target='';self.scroll_last=None
+        # Interruption must not turn an uninterrupted expression into a new
+        # press. Only a valid, neutral observation below releases this latch.
+        self.scroll_expression_blocked=neutral_required
+        if blocked:self.gesture=self.lock='conflict'
+        if point is not None:
+            # An explicit drop consumes the dwell at this location just like a
+            # dwell drop does. Departure is required before another PC click.
+            self.point=self.dwell_anchor=point;self.dwell_fired=True;self.dwell_target=''
         for filter in self.filters:filter.reset()
         return events
+
+    def set_head_scroll(self,enabled):
+        if type(enabled) is not bool or self.profile['mode']!='head':
+            raise ValueError('Head scrolling requires Head & Face mode.')
+        previous=self.point
+        events=self.reset(consume_dwell=True)
+        self.point=previous;self.head_scroll=enabled
+        self.scroll_expression_blocked=not enabled or self.scroll_expression_blocked
+        if not enabled:self.hud_blocked=True
+        return events
+
+    def _head_scroll_step(self,hud,t,*,gap=False):
+        self.gesture='';self.progress=0.
+        if gap or hud!=self.scroll_target:
+            self.scroll_target=hud;self.scroll_since=t;self.scroll_last=None
+        if not hud:return []
+        self.progress=clamp((t-self.scroll_since)/(self.profile['dwell_ms']/1000))
+        if self.progress<1:return []
+        if hud in ('scroll_up','scroll_down'):
+            if self.scroll_last is None or t-self.scroll_last>=.15:
+                self.scroll_last=t
+                return [{'kind':'scroll','dy':2 if hud=='scroll_up' else -2}]
+        elif hud in ('scroll_done','pause','stop') and self.scroll_last is None:
+            self.scroll_last=t
+            return [{'kind':'hud_action','action':hud}]
+        return []
 
     def select_dwell(self,action):
         if action not in ('left_click','right_click','double_click','drag'):raise ValueError('Choose a supported dwell action')
@@ -68,6 +215,7 @@ class GestureEngine:
     def step(self,frame,*,paused=False):
         events=[];t=number(frame.get('timestamp'),-1)
         if t<=self.sequence_time:return events
+        gap=self.sequence_time>=0 and t-self.sequence_time>.25
         self.sequence_time=t
         hand=frame.get('hand') or {};face=frame.get('face') or {};mode=self.profile['mode']
         hand_ok=tracked(hand);face_ok=tracked(face)
@@ -76,21 +224,45 @@ class GestureEngine:
         if not valid:
             events=self.reset();self.lost=True;self.confidence=0.;return events
         self.lost=False;self.confidence=None
+        replay=None;hold_filters=False
         if mode=='hand':
             x0,y0,x1,y1=self.profile['calibration']['hand_bounds']
             raw=(clamp((number(hand.get('x'),.5)-x0)/(x1-x0)),clamp((number(hand.get('y'),.5)-y0)/(y1-y0)))
+            raw=tuple(clamp(.5+(v-.5)*self.profile['sensitivity']) for v in raw)
         else:
-            yaw,pitch=self.profile['calibration']['head_neutral'];span=self.profile['head_range']*2
-            raw=(clamp(.5+(number(face.get('yaw'))-yaw)/span),clamp(.5+(number(face.get('pitch'))-pitch)/span))
-        raw=tuple(clamp(.5+(v-.5)*self.profile['sensitivity']) for v in raw)
-        if mode!='hand':
-            width,height=self.profile.get('_monitor_scale',(1920,1080))
-            resolution=max(1.,width/1920,height/1080)
-            for filter in self.filters:filter.minimum=(.3+(1-self.profile['smoothing'])*1.4)/resolution
+            pose=(number(face.get('yaw')),number(face.get('pitch')))
+            if self.profile['smoothing']:pose,replay,hold_filters=self._pose_gate(pose,t)
+            raw,self.local_gain=self._map_pose(pose)
+            if replay:replay=(*self._map_pose(replay[:2])[0],replay[2])
+        width,height=self.profile.get('_monitor_scale',(1920,1080))
+        resolution=1. if mode=='hand' else max(1.,width/1920,height/1080)
+        for axis,filter in enumerate(self.filters):
+            filter.minimum=self._cutoff(resolution,axis)
+            filter.beta=(HAND_BETA if mode=='hand' else HEAD_BETA)/self._hand_gain(axis)
+            if mode!='hand':filter.floor=HEAD_FLOOR*self._hand_gain(axis)
         previous_point=self.point
-        filtered=raw if not self.profile['smoothing'] else tuple(filter.step(value,t) for filter,value in zip(self.filters,raw))
-        if mode!='hand':
-            scale=self.profile.get('_monitor_scale',(1920,1080));radius=self.profile['head_stability']
+        if replay:
+            for filter,value in zip(self.filters,replay):filter.step(value,replay[2])
+        if hold_filters and all(f.value is not None for f in self.filters):filtered=tuple(f.value for f in self.filters)
+        else:filtered=raw if not self.profile['smoothing'] else tuple(filter.step(value,t) for filter,value in zip(self.filters,raw))
+        if mode=='hand' and self.hand_rebase is not None:
+            origin,target=self.hand_rebase
+            # Re-anchor after finger release. Interpolate toward both screen
+            # edges so the retained drag offset cannot strand an edge.
+            anchored=[];origins=list(origin);targets=list(target)
+            for i,(v,a,b) in enumerate(zip(filtered,origin,target)):
+                if v<a:mapped=v*b/a
+                elif a<1:mapped=b+(v-a)*(1-b)/(1-a)
+                else:mapped=b
+                anchored.append(clamp(mapped))
+                # A release exactly at a boundary needs departure before that
+                # edge can be reached again, without a stationary-pointer jump.
+                if a in (0.,1.) and v!=a:origins[i]=v;targets[i]=clamp(mapped)
+            self.hand_rebase=(tuple(origins),tuple(targets));filtered=tuple(anchored)
+        hand_hold=mode=='hand' and self.profile['smoothing'] and self.profile['hand_stability']
+        if mode!='hand' or hand_hold:
+            scale=self.profile.get('_monitor_scale',(1920,1080));radius=self.profile['hand_stability' if mode=='hand' else 'head_stability']*(self._hand_gain(0)+self._hand_gain(1))/2
+            if mode!='hand':radius=self._noisy_radius(filtered,scale,radius,t,dwell_cap=self.profile['dwell_radius'])
             if self.steady_point is None:self.steady_point=filtered
             dx,dy=((filtered[i]-self.steady_point[i])*scale[i] for i in range(2))
             distance=math.hypot(dx,dy)
@@ -100,24 +272,43 @@ class GestureEngine:
             filtered=self.steady_point
         self.point=filtered
         hud=next((r['action'] for r in self.hud_regions if r['rect'][0]<=self.point[0]<=r['rect'][2] and r['rect'][1]<=self.point[1]<=r['rect'][3]),'') if mode=='head' else ''
+        if self.head_scroll:return self._head_scroll_step(hud,t,gap=gap)
         if not hud:self.hud_blocked=False
         gesture=self._gesture(hand if mode!='head' else {},face,paused=paused)
+        if self.scroll_expression_blocked:
+            if gesture:
+                self.gesture=self.lock='conflict';self.progress=0.
+                return [{'kind':'pointer','x':self.point[0],'y':self.point[1]}]
+            self.scroll_expression_blocked=False
         if hud or self.drag_latched:gesture=''
         # Resume is meaningful only while paused; an open hand must not freeze
         # ordinary pointing in active control or the practice simulator.
         if gesture=='open_palm' and not paused:gesture=''
         if gesture!='conflict' and self.profile['bindings'].get(gesture,'none')=='none':gesture=''
-        target_gesture=(mode=='hand' and gesture.startswith('pinch_') or mode=='head' and gesture in ('smile','wink_left','wink_right','brows_up') and self.profile['bindings'].get(gesture) in ('left_click','right_click','double_click','left_drag'))
+        target_gesture=(mode in ('hand','combined') and gesture.startswith('pinch_') or mode=='head' and gesture in ('smile','wink_left','wink_right','brows_up') and self.profile['bindings'].get(gesture) in ('left_click','right_click','double_click','left_drag'))
         if target_gesture:
             if self.pinch_anchor is None or self.gesture!=gesture:
-                self.pinch_anchor=previous_point or filtered;self.pinch_origin=filtered
+                # A fresh press anchors where the pointer was just before the gesture began;
+                # switching between pinches while one is held keeps the held position.
+                earlier=self._lookback(t,HAND_LOOKBACK if mode!='head' else HEAD_LOOKBACK) if self.pinch_anchor is None else previous_point
+                self.pinch_anchor=earlier or previous_point or filtered;self.pinch_origin=filtered
             if self.gesture!=gesture or not self.fired or self.profile['bindings'][gesture]!='left_drag':self.point=self.pinch_anchor
             else:self.point=tuple(clamp(a+b-c) for a,b,c in zip(self.pinch_anchor,filtered,self.pinch_origin))
         elif self.pinch_anchor is not None:
             self.pinch_anchor=None;self.pinch_origin=None
             if previous_point is not None:
                 self.point=previous_point
-                for filter,value in zip(self.filters,previous_point):filter.reset();filter.step(value,t)
+                if mode=='hand':self.hand_rebase=(raw,previous_point)
+                self.steady_point=previous_point
+                for filter,value,held in zip(self.filters,raw,previous_point):
+                    filter.reset();filter.step(value,t)
+                    # Head pose keeps the held point as its starting value and then
+                    # eases toward the head; seeding the held point as a sample
+                    # would read the gap as a fast move and jump the pointer.
+                    if mode!='hand':filter.value=held
+        if self.pinch_anchor is None:
+            self.trail.append((t,self.point))
+            while self.trail and t-self.trail[0][0]>TRAIL_SECONDS:self.trail.pop(0)
         if self.lock=='conflict' and gesture:
             self.progress=0.;return events
         if self.lock and self.lock!=gesture and gesture:

@@ -47,8 +47,6 @@ class TouchHelmClient {
     this.liveTextValue = "";
     this.isComposing = false;
     this.pingInterval = null;
-    this.wakeLock = null;
-    this.wakeLockRequested = false;
     this.deferredPrompt = null;
 
     // Touch & Trackpad State
@@ -64,11 +62,6 @@ class TouchHelmClient {
     // Telemetry rate tracking
     this.touchFrameCount = 0;
     this.lastFpsCalcTime = Date.now();
-
-    // Gyro / Air Mouse
-    this.gyroEnabled = false;
-    this.lastOrientation = null;
-    this.gyroHandler = null;
 
     // Laser state
     this.laserColor = "red";
@@ -100,6 +93,7 @@ class TouchHelmClient {
     if (window.TouchHelmExperience) this.experience = new window.TouchHelmExperience(this);
     if (window.TouchHelmRemote) this.remote = new window.TouchHelmRemote(this);
     if (window.TouchHelmTextSync) this.textSync = new window.TouchHelmTextSync(this);
+    if (window.TouchHelmFiles) this.files = new window.TouchHelmFiles(this);
     this.connect();
     this.initPwa();
     this.fetchServerConfig();
@@ -129,7 +123,6 @@ class TouchHelmClient {
 
     // Top buttons
     this.btnTheme = document.getElementById("btnTheme");
-    this.btnWakeLock = document.getElementById("btnWakeLock");
     this.btnFullscreen = document.getElementById("btnFullscreen");
     this.btnSettings = document.getElementById("btnSettings");
 
@@ -148,7 +141,6 @@ class TouchHelmClient {
     this.btnLeftClick = document.getElementById("btnLeftClick");
     this.btnRightClick = document.getElementById("btnRightClick");
     this.btnMiddleClick = document.getElementById("btnMiddleClick");
-    this.btnGyro = document.getElementById("btnGyro");
 
     // Scroll handle
     this.scrollHandle = document.querySelector("#scrollStrip .scroll-handle");
@@ -450,6 +442,7 @@ class TouchHelmClient {
             return;
           }
           this.isConnected = true;
+          this.files?.connected(msg.config);
           this.setInputOwner(msg.input_owner||'phone');
           this.textSync?.connected(true);
           try { if(this.authPin)sessionStorage.setItem(`touchhelm_pairing_${this.host}`,this.authPin); } catch {}
@@ -467,15 +460,21 @@ class TouchHelmClient {
           if ('brightness' in msg) {
             this.onBrightnessSync(msg.brightness);
           }
+        } else if (msg.type === 'files_ticket') {
+          this.files?.acceptTicket(msg.ticket);
+        } else if (msg.type === 'files_download') {
+          this.files?.downloadUpdate(msg);
         } else if (msg.type === 'input_owner') {
           this.setInputOwner(msg.owner);
         } else if (msg.type === "auth_required") {
+          this.files?.disconnected();
           this.remote?.connected(false);
           this.releaseDragLock();
           this.isConnected = false;
           this.stopPing();
           if(this.authPin){if(!this.authPending)this.authenticate();}else this.showPin();
         } else if (msg.type === "config_sync") {
+          if(msg.config)this.files?.configure(msg.config);
           if (msg.config) this.applyServerConfig(msg.config);
           this.remote?.query();
         } else if (msg.type.startsWith('remote_')) {
@@ -502,6 +501,7 @@ class TouchHelmClient {
     };
 
     socket.onclose = () => {
+      this.files?.disconnected();
       if (this.ws !== socket) return;
       this.isConnected = false;
       this.stopPing();
@@ -702,6 +702,7 @@ class TouchHelmClient {
     }
     if (this.elStatusDot) this.elStatusDot.className = `status-dot ${state}`;
     if (this.elStatusLabel) this.elStatusLabel.textContent = label;
+    window.TouchHelmMotion?.connection(state, this.elStatusPill);
     if (state !== "connected" && this.elStatusPing) {
       this.elStatusPing.textContent = "--ms";
     }
@@ -711,7 +712,6 @@ class TouchHelmClient {
     const buttons = [this.btnLeftClick, this.btnRightClick, this.btnMiddleClick,
       this.btnSlideNext, this.btnSlidePrev, this.btnSlideStart, this.btnSlideCurrent,
       this.btnSlideBlack, this.btnSlideWhite, this.btnSlideEnd, this.btnKeyViewStart,
-      this.btnGyro,
       this.btnVolUp, this.btnVolDown, this.btnVolMute, this.sliderVol, this.sliderBright,
       this.btnBrightUp, this.btnBrightDown, this.btnMediaPlay, this.btnMediaPrev, this.btnMediaNext,
       this.sliderSens, this.sliderAccel, this.sliderScroll, this.chkInvertScroll,
@@ -728,7 +728,6 @@ class TouchHelmClient {
     for (const surface of [this.touchSurface, this.scrollStrip, this.laserSurface]) {
       surface?.setAttribute("aria-disabled", String(!this.isConnected));
     }
-    if (!this.isConnected && this.gyroEnabled) this.disableGyro();
     this.updateTypingUi();
   }
 
@@ -771,7 +770,11 @@ class TouchHelmClient {
     if (data.type === 'text' && data.text?.includes('\n') && this.newlineMode === 'shift_enter') data = {...data,newline_mode:'shift_enter'};
     if (data.type === 'laser' && (this.presentationDisplay||this.autoPresentationDisplay)) data = {...data,display_id:this.presentationDisplay||this.autoPresentationDisplay};
     data = this.remote?.wrap(data) || data;
-    try { this.ws.send(JSON.stringify(data)); return true; } catch (e) { return false; }
+    try {
+      this.ws.send(JSON.stringify(data));
+      if(data.type==='click'||data.type==='dblclick')this.textSync?.pointerAction?.();
+      return true;
+    } catch (e) { return false; }
   }
 
   // --------------------------------------------------------------------------
@@ -878,7 +881,6 @@ class TouchHelmClient {
     else if (this.btnReconnect) this.onTap(this.btnReconnect, () => this.connectToHost());
     if (this.settingHost) this.settingHost.addEventListener("input", () => this.settingHost.setCustomValidity(""));
 
-    if (this.btnWakeLock) this.onTap(this.btnWakeLock, () => this.toggleWakeLock());
     if (this.btnFullscreen) this.onTap(this.btnFullscreen, () => this.toggleFullscreen());
 
     // Dismiss modals when clicking on dark backdrop
@@ -963,7 +965,7 @@ class TouchHelmClient {
       if (this.leftBtnDown) {
         this.leftBtnDown = false;
         this.vibrate(8);
-        this.send({ type: "mouseup", button: "left" });
+        if(this.send({ type: "mouseup", button: "left" })&&e.type!=='touchcancel')this.textSync?.pointerAction?.();
       }
     };
     if (this.btnLeftClick) {
@@ -972,6 +974,9 @@ class TouchHelmClient {
       this.btnLeftClick.addEventListener("touchcancel", onLeftUp, { passive: false });
       this.btnLeftClick.addEventListener("mousedown", onLeftDown);
       this.btnLeftClick.addEventListener("mouseup", onLeftUp);
+      this.btnLeftClick.addEventListener('click',event=>{
+        if(event.detail===0)this.send({type:'click',button:'left'});
+      });
       window.addEventListener("mouseup", onLeftUp);
     }
 
@@ -992,8 +997,6 @@ class TouchHelmClient {
       });
     }
 
-    this.onTap(this.btnGyro, () => this.toggleGyro());
-
     // Presenter Controls
     this.bindPresenterControls();
 
@@ -1007,36 +1010,37 @@ class TouchHelmClient {
     this.bindNumpadControls();
 
     // Safety: release drag lock on window blur or visibility change
-    window.addEventListener("blur", () => { this.releaseDragLock(); this.controls?.releaseKeys(); this.stopLaser(); this.disableGyro(); });
-    document.addEventListener("visibilitychange", async () => {
+    window.addEventListener("blur", () => { this.releaseDragLock(); this.controls?.releaseKeys(); this.stopLaser(); });
+    document.addEventListener("visibilitychange", () => {
       if (document.hidden) {
         this.releaseDragLock();
         this.controls?.releaseKeys();
         this.stopLaser();
-        this.disableGyro();
-      } else if (this.wakeLockRequested && !this.wakeLock && document.visibilityState === "visible") {
-        await this.requestWakeLock();
       }
     });
     document.addEventListener("fullscreenchange", () => {
       this.btnFullscreen?.setAttribute("aria-pressed", String(!!document.fullscreenElement));
     });
-    this.btnWakeLock?.setAttribute("aria-pressed", "false");
     this.btnFullscreen?.setAttribute("aria-pressed", String(!!document.fullscreenElement));
   }
 
   switchView(viewId) {
+    this.files?.onView(viewId);
     this.textSync?.onView(viewId);
     this.remote?.onView(viewId);
     window.TouchHelmEffects?.reset?.();
     if(this.experience?.seeking){this.experience.seeking=false;this.experience.text('seekPreview','');this.experience.tickMedia();}
     this.releaseDragLock();
     this.controls?.onViewChange(viewId);
-    if (viewId !== "viewTrackpad") this.disableGyro();
+    // Entrance direction follows the bottom-nav order so a view slides in from the side its tab sits on.
+    const order = [...this.navTabs].map((tab) => tab.getAttribute("data-view"));
+    const from = order.indexOf([...this.views].find((v) => v.classList.contains("active"))?.id), to = order.indexOf(viewId);
+    if (from !== to) document.querySelector?.(".main-content")?.setAttribute("data-nav-dir", to < from ? "back" : "forward");
     this.navTabs.forEach((tab) => {
       const selected = tab.getAttribute("data-view") === viewId;
       tab.classList.toggle("active", selected);
       tab.setAttribute("aria-selected", String(selected));
+      if(selected)tab.scrollIntoView?.({block:'nearest',inline:'nearest'});
     });
     this.views.forEach((v) => {
       v.classList.toggle("active", v.id === viewId);
@@ -1070,6 +1074,17 @@ class TouchHelmClient {
   // TRACKPAD GESTURES (TOUCH ENGINE)
   // --------------------------------------------------------------------------
   bindTrackpadGestures() {
+    this.touchSurface.addEventListener('keydown', (event) => {
+      if(event.ctrlKey||event.altKey||event.metaKey)return;
+      const step=event.shiftKey?36:12;
+      const movement={ArrowLeft:[-step,0],ArrowRight:[step,0],ArrowUp:[0,-step],ArrowDown:[0,step]}[event.key];
+      if(movement){event.preventDefault();this.send({type:'move',dx:movement[0],dy:movement[1]});}
+      else if(event.key==='PageUp'||event.key==='PageDown'){
+        event.preventDefault();this.send({type:'scroll',dx:0,dy:event.key==='PageUp'?3:-3});
+      }else if((event.key==='Enter'||event.key===' ')&&!event.repeat){
+        event.preventDefault();this.send({type:'click',button:'left'});
+      }
+    });
     let lastScrollY = 0;
     let lastScrollX = 0;
     let movedTotal = 0;
@@ -1390,91 +1405,6 @@ class TouchHelmClient {
         onEnd(e);
       }
     });
-  }
-
-  // --------------------------------------------------------------------------
-  // GYROSCOPE / AIR MOUSE
-  // --------------------------------------------------------------------------
-  async toggleGyro() {
-    if (this.gyroEnabled) {
-      this.disableGyro();
-      return;
-    }
-
-    if(window.isSecureContext===false){this.btnGyro?.setAttribute('aria-pressed','false');this.showFeedback('Air Mouse needs a trusted HTTPS connection. Complete Secure pairing in Settings first.','error','capability');return;}
-
-    if (typeof DeviceOrientationEvent !== "undefined" && typeof DeviceOrientationEvent.requestPermission === "function") {
-      try {
-        const permission = await DeviceOrientationEvent.requestPermission();
-        if (permission === "granted") {
-          this.enableGyro();
-        } else {
-          this.btnGyro?.setAttribute("aria-pressed", "false");
-          this.showFeedback("Air Mouse needs motion access. Allow it in your browser and try again.", "error", "capability");
-        }
-      } catch (err) {
-        this.btnGyro?.setAttribute("aria-pressed", "false");
-        this.showFeedback("Air Mouse could not access motion sensors. Try a supported browser over HTTPS.", "error", "capability");
-      }
-    } else if (window.DeviceOrientationEvent) {
-      this.enableGyro();
-    } else {
-      this.btnGyro?.setAttribute("aria-pressed", "false");
-      this.showFeedback("Air Mouse motion sensors are unavailable on this device or browser.", "error", "capability");
-    }
-  }
-
-  enableGyro() {
-    this.gyroEnabled = true;
-    if (this.btnGyro) this.btnGyro.classList.add("active");
-    this.btnGyro?.setAttribute("aria-pressed", "true");
-    this.lastOrientation = null;
-    this.gyroHandler = (e) => this.handleGyro(e);
-    window.addEventListener("deviceorientation", this.gyroHandler, true);
-    this.clearFeedback("capability");
-    this.vibrate(25);
-  }
-
-  disableGyro() {
-    this.gyroEnabled = false;
-    if (this.btnGyro) this.btnGyro.classList.remove("active");
-    this.btnGyro?.setAttribute("aria-pressed", "false");
-    if (this.gyroHandler) {
-      window.removeEventListener("deviceorientation", this.gyroHandler, true);
-      this.gyroHandler = null;
-    }
-    this.vibrate(15);
-  }
-
-  handleGyro(e) {
-    if (e.gamma == null || e.beta == null || isNaN(e.gamma) || isNaN(e.beta)) return;
-    if (!this.lastOrientation) {
-      this.lastOrientation = { gamma: e.gamma, beta: e.beta };
-      return;
-    }
-
-    const dGamma = e.gamma - this.lastOrientation.gamma;
-    const dBeta = e.beta - this.lastOrientation.beta;
-
-    // Prevent cursor teleports on gimbal flip or orientation wrap-around
-    if (Math.abs(dGamma) > 30 || Math.abs(dBeta) > 30) {
-      this.lastOrientation = { gamma: e.gamma, beta: e.beta };
-      return;
-    }
-
-    const deadzone = 0.12;
-    if (Math.abs(dGamma) > deadzone || Math.abs(dBeta) > deadzone) {
-      const dx = dGamma * 3.5;
-      const dy = dBeta * 3.5;
-
-      this.send({
-        type: "move",
-        dx: dx,
-        dy: dy
-      });
-    }
-
-    this.lastOrientation = { gamma: e.gamma, beta: e.beta };
   }
 
   // --------------------------------------------------------------------------
@@ -1936,9 +1866,9 @@ class TouchHelmClient {
 
     if (this.btnClearText) {
       this.onTap(this.btnClearText, () => {
-        this.textSync?.clear();
+        const linked=this.textSync?.clear()===true;
         if (this.typeInput) this.typeInput.value = "";
-        this.liveTextValue = "";
+        if(!linked)this.liveTextValue = "";
         this.liveTypingPaused = false;
         this.updateTypingUi();
         this.clearFeedback("typing");
@@ -2045,7 +1975,7 @@ class TouchHelmClient {
   }
 
   // --------------------------------------------------------------------------
-  // WAKE LOCK & FULLSCREEN & PWA
+  // SESSION RESTORE & FULLSCREEN & PWA
   // --------------------------------------------------------------------------
   restoreSession() {
     try {
@@ -2109,60 +2039,13 @@ class TouchHelmClient {
         timerRunning: this.timerRunning, timerDeadline: this.timerDeadline }));
       sessionStorage.setItem(retryKey, JSON.stringify({ build: info.build, savedAt: Date.now() }));
       this.controls?.releaseKeys();
-      this.releaseDragLock(); this.stopLaser(); this.disableGyro();
+      this.releaseDragLock(); this.stopLaser();
       const target = new URL(window.location.href);
       target.searchParams.set("build", info.build);
       window.location.replace(target.href);
       return true;
     } catch (error) { return false; }
     finally { this.versionChecking = false; }
-  }
-
-  async toggleWakeLock() {
-    this.wakeLockRequested = !this.wakeLockRequested;
-    if (!this.wakeLockRequested) {
-      const lock = this.wakeLock;
-      this.wakeLock = null;
-      if (lock) { try { await lock.release(); } catch (e) {} }
-      if (this.btnWakeLock) this.btnWakeLock.style.color = "var(--text-muted)";
-      this.btnWakeLock?.setAttribute("aria-pressed", "false");
-      if (this.btnWakeLock) this.btnWakeLock.title = "Keep Screen Awake";
-      this.showFeedback("Keep Screen Awake is off.", "info", "capability");
-      this.vibrate(15);
-      return;
-    }
-    await this.requestWakeLock();
-  }
-
-  async requestWakeLock() {
-    try {
-      if(window.isSecureContext===false)throw new Error('A trusted secure context is required');
-      if (!navigator.wakeLock?.request) throw new Error("Wake lock unavailable");
-      const lock = await navigator.wakeLock.request("screen");
-      if (!this.wakeLockRequested) { await lock.release(); return; }
-      this.wakeLock = lock;
-      if (this.btnWakeLock) {
-        this.btnWakeLock.style.color = "var(--primary)";
-        this.btnWakeLock.title = "Turn off Keep Screen Awake";
-        this.btnWakeLock.setAttribute("aria-pressed", "true");
-      }
-      lock.addEventListener("release", () => {
-        if (this.wakeLock === lock) this.wakeLock = null;
-        if (!this.wakeLock && this.btnWakeLock) this.btnWakeLock.style.color = "var(--text-muted)";
-        if (!this.wakeLock) this.btnWakeLock?.setAttribute("aria-pressed", "false");
-      });
-      this.showFeedback("Your screen will stay awake while TouchHelm is open.", "success", "capability");
-      this.vibrate(25);
-    } catch (e) {
-      this.wakeLockRequested = false;
-      this.wakeLock = null;
-      if (this.btnWakeLock) {
-        this.btnWakeLock.style.color = "var(--text-muted)";
-        this.btnWakeLock.title = "Keep Screen Awake is unavailable. Use a supported browser over HTTPS.";
-        this.btnWakeLock.setAttribute("aria-pressed", "false");
-      }
-      this.showFeedback("Keep Screen Awake is unavailable. Use a supported browser over HTTPS.", "error", "capability");
-    }
   }
 
   async toggleFullscreen() {
@@ -2211,6 +2094,9 @@ class TouchHelmClient {
         .then(registration => registration.update()).catch(() => {});
     }
     this.checkServerVersion();
+    this.versionTimer=setInterval(()=>{
+      if(!document.hidden&&!this.isComposing&&this.textSync?.pending?.action!=='write')this.checkServerVersion();
+    },15000);
     window.addEventListener("pageshow", () => this.checkServerVersion());
     window.addEventListener("focus", () => this.checkServerVersion());
     document.addEventListener("visibilitychange", () => {

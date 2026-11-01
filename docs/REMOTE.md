@@ -1,7 +1,7 @@
 # Remote screen control and mirroring
 
 TouchHelm 2.2 adds a sixth **Remote** tab. Existing Trackpad, Presenter, Media,
-Keyboard and Apps remain available. No TouchHelm Android app is required.
+Keyboard and Apps remain available. No phone app is required.
 
 ## Setup
 
@@ -17,25 +17,11 @@ Keyboard and Apps remain available. No TouchHelm Android app is required.
    to rotate the PIN when needed. Previously configured passwords remain compatible.
    It is disabled by default. The desktop bridge is the only interface that can
    enable it; the phone settings API cannot.
-3. Connect using trusted local HTTPS or private Tailscale HTTPS from desktop Pairing.
-   For Tailscale, install/sign in on both devices and join the same tailnet.
+3. Connect from the phone over the same Wi-Fi using the desktop Pairing QR code and PIN.
 4. Open **Remote → Control PC** or **View PC**. PC audio starts off; enable it and
    tap Unmute when the browser requires a playback gesture.
 
-For less manual setup, use desktop Pairing → **Set up trusted pairing**. This
-installs Tailscale on Windows through App Installer when missing, installs missing
-screen/audio providers, enables a host PIN, prepares the private HTTPS endpoint,
-and enables screen/audio access after HTTPS setup succeeds. Sign-in/Windows
-approval remains a user step; install/sign in to Tailscale on the phone using the
-same account. The selected private connection is saved. No phone certificate
-download is required. No public relay, Funnel or router port forwarding is added.
-
-Browser-only automatic trust of a private LAN address is not available: public CAs
-cannot issue certificates for reserved IPs/internal names, and a website cannot
-silently install a CA on the phone. A future browser-only trusted setup would need
-a registered domain and certificate provisioning infrastructure. See the
-[CA/Browser Forum requirements](https://cabforum.org/working-groups/server/baseline-requirements/requirements/)
-and [Tailscale Serve](https://tailscale.com/docs/features/tailscale-serve).
+Screen and audio providers can also be installed from desktop Settings.
 
 ## Listening without screen access
 
@@ -50,8 +36,6 @@ Backgrounding the phone still pauses the stream; returning requires explicit Res
 
 The PC must remain powered on, signed in and running TouchHelm. Remote access does
 not unlock Windows, cross UAC, start the PC or control elevated applications.
-Trusted local certificates still require phone trust installation. Tailscale is
-the supported alternative without installing TouchHelm's CA.
 
 ## Using the viewer
 
@@ -92,14 +76,13 @@ outside pointer processing. aiortc sends H.264/VP8 video and Opus audio. Buffers
 are bounded, and PC audio uses WASAPI output loopback rather than a microphone.
 Audio is normalized to stereo 48 kHz across output-device format changes.
 
-WebSocket signaling uses the selected HTTPS origin. **WebRTC media does not pass
-through Tailscale Serve's HTTP proxy.** It needs a reachable LAN/tailnet UDP path.
-Private host/mDNS ICE candidates are accepted; public/relay candidates are omitted.
-No public TURN service, Funnel or router port forwarding is configured.
+WebSocket signaling uses the local HTTP origin. WebRTC media needs a reachable LAN UDP
+path. Private host/mDNS ICE candidates are accepted; public/relay candidates are omitted.
+No public TURN service or router port forwarding is configured.
 
-If negotiation fails, check that both devices are on the reachable LAN/tailnet,
+If negotiation fails, check that both devices are on the same reachable LAN,
 that Windows Firewall permits the host Python application on the intended private
-network, and that tailnet access rules allow peer traffic. Managed browser/network
+network. Managed browser/network
 policies can block WebRTC. Streaming dependencies stay optional; missing providers
 do not prevent the original controls from working.
 
@@ -126,23 +109,21 @@ Both devices need compatible **Miracast** support. Google Cast-only phones and
 iPhone AirPlay do not connect directly to that receiver. A registered Windows
 receiver is shown when detected; hardware compatibility stays Unknown until tested.
 The guide never claims a casting connection is active. System controls start/stop
-casting, and Tailscale does not extend Miracast over the internet.
+casting. Miracast does not work over the internet.
 
 ## Verification
 
 Software and local transport checks are recorded in `REMOTE_PLAN.md`. Automated
 PC input remains mocked. The opt-in `tests/remote_transport_check.cjs` exercises
-real Windows capture/audio to a real local browser without saving footage. Its
-temporary test certificate is bypassed only in the probe; it does **not** verify
-trusted phone pairing.
+real Windows capture/audio to a real local browser without saving footage.
 
 The preview board covers all six tabs and Remote control/view/connecting/paused/
 unavailable states across all seven themes. Its desktop picture is an authored,
 clearly labeled SVG fixture; it contains no captured personal desktop data.
 
 **Still unperformed:** physical Android typing/gesture/audio/performance checks,
-30-minute LAN and Tailscale sessions with background/resume and source restart,
-trusted Android HTTPS, and compatible Miracast hardware acceptance. Local loopback
+30-minute LAN sessions with background/resume and source restart,
+and compatible Miracast hardware acceptance. Local loopback
 success must not be presented as those device/network results.
 
 Sources: [Windows capture](https://learn.microsoft.com/en-us/windows/win32/direct3ddxgi/desktop-dup-api),

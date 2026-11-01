@@ -16,27 +16,18 @@ BROADCAST_INTERVAL = 2.0  # seconds
 def get_local_ip_addresses():
     """Returns detected IPv4 addresses of this Windows machine."""
     ips = []
-    s = None
     try:
-        s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        s.connect(("8.8.8.8", 80))
-        primary_ip = s.getsockname()[0]
-        if not primary_ip.startswith("127."):
-            ips.append(primary_ip)
+        import ifaddr
+        import ipaddress
+        adapters=sorted(ifaddr.get_adapters(),key=lambda adapter:0 if any(word in (adapter.nice_name or '').lower() for word in ('wi-fi','wifi','wireless')) else 1)
+        for adapter in adapters:
+            for address in adapter.ips:
+                value=address.ip
+                if not isinstance(value,str):continue
+                ip=ipaddress.ip_address(value)
+                if any(ip in ipaddress.ip_network(network) for network in ('10.0.0.0/8','172.16.0.0/12','192.168.0.0/16')) and value not in ips:ips.append(value)
     except Exception:
         pass
-    finally:
-        if s is not None:
-            s.close()
-
-    try:
-        hostname = socket.gethostname()
-        for ip in socket.gethostbyname_ex(hostname)[2]:
-            if not ip.startswith("127.") and ":" not in ip and ip not in ips:
-                ips.append(ip)
-    except Exception:
-        pass
-
     return ips or ["127.0.0.1"]
 
 

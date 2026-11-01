@@ -21,14 +21,14 @@ def private_sdp(sdp):
         address=fields[4]
         try:
             ip=ipaddress.ip_address(address)
-            allowed=(ip.is_private or ip.is_loopback or ip in ipaddress.ip_network('100.64.0.0/10'))
+            allowed=ip.is_private or ip.is_loopback or ip in ipaddress.ip_network('100.64.0.0/10')  # shared address space used by some routers and hotspots
             allowed=allowed and not (ip.is_multicast or ip.is_unspecified or ip.is_link_local)
         except ValueError:
             allowed=bool(re.fullmatch(r'[a-zA-Z0-9-]{1,63}\.local',address))
         try:port=int(fields[5])
         except ValueError:continue
         if allowed and 1<=port<=65535:lines.append(line);count+=1
-    if not count:raise ValueError('No private WebRTC path is available. Check LAN/Tailscale and browser network permissions.')
+    if not count:raise ValueError('No private WebRTC path is available. Check your Wi-Fi connection and browser network permissions.')
     return '\r\n'.join(lines)+'\r\n'
 
 
@@ -114,17 +114,21 @@ class RemoteService:
         if mode=='audio':audio=True
         return mode, quality, audio
 
-    async def request(self, client, data, secure=False):
+    async def request(self, client, data, secure=False,local=False):
         kind = data.get('type')
         try:
+            local=bool(local and getattr(client,'local_lan',False))
             caps=self.capabilities()
             if kind=='remote_query':
                 return {'type':'remote_capabilities','success':True,**caps,
                     'enabled':bool(self.config.get('remote_enabled')),
-                    'pin_required':True,'secure':bool(secure), **await self.displays()}
-            if not (client.authenticated and not client.ws.closed and secure and
-                    self.config.get('require_pin') and self.config.get('remote_enabled')):
-                raise PermissionError('Enable Remote screen access on the desktop, set a host PIN, and use trusted HTTPS.')
+                    'pin_required':True,'secure':bool(secure),'local':local, **await self.displays()}
+            if not (client.authenticated and not client.ws.closed and self.config.get('require_pin')):
+                raise PermissionError('Connect and authenticate with the PC pairing PIN before starting screen or audio sharing.')
+            if not (secure or local):
+                raise PermissionError('Connect directly to this PC on the same local Wi-Fi before starting screen or audio sharing.')
+            if not self.config.get('remote_enabled'):
+                raise PermissionError('Screen and audio access is off on this PC. Open TouchHelm on the PC → Pair your phone → Screen and audio access → Enable.')
             if kind=='remote_start':
                 if self.owner or self._closing: raise ValueError('A remote session is active or still stopping. Wait or stop it on the desktop first.')
                 mode, quality, audio=self._options(data)
@@ -155,7 +159,8 @@ class RemoteService:
                             self.state,self.message=state,message; self._publish()
                     loop.call_soon_threadsafe(apply)
                 try:
-                    self.worker=self.worker_factory(on_state=event)
+                    options={'local_peer':client.remote_ip} if local else {}
+                    self.worker=self.worker_factory(on_state=event,**options)
                     # Release preexisting app input before granting exclusive control.
                     self.release(client)
                     if mode=='control' and self.before_control:self.before_control()

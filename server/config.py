@@ -13,7 +13,9 @@ import secrets
 def random_password():
     return f'{secrets.randbelow(10000):04d}'
 
-CONFIG_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "config.json")
+from .portable import bundle_root, config_path
+
+CONFIG_FILE = str(config_path(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 DEFAULT_CONFIG = {
     "server_name": socket.gethostname(),
@@ -25,13 +27,10 @@ DEFAULT_CONFIG = {
     "require_pin": False,
     "pin_code": "",
     "laser_color": "red",
-    "theme": "cyber",
+    "theme": "aurora",
     "haptics_enabled": True,
-    "https_enabled": False,
-    "https_port": 8766,
-    "tailscale_enabled": False,
     "remote_enabled": False,
-    "tailscale_owned_host": ""
+    "files_enabled": False
 }
 
 
@@ -40,6 +39,8 @@ class ConfigManager:
         self.file_path = file_path
         self._lock = threading.RLock()
         self.data = DEFAULT_CONFIG.copy()
+        if bundle_root() is not None:
+            self.data['require_pin'] = True
         self.data['pin_code'] = random_password()
         self.load()
         if not os.path.exists(self.file_path):self.save()
@@ -62,6 +63,8 @@ class ConfigManager:
                     self.data["pin_code"] = random_password()
                 if self.data['remote_enabled'] and not self.data['require_pin']:
                     self.data['remote_enabled']=False
+                if self.data['files_enabled'] and not self.data['require_pin']:
+                    self.data['files_enabled']=False
             except Exception as e:
                 print(f"Error loading config: {e}")
 
@@ -98,19 +101,16 @@ class ConfigManager:
         if key in numeric:
             low, high = numeric[key]
             valid = type(value) in (int, float) and low <= value <= high and math.isfinite(value)
-        elif key in ("port","https_port"):
+        elif key == "port":
             valid = type(value) is int and 1 <= value <= 65535
-        elif key in ("require_pin", "invert_scroll", "haptics_enabled","https_enabled","tailscale_enabled","remote_enabled"):
+        elif key in ("require_pin", "invert_scroll", "haptics_enabled","remote_enabled","files_enabled"):
             valid = type(value) is bool
-        elif key == 'tailscale_owned_host':
-            import re
-            valid = value == '' or isinstance(value,str) and bool(re.fullmatch(r'[a-z0-9][a-z0-9.-]*\.ts\.net',value))
         elif key == "pin_code":
             valid = value == "" or cls._valid_pin(value)
         elif key == "laser_color":
             valid = isinstance(value, str) and value in ("red", "green", "blue", "amber")
         elif key == "theme":
-            valid = isinstance(value, str) and value in ("cyber", "oled", "matrix", "nordic", "light","bloom","resonance","companion","clay","glass","soft","ink")
+            valid = isinstance(value, str) and value in ("aurora","bloom","resonance","constellation","ink","cyber","oled","matrix","nordic","light","companion","clay","glass","soft")
         else:
             valid = isinstance(value, str) and 1 <= len(value.strip()) <= 100
         if not valid:
@@ -125,10 +125,10 @@ class ConfigManager:
             updated = dict(self.data, **settings)
             if updated["require_pin"] and not self._valid_pin(updated["pin_code"]):
                 raise ValueError("Use a legacy four-digit PIN or an 8–64 character password containing letters and numbers")
-            if updated['tailscale_enabled'] and not updated['require_pin']:
-                raise ValueError('Disable private Tailscale HTTPS before removing the host PIN.')
             if updated['remote_enabled'] and not updated['require_pin']:
                 raise ValueError('Set a host PIN before enabling Remote screen access.')
+            if updated['files_enabled'] and not updated['require_pin']:
+                raise ValueError('Set a host PIN before enabling File access.')
             previous = self.data
             self.data = updated
             try:

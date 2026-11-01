@@ -2,7 +2,7 @@
 (() => {
   if(new URLSearchParams(location.search).get('preview')!=='1')return;
   const sockets=new Set();
-  const config={theme:'glass',mouse_sensitivity:1.3,mouse_acceleration:1.25,scroll_speed:1,invert_scroll:false};
+  const config={theme:'aurora',mouse_sensitivity:1.3,mouse_acceleration:1.25,scroll_speed:1,invert_scroll:false};
   let stateName='ready';
   const media={available:true,session_id:'demo:player',app:'Demo player',title:'Morning light',artist:'Preview artist',album:'Illustrative album',status:'Playing',position:65,duration:240,min_seek:0,max_seek:240,playback_rate:1,shuffle:false,repeat:'none',artwork_id:'demo:record',capabilities:{play:true,pause:true,next:true,prev:true,stop:true,seek:true,shuffle:true,repeat:true,rate:true}};
   const presentation={available:true,active:true,app:'PowerPoint · preview',title:'Quarterly review',slide:3,total:12,slide_title:'Results',capabilities:{details:true,goto:true},message:''};

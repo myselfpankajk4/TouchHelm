@@ -25,7 +25,7 @@ if errorlevel 1 (
 )
 "%TOUCHHELM_PYTHON%" -c "import webview, cryptography" >nul 2>&1
 if errorlevel 1 (
-    echo [INFO] Installing desktop and secure pairing dependencies...
+    echo [INFO] Installing desktop dependencies...
     "%TOUCHHELM_PYTHON%" -m pip install -r requirements.txt
     if errorlevel 1 exit /b 1
 )

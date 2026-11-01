@@ -124,6 +124,17 @@ test('a double tap emits two clicks total', () => {
   assert.deepEqual(messages, [{ type: 'click', button: 'left' }, { type: 'click', button: 'left' }]);
 });
 
+test('focused trackpad has keyboard movement, scroll and click alternatives', () => {
+  const client = Object.create(loadClient().prototype), messages = [];
+  client.touchSurface=element();client.send=packet=>messages.push(JSON.parse(JSON.stringify(packet)));
+  client.bindTrackpadGestures();
+  client.touchSurface.emit('keydown',{key:'ArrowRight'});
+  client.touchSurface.emit('keydown',{key:'ArrowUp',shiftKey:true});
+  client.touchSurface.emit('keydown',{key:'PageDown'});
+  client.touchSurface.emit('keydown',{key:'Enter'});
+  assert.deepEqual(messages,[{type:'move',dx:12,dy:0},{type:'move',dx:0,dy:-36},{type:'scroll',dx:0,dy:-3},{type:'click',button:'left'}]);
+});
+
 test('send rejects disconnected input and reports the outcome', () => {
   const client = Object.create(loadClient().prototype);
   const messages = [];

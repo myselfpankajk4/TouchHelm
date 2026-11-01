@@ -267,22 +267,11 @@ class DiscoveryTests(unittest.TestCase):
         self.assertIsNotNone(sock.payload)
         self.assertIs(sock.payload["has_pin"], True)
 
-    def test_ip_probe_closes_socket_when_connect_fails(self):
-        class Socket:
-            closed = False
-
-            def connect(self, address):
-                raise OSError("offline")
-
-            def close(self):
-                self.closed = True
-
-        sock = Socket()
-        with patch.object(discovery.socket, "socket", return_value=sock), patch.object(
-            discovery.socket, "gethostbyname_ex", return_value=("pc", [], [])
-        ):
+    def test_ip_discovery_works_offline_without_any_internet_probe(self):
+        import ifaddr
+        with patch.object(ifaddr,'get_adapters',side_effect=OSError('No adapter')),patch.object(discovery.socket,'socket') as network:
             self.assertEqual(discovery.get_local_ip_addresses(), ["127.0.0.1"])
-        self.assertTrue(sock.closed)
+        network.assert_not_called()
 
     def test_listener_closes_socket_when_bind_fails(self):
         class Socket:

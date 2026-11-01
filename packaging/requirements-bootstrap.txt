@@ -1,0 +1,2 @@
+# Used only by the compact EXE to prepare locked per-user components.
+pip==26.2.2

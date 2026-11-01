@@ -12,6 +12,43 @@ def observation(t, *, pose='Pointing_Up', pinch=1, middle=1, x=.5, y=.5, face=Fa
 class GestureEngineTests(unittest.TestCase):
     def setUp(self):self.engine=GestureEngine(default_profile(mode='hand'))
 
+    def test_hand_drag_release_keeps_target_until_deliberate_movement(self):
+        for smoothing in (0,.6):
+            with self.subTest(smoothing=smoothing):
+                profile=default_profile(mode='hand');profile['smoothing']=smoothing
+                engine=GestureEngine(profile)
+                for t,x,pinch in [(0,.5,1),(.1,.43,.1),(.21,.42,.1),(.3,.49,.1)]:
+                    engine.step(observation(t,x=x,pinch=pinch))
+                destination=engine.point
+                events=engine.step(observation(.4,x=.49))
+                self.assertIn({'kind':'button','action':'up','button':'left'},events)
+                for i in range(5,16):engine.step(observation(i/10,x=.49))
+                self.assertLess(abs(engine.point[0]-destination[0])*1920,1)
+                engine.step(observation(1.6,x=.6))
+                self.assertGreater(engine.point[0],destination[0])
+
+    def test_hand_drag_release_preserves_edges_and_reset_restores_calibration(self):
+        profile=default_profile(mode='hand');profile['smoothing']=0
+        engine=GestureEngine(profile)
+        for t,x,pinch in [(0,.5,1),(.1,.43,.1),(.21,.42,.1),(.3,.49,.1),(.4,.49,1)]:
+            engine.step(observation(t,x=x,pinch=pinch))
+        engine.step(observation(.5,x=.85,y=.85));self.assertEqual(engine.point,(1.,1.))
+        engine.step(observation(.6,x=.15,y=.15));self.assertEqual(engine.point,(0.,0.))
+        engine.reset();engine.step(observation(.7,x=.5))
+        self.assertAlmostEqual(engine.point[0],.5)
+
+    def test_hand_release_at_movement_boundary_can_return_to_that_edge(self):
+        for boundary,inward in [(.15,.25),(.85,.75)]:
+            with self.subTest(boundary=boundary):
+                profile=default_profile(mode='hand');profile['smoothing']=0
+                engine=GestureEngine(profile)
+                for t,x,pinch in [(0,.5,1),(.1,boundary,.1),(.21,boundary,.1),(.3,boundary,1)]:
+                    engine.step(observation(t,x=x,pinch=pinch))
+                destination=engine.point
+                engine.step(observation(.4,x=boundary));self.assertEqual(engine.point,destination)
+                engine.step(observation(.5,x=inward));engine.step(observation(.6,x=boundary))
+                self.assertEqual(engine.point[0],0. if boundary==.15 else 1.)
+
     def test_index_drag_does_not_raise_the_other_pinch_threshold(self):
         self.engine.step(observation(0,pinch=.15,middle=.33))
         self.engine.step(observation(.11,pinch=.15,middle=.33))

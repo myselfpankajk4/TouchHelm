@@ -40,6 +40,10 @@ def run_async_server(server_instance, loop, startup=None):
 
 
 def print_banner(primary_ip, port, require_pin, pin_code):
+    from server.portable import bundle_root
+    if bundle_root() is not None:
+        # Portable diagnostics must not persist the user's pairing PIN/QR.
+        return
     if sys.platform == "win32" and hasattr(sys.stdout, "reconfigure"):
         try:
             sys.stdout.reconfigure(encoding="utf-8", errors="replace")

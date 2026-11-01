@@ -36,16 +36,20 @@ def learn(neutral,active,gesture):
 
 def recognize(face,profile,held):
     if not profile['expressions_calibrated']:return ''
-    values=levels(face)
-    # Legacy observations may contain only the expression used by their profile.
-    if not values:
-        e=face.get('expressions',{})
-        value=lambda k: e.get(k,0.) if type(e.get(k,0.)) in (int,float) and math.isfinite(e.get(k,0.)) else 0.
-        values={'wink_left':value('eyeBlinkLeft'),'wink_right':value('eyeBlinkRight'),
-            'smile':min(value('mouthSmileLeft'),value('mouthSmileRight')),'brows_up':value('browInnerUp')}
+    e=face.get('expressions',{})
+    if not isinstance(e,dict):return ''
+    valid=lambda k:type(e.get(k)) in (int,float) and math.isfinite(e[k]) and 0<=e[k]<=1
+    values={}
+    # Partial observations remain usable only for expressions whose evidence is
+    # complete. Missing/invalid opposite-eye data never means an open eye.
+    if valid('eyeBlinkLeft') and valid('eyeBlinkRight'):
+        values.update(wink_left=e['eyeBlinkLeft'],wink_right=e['eyeBlinkRight'])
+    if valid('mouthSmileLeft') and valid('mouthSmileRight'):
+        values['smile']=(e['mouthSmileLeft']+e['mouthSmileRight'])/2
+    if valid('browInnerUp'):values['brows_up']=e['browInnerUp']
     matches=[]
     for gesture in NAMES:
-        if gesture not in profile['calibrated_expressions'] or profile['bindings'][gesture]=='none':continue
+        if gesture not in values or gesture not in profile['calibrated_expressions'] or profile['bindings'][gesture]=='none':continue
         limits=profile.get('expression_thresholds',{}).get(gesture,{'on':.7 if gesture=='smile' else .75,'off':.5,'other_max':.25})
         threshold=limits['off'] if held==gesture else limits['on']
         if values[gesture]<threshold:continue

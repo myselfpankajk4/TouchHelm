@@ -1,0 +1,76 @@
+# TouchHelm Windows installer
+
+Use `TouchHelm-2.2.3-setup-win-x64.exe` for a normal installation on Windows
+10/11 x64. Run setup and choose Install. It installs for the current Windows user,
+creates Start Menu and desktop shortcuts (desktop selected by default), and adds
+TouchHelm to Settings → Apps → Installed apps with an uninstaller. The application
+opens from the finish page. No administrator account is normally required.
+
+Test 8 adds Files and makes pairing, controls, transfers and screen/audio local
+Wi-Fi only. No public tunnel helper is bundled or downloaded. See
+[Local Wi-Fi and Files](LOCAL_WIFI.md) for access permissions, browser format
+support and the distinction between HTTP file/control traffic and encrypted
+WebRTC media. The phone does not need a certificate, VPN or app.
+
+Python, screen/audio libraries, the isolated camera runtime, and camera models
+are included, along with the Microsoft OpenMP DLL required by screen capture.
+There is no Python or C++ installer, pip, manual requirements step, or
+PATH/environment-variable change. The launcher uses the private runtime beside
+the app. A separately installed Python is neither used nor required. Upgrades
+use the same app entry and preserve settings under LocalAppData\TouchHelm.
+Uninstall removes application files and shortcuts; settings are retained.
+Test 4 prevents a selected inline autocomplete suffix from replacing an ongoing
+phone edit. For example, Chrome can suggest `google.com` after the phone sends
+`g`, while the phone keeps `g`. Accepting that suggestion on the PC syncs the
+full address. Other PC edits continue to sync automatically. No Chrome setting
+or extra recovery button is needed. Fields without accessible selection metadata
+retain the existing synchronization behavior.
+If TouchHelm is running, choose Exit from its tray menu before updating or
+uninstalling. Windows setup checks the running-app guard to prevent removing
+files while the host is active.
+
+The desktop uses Microsoft's Evergreen WebView2 already present on most current
+Windows installations. If missing, setup downloads Microsoft's bootstrapper,
+verifies its Microsoft signature, and runs it silently. That step needs internet;
+managed-PC policies may prevent it. It also retries automatically when opening
+TouchHelm. No screen/audio/camera packages or models are downloaded on first launch.
+An offline PC must already have WebView2; Test 1 includes a private browser if that
+is essential. Windows firewall and camera permissions remain controlled by Windows.
+
+This test build is unsigned. A normal installer and a native launcher do not
+establish publisher trust. SmartScreen/Smart App Control can warn or block it.
+Do not disable Windows security or install an untrusted certificate to hide that
+warning. Trusted signing requires a verified signing identity; Microsoft Store
+MSIX distribution is a separate route that uses Microsoft's signing. Newly signed
+direct downloads may still need reputation. See Microsoft's official guidance:
+https://learn.microsoft.com/windows/apps/package-and-deploy/code-signing-options
+
+Renaming or repackaging the unsigned installer as an MSI does not establish publisher trust.
+
+## Build
+
+Prepare `build/portable-stage` using the existing offline builder, then run:
+
+```
+build\portable-stage\runtime\python.exe -B -c "import sys,runpy;sys.path.insert(0,r'packaging');runpy.run_path(r'packaging/build_installer.py',run_name='__main__')"
+```
+
+The builder copies an allowlist of current app sources and verified feature
+runtimes into a fresh stage, checks models and private-file exclusions, compiles
+the installed launcher, then uses Inno Setup's solid LZMA2 compression. It excludes
+the private browser and package installers; all native dependency licenses remain
+with their distributions. The file size and SHA-256 are in
+`dist/installer-build-manifest.json` and `dist/SHA256SUMS.txt`.
+
+## Verification
+
+`TouchHelm.exe --self-test --report C:\existing-folder\report.json` checks imports,
+both bundled runtimes, model integrity, actual WebView2 JavaScript execution, and
+the Tk fallback without opening a camera or sending PC input. It uses the same
+installed launcher as the shortcuts. Build-host checks do not substitute for a
+clean Windows VM or a physical Android Chrome test.
+
+Test 8 pairing uses the PC's local HTTP address directly. No public helper is
+included. File access and screen/audio retain separate PC permissions, and PINs
+remain required for those capabilities. Reloading the local page needs no
+internet bootstrap. See [Local Wi-Fi setup and limits](LOCAL_WIFI.md).

@@ -7,6 +7,22 @@ def face(smile=.1,left=.1,right=.1,brow=.1):
         'eyeBlinkLeft':left,'eyeBlinkRight':right,'browInnerUp':brow}}
 
 class ExpressionTests(unittest.TestCase):
+    def test_wink_requires_valid_evidence_from_both_eyes(self):
+        for gesture,channel,other in [('wink_left','eyeBlinkLeft','eyeBlinkRight'),('wink_right','eyeBlinkRight','eyeBlinkLeft')]:
+            profile=default_profile(mode='head');profile.update(expressions_calibrated=True,calibrated_expressions=[gesture])
+            profile['bindings'][gesture]='left_click'
+            for invalid in (None,float('nan'),-1,2,True):
+                with self.subTest(gesture=gesture,invalid=invalid):
+                    values={channel:.95}
+                    if invalid is not None:values[other]=invalid
+                    self.assertEqual(recognize({'expressions':values},profile,''),'')
+            self.assertEqual(recognize({'expressions':{channel:.95,other:.1}},profile,''),gesture)
+
+    def test_missing_unrelated_channels_does_not_change_smile_threshold(self):
+        profile=default_profile(mode='head');profile.update(expressions_calibrated=True,calibrated_expressions=['smile'])
+        profile['bindings']['smile']='left_click'
+        self.assertEqual(recognize({'expressions':{'mouthSmileLeft':.9,'mouthSmileRight':.6}},profile,''),'smile')
+
     def test_simultaneous_assigned_expressions_cancel_instead_of_picking_an_action(self):
         profile=default_profile(mode='head');profile.update(expressions_calibrated=True,calibrated_expressions=['smile','wink_left'])
         profile['bindings'].update(smile='left_click',wink_left='right_click')

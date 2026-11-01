@@ -21,6 +21,7 @@ from server.aircontrol.service import AirControlService
 from server.aircontrol.engine import GestureEngine
 from server.aircontrol.profiles import default_profile
 from server.desktop_services import DesktopServices
+from tests.test_aircontrol_head_actions import aim
 from server.windows_input import WindowsInputController
 
 SCRIPT=r'''
@@ -105,7 +106,7 @@ async def run():
                 while time.monotonic()<deadline:
                     expected=service.last_point;actual=native.get_physical_cursor_pos()
                     service.observe({'timestamp':time.monotonic(),'seq':sequence,'face':{'tracked':True,'count':1,
-                        'yaw':((x-r['x'])/(r['width']-1)-.5)*36,'pitch':((y-r['y'])/(r['height']-1)-.5)*36}})
+                        'yaw':aim((x-r['x'])/(r['width']-1),(y-r['y'])/(r['height']-1))[0],'pitch':aim((x-r['x'])/(r['width']-1),(y-r['y'])/(r['height']-1))[1]}})
                     sequence+=1
                     if service.state!='active':
                         print(json.dumps({'interrupted':service.message,'detail':service.last_error,'actual_before':actual,'last_commanded':expected}),flush=True)

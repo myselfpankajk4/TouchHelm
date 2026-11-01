@@ -96,6 +96,24 @@ components:
 
 # Design System: TouchHelm
 
+## Files — approved 27 October 2026
+
+The seventh destination extends the existing materials with sculpted, locally
+authored SVG folders/files. Keep Files second after Trackpad. A compact bento
+area serves actual locations; folder contents remain readable rows with optional
+grid view, breadcrumbs, search, sorting and pagination. A destination dialog
+precedes uploads, a transfer tray shows real byte progress/cancel/retry, and phone
+previews use native media controls with explicit unsupported-format recovery.
+Desktop File access is separate from screen/audio access. The pairing flow uses
+one local QR and PIN without internet setup or certificate instructions.
+
+The Glass light Files surface uses cloud white, paper, slate and a blue action
+accent from the approved target; other themes retain their semantic colors.
+Dark/light, 320px phone, 393px reference and wide sidebar/preview layouts share
+native semantics, >=44px hit regions, visible focus and reduced-motion support.
+The target and planned adaptations are in
+docs/superpowers/specs/2026-10-27-files-local-design.md.
+
 ## Overview
 
 The approved direction is a compact control console with seven distinct material families. Large usable movement space and readable feedback take priority. The mouse mark and original app branding preserve TouchHelm's identity; controls use system typography and native semantics.
@@ -104,7 +122,7 @@ The phone uses compact toolbars, contextual titles and broad touch surfaces. The
 
 ## Colors
 
-The frontmatter records legacy fallback tokens. Current semantic colors and materials live in `web/themes.css` and the seven packages under `web/themes/`, shared by phone and desktop. Legacy IDs migrate through `web/themes.js`. Bloom, Resonance, Companion, Clay, Glass, Soft UI and Ink each provide light/dark and increased-contrast treatment.
+The frontmatter records legacy fallback tokens. Current semantic colors and materials live in `web/themes.css` and the five packages under `web/themes/`, shared by phone and desktop. Legacy IDs migrate through `web/themes.js`. Aurora, Bloom, Resonance, Constellation and Ink each provide light/dark and increased-contrast treatment.
 
 Primary indicates selected navigation, prominent actions, pressed keys, and focused controls. Main, muted, and dim text separate context from supporting labels without making essential information decorative. Danger marks destructive actions and persistent save failures. Alternate themes retain the same hierarchy and their own contrast color.
 
@@ -148,3 +166,35 @@ Controls use gently rounded corners, with smaller radii for dense keys and large
 - Don't expand decoration, glows, simulated telemetry, or empty cards at the expense of task controls.
 - Don't manufacture slide counts, playlists, successful saves, or ready connection states.
 - Don't introduce a second Windows Start button or move ordinary typing out of Trackpad.
+
+## AirControl daily-use workspace — 18 October 2026
+
+The live movement area leads the desktop AirControl page. Use a compact persistent
+session bar, setup-only Camera/Calibrate/Practice/Enable progression, a contextual
+inspector, and Session/Practice/Personal settings/Diagnostics tabs. The mode and
+camera selectors belong behind Change setup during a session; it explicitly
+stops control before presenting a fresh setup flow.
+
+Preserve the mouse mark, five theme families and Segoe UI/system typography.
+Use existing theme variables rather than hard-coded default colors; the default
+blue-black/slate/cyan palette remains. Use 26–30 px page titles, 18–20 px section
+titles, 14–16 px body/main controls and at least 12 px supporting information.
+Group with 4/8/12/16/24 px spacing and restrained edges. Remove promotional
+uppercase eyebrows and oversized gesture art from the working surface.
+
+At 820×620 the stage begins in the initial view with at least 240 visible pixels.
+Narrow effective widths reflow to one column. Controls retain 44 px targets,
+keyboard focus and associated tab panels. Reduced motion removes spatial
+animation. Live status changes only when its meaning changes; elapsed practice
+time is separate from the live announcement.
+
+Practice targets use the service's normalized geometry, with at least 64 px
+visual targets. Head drag and scroll exercises select their simulated action.
+During exercises the task inspector replaces the ordinary action dock. Head
+scroll uses a visible virtual cursor with immediate direction departure; its
+Up/Down/Done geometry is shared with hit testing. No simulated exercise injects
+Windows input. See docs/AIRCONTROL_DAILY_USE_RELEASE.md for current screenshots.
+
+Browser pairing refinement (26 October 2026): fresh desktop profiles offer browser-only HTTPS without starting it automatically. The selected connection, explicit Start/Stop/New QR actions, readiness and lifetime precede a compact QR/address/PIN group. Internet/provider routing is visible beside the choice; screen/audio permission and advanced methods use disclosures. Host loading/failure hides stale QR/PIN data and offers Retry. Copy feedback stays beside its button; settings use a sticky dirty/save bar and retain drafts across polling. Unchanged diagnostics preserve selection. Preserve seven themes, native system typography, 44px controls, reduced motion and 820x620/200-percent reflow. Visual proof uses the incumbent desktop and synthetic fixtures; no new image direction was introduced.
+
+Test 6 local transport: the connection choice says Secure local Wi-Fi. Internet is used only to load and pair. Connected status explicitly reports encrypted local control and a closed public tunnel; no stale public QR/address remains. Stop stays reachable. The phone explains fresh-QR recovery rather than silently reconnecting through a relay. Material CSS is prepared during pairing and reused through blob URLs after the helper closes.

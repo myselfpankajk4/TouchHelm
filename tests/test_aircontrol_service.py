@@ -8,6 +8,103 @@ from server.aircontrol.profiles import default_profile
 from server.aircontrol.engine import GestureEngine
 
 class AirServiceTests(unittest.IsolatedAsyncioTestCase):
+    async def test_reset_measurements_preserves_tracking_sequence_and_calibration(self):
+        s=self.service;s.worker=self.worker;s.calibrated=True;s.state='practicing';s.last_sequence=99
+        s.metrics.record_latency(25.);s.practice.start('click',1.)
+        await s.command('reset_measurements')
+        self.assertEqual(s.last_sequence,99);self.assertTrue(s.calibrated);self.assertIs(s.worker,self.worker)
+        self.assertEqual(s.practice.name,'click');self.assertIsNone(s.snapshot()['metrics']['p95_latency_ms'])
+        result=await s.command('export_report',{'build_id':'a'*32})
+        self.assertEqual(result['report']['build'],'a'*32)
+        self.assertNotIn('profile',result['report']);self.assertNotIn('frame',result['report'])
+
+    async def test_watchdog_records_only_one_tracking_interruption(self):
+        s=self.service;s.state='active';s.last_frame=10.
+        s.metrics.observe(at=10.,tracked=True)
+        s.watchdog(now=10.251);s.watchdog(now=10.5)
+        self.assertEqual(s.snapshot()['metrics']['tracking_interruptions'],1)
+
+    async def test_exercise_start_returns_ownership_and_viewport_revisions_are_guarded(self):
+        self.service.worker=self.worker;self.service.calibrated=True;self.service.state='active';self.service.owns_input=True
+        await self.service.command('practice_viewport',{'width':640,'height':480,'revision':1})
+        await self.service.command('practice_start',{'name':'click'})
+        self.assertEqual(self.service.state,'practicing');self.assertFalse(self.service.owns_input)
+        self.release.assert_awaited_once()
+        await self.service.command('practice_viewport',{'width':320,'height':240,'revision':2})
+        await self.service.command('practice_viewport',{'width':640,'height':480,'revision':1})
+        self.assertEqual(self.service.snapshot()['practice']['viewport'],[320,240])
+        with self.assertRaises(ValueError):await self.service.command('practice_viewport',{'width':True,'height':240,'revision':3})
+
+    async def test_real_head_dwell_scores_practice_target_without_native_effects(self):
+        import time
+        from test_aircontrol_head_actions import face
+        s=self.service;s.profile=default_profile(mode='head');s.profile.update(smoothing=0,head_stability=0)
+        s.engine=GestureEngine(s.profile);s.worker=self.worker;s.calibrated=True;s.state='practicing'
+        await s.command('practice_start',{'name':'click'})
+        start=time.monotonic()
+        for i in range(12):
+            frame=face(start+i*.1,yaw=-9);frame['seq']=i;s.observe(frame,now=frame['timestamp'])
+        self.assertEqual(s.snapshot()['practice']['successes'],1)
+        self.assertEqual(s.practice_actions,1)
+        self.input.set_physical_cursor_pos.assert_not_called();self.input.click.assert_not_called()
+        self.acquire.assert_not_awaited()
+        await s.command('practice_pause');self.assertEqual(s.snapshot()['practice']['status'],'paused')
+        await s.command('practice_resume');self.assertEqual(s.snapshot()['practice']['status'],'running')
+
+    async def test_head_exercises_select_the_required_simulated_action(self):
+        s=self.service;s.worker=self.worker;s.calibrated=True;s.state='practicing'
+        s.profile=default_profile(mode='head');s.engine=GestureEngine(s.profile)
+        await s.command('practice_start',{'name':'drag'})
+        self.assertEqual(s.engine.dwell_action,'drag')
+        await s.command('practice_start',{'name':'scroll'})
+        self.assertTrue(s.engine.head_scroll)
+        self.input.scroll.assert_not_called();self.acquire.assert_not_awaited()
+        await s.command('practice_viewport',{'width':320,'height':240,'revision':1})
+        self.assertTrue(s.engine.head_scroll)
+        self.assertEqual(s.practice.misses,0)
+
+    async def test_readiness_is_local_and_explains_camera_off(self):
+        self.service.worker=None
+        result=self.service.activation_readiness(now=10.)
+        self.assertEqual(result['code'],'camera_off');self.assertFalse(result['ready'])
+        self.acquire.assert_not_awaited();self.service.displays.assert_not_awaited()
+        self.input.mouse_down.assert_not_called()
+
+    async def test_readiness_matches_enable_and_repeated_enable_cannot_acquire_twice(self):
+        import time
+        self.service.worker=self.worker;self.service.state='practicing'
+        self.service.calibrated=True;self.service.practice_frames=20;self.service.practice_actions=1
+        self.service.engine.lost=False;self.service.last_frame=time.monotonic()
+        self.service.stable_since=time.monotonic()-.3;self.service.stable_frames=8
+        self.service.display={'id':'m','rect':{'x':-100,'y':0,'width':1000,'height':800}}
+        self.assertTrue(self.service.activation_readiness()['ready'])
+        await self.service.command('enable')
+        self.assertEqual(self.service.activation_readiness()['code'],'already_active')
+        with self.assertRaises(ValueError):await self.service.command('enable')
+        self.acquire.assert_awaited_once()
+
+    async def test_readiness_freshness_and_required_neutral_pose(self):
+        self.service.worker=self.worker;self.service.state='practicing';self.service.calibrated=True
+        self.service.practice_frames=20;self.service.practice_actions=1;self.service.engine.lost=False
+        self.service.last_frame=10.;self.service.stable_since=9.;self.service.stable_frames=8
+        self.service.display={'id':'m','rect':{'x':0,'y':0,'width':1000,'height':800}}
+        self.assertEqual(self.service.activation_readiness(now=10.25)['code'],'ready')
+        self.assertEqual(self.service.activation_readiness(now=10.251)['code'],'tracking_required')
+        self.service.engine.held=True
+        self.assertEqual(self.service.activation_readiness(now=10.2)['code'],'release_gesture')
+
+    async def test_readiness_explains_each_remaining_setup_gate(self):
+        s=self.service;s.worker=self.worker;s.state='practicing';s.last_frame=10.
+        self.assertEqual(s.activation_readiness(now=10.)['code'],'calibration_required')
+        s.calibrated=True
+        self.assertEqual(s.activation_readiness(now=10.)['code'],'practice_required')
+        s.practice_frames=20;s.practice_actions=1
+        self.assertEqual(s.activation_readiness(now=10.)['code'],'tracking_required')
+        s.engine.lost=False
+        self.assertEqual(s.activation_readiness(now=10.)['code'],'steady_required')
+        s.stable_since=9.;s.stable_frames=8
+        self.assertEqual(s.activation_readiness(now=10.)['code'],'monitor_required')
+
     async def test_locked_desktop_cannot_start_camera(self):
         self.service.desktop_available=lambda:False
         with self.assertRaisesRegex(ValueError,'Unlock'):await self.service.command('start')
@@ -32,7 +129,7 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(self.service.calibrated);self.assertFalse(self.service.owns_input)
     async def test_enable_does_not_replay_a_still_held_practice_pinch(self):
         import time
-        self.service.worker=self.worker;self.service.calibrated=True;self.service.practice_frames=20;self.service.practice_actions=1
+        self.service.worker=self.worker;self.service.state='practicing';self.service.calibrated=True;self.service.practice_frames=20;self.service.practice_actions=1
         self.service.last_frame=time.monotonic();self.service.stable_since=time.monotonic()-.3;self.service.stable_frames=8
         self.service.engine.lost=False;self.service.engine.held=True;self.service.engine.gesture='pinch_index'
         self.service.display={'id':'m','rect':{'x':-100,'y':0,'width':1000,'height':800}}
@@ -89,6 +186,22 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
         self.service.worker=self.worker;self.service.calibrated=True;self.service.state='practicing'
         await self.service.command('recenter')
         self.assertEqual(self.service.state,'practicing');self.assertFalse(self.service.owns_input)
+
+    async def test_head_recenter_averages_recent_pose_instead_of_one_noisy_frame(self):
+        import time,random
+        from test_aircontrol_head_actions import face
+        s=self.service;s.profile=default_profile(mode='head');s.engine=GestureEngine(s.profile)
+        s.worker=self.worker;s.calibrated=True;s.state='practicing'
+        random.seed(3);start=time.monotonic()-1.4
+        for i in range(15):
+            frame=face(start+i*.09,yaw=4+random.gauss(0,.4),pitch=-2+random.gauss(0,.4));frame['seq']=i
+            s.observe(frame,now=frame['timestamp'])
+        s.last_frame=time.monotonic()
+        await s.command('recenter')
+        yaw,pitch=s.profile['calibration']['head_neutral']
+        self.assertAlmostEqual(yaw,4,delta=.4);self.assertAlmostEqual(pitch,-2,delta=.4)
+        self.assertNotEqual(yaw,s.frame['face']['yaw'])
+        self.assertEqual(s.engine.profile['calibration']['head_neutral'],[yaw,pitch])
 
     async def test_pause_pose_in_practice_does_not_satisfy_click_requirement(self):
         self.service.state='practicing'
@@ -151,7 +264,7 @@ class AirServiceTests(unittest.IsolatedAsyncioTestCase):
     async def test_enable_transfers_input_only_after_validated_practice(self):
         import time
         await self.service.command('start',{'profile':default_profile(mode='hand')})
-        self.service.calibrated=True;self.service.practice_frames=20;self.service.practice_actions=1
+        self.service.state='practicing';self.service.calibrated=True;self.service.practice_frames=20;self.service.practice_actions=1
         self.service.engine.lost=False;self.service.last_frame=time.monotonic()
         self.service.stable_since=time.monotonic()-.3;self.service.stable_frames=8
         await self.service.command('enable')

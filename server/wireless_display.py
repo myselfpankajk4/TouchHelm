@@ -59,7 +59,7 @@ class WirelessDisplaySetup:
         try:
             self.folder.mkdir(parents=True,exist_ok=True)
             if self.launcher is launch_installer:
-                from .secure_pairing import protect_user_path
+                from .private_storage import protect_user_path
                 protect_user_path(self.folder)
             path=self.folder/('setup-'+secrets.token_hex(12)+'.json')
             self.launcher(path)

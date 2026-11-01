@@ -17,7 +17,7 @@ GESTURE_LABELS={'pinch_index':'Thumb + index pinch','pinch_middle':'Thumb + midd
     'wink_left':'Left wink','wink_right':'Right wink','brows_up':'Raised eyebrows'}
 LIMITS={'sensitivity':(.3,3),'smoothing':(0, .9),'pinch_close':(.08,.5),
     'pinch_open':(.2,.9),'dwell_ms':(400,2500),'hold_ms':(200,1800),
-    'cooldown_ms':(250,2500),'head_range':(8,35),'head_stability':(0,12),'dwell_radius':(12,40)}
+    'cooldown_ms':(250,2500),'head_range':(8,35),'head_stability':(0,20),'hand_stability':(0,16),'dwell_radius':(12,40)}
 
 def default_profile(name='everyday',mode='head'):
     bindings={'pinch_index':'left_drag','pinch_middle':'right_click','two_fingers':'scroll',
@@ -28,7 +28,7 @@ def default_profile(name='everyday',mode='head'):
     return dict(version=1,name=name,mode=mode,hand='auto',camera_id='0',monitor_id='',mirror=True,
         landmarks=True,auto_dictation=True,sensitivity=1.,smoothing=.6 if mode=='head' else .45,pinch_close=.25,
         pinch_open=.4,dwell_ms=900,hold_ms=400,cooldown_ms=700,head_range=18,
-        dwell=True,head_stability=4.,dwell_radius=22.,expressions_calibrated=False,calibrated_expressions=[],expression_thresholds={},bindings=bindings,
+        dwell=True,head_stability=8.,hand_stability=6.,dwell_radius=22.,expressions_calibrated=False,calibrated_expressions=[],expression_thresholds={},bindings=bindings,
         calibration={'hand_bounds':[.15,.15,.85,.85],'head_neutral':[0.,0.]})
 
 def validate_profile(profile):
@@ -72,8 +72,27 @@ def validate_profile(profile):
     value['version']=1
     return value
 
+# Revision of the tuning defaults a saved file was written with. Files written before it
+# existed carry the old head_stability default (4 px), which validate_profile cannot
+# replace because it only fills missing keys.
+TUNING=3
+OLD_HEAD_STABILITY=4
+
+def upgrade_profile(profile,tuning):
+    if tuning<2 and isinstance(profile,dict) and type(profile.get('head_stability')) in (int,float) and profile['head_stability']==OLD_HEAD_STABILITY:
+        profile=dict(profile,head_stability=default_profile()['head_stability'])
+    if tuning<3 and isinstance(profile,dict) and isinstance(profile.get('calibration'),dict):
+        # Tuning 3 aims with the knuckle centre instead of the index fingertip, which sits
+        # about a finger-length lower in the image. Movement bounds captured on the fingertip
+        # would place the cursor off-screen until Quick setup is run again.
+        profile=dict(profile,calibration=dict(profile['calibration'],hand_bounds=list(default_profile()['calibration']['hand_bounds'])))
+    return profile
+
 class ProfileStore:
     def __init__(self,path):self.path=Path(path)
+    def _tuning(self,data):
+        value=data.get('tuning',1)
+        return value if type(value) is int else 1
     def _data(self):
         try:
             value=json.loads(self.path.read_text(encoding='utf-8'))
@@ -83,23 +102,24 @@ class ProfileStore:
         data=self._data();profiles={name:default_profile(name) for name in ('everyday','presenter','media','custom')}
         candidates=data.get('profiles',{}) if 'profiles' in data else {data.get('name','everyday'):data}
         if isinstance(candidates,dict):
+            tuning=self._tuning(data)
             for name,profile in candidates.items():
                 try:
-                    if name in profiles:profiles[name]=validate_profile(profile)
+                    if name in profiles:profiles[name]=validate_profile(upgrade_profile(profile,tuning))
                 except (TypeError,ValueError):pass
         return profiles
     def read(self):
         try:
             data=self._data()
             if 'profiles' in data:return self.all().get(data.get('active'),default_profile())
-            return validate_profile(data)
+            return validate_profile(upgrade_profile(data,self._tuning(data)))
         except (OSError,ValueError,TypeError):return default_profile()
     def save(self,profile):
         value=validate_profile(profile)
         profiles=self.all();profiles[value['name']]=value
         self.path.parent.mkdir(parents=True,exist_ok=True)
-        from server.secure_pairing import protect_user_path
+        from server.private_storage import protect_user_path
         protect_user_path(self.path.parent)
-        temporary=self.path.with_suffix('.tmp');temporary.write_text(json.dumps({'version':1,'active':value['name'],'profiles':profiles}),encoding='utf-8')
+        temporary=self.path.with_suffix('.tmp');temporary.write_text(json.dumps({'version':1,'tuning':TUNING,'active':value['name'],'profiles':profiles}),encoding='utf-8')
         protect_user_path(temporary);temporary.replace(self.path)
         return value

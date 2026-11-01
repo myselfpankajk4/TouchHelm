@@ -1,5 +1,41 @@
 # AirControl reliability review — 18 October 2026
 
+The [daily-use workspace release](AIRCONTROL_DAILY_USE_RELEASE.md) extends this
+review with guided setup, task-based practice, Head scrolling, sanitized reports,
+411 Python / 81 browser / 86 JavaScript passes, a 36-scenario replay comparison,
+and 22 axe scans with no reported violations. Earlier counts below describe
+their own historical repair passes.
+
+## Follow-up: release continuity and expression evidence
+
+The approved follow-up repaired three reproducible control defects and the
+practice feedback display:
+
+- A stationary hand could jump about 219 pixels horizontally on a 1920-pixel
+  display after releasing a drag with smoothing off. Hand release now anchors
+  movement at the drop location and maps subsequent movement toward the screen
+  edges. Recenter/tracking interruption clears the session adjustment. Boundary
+  releases require moving inward and back before reaching that edge again.
+- Partial expression observations treated missing/invalid opposite-eye data as
+  an open eye. Winks now require valid readings from both eyes. Smile activation
+  uses the same bilateral average even when unrelated channels are unavailable.
+- Explicit Release drag cleared dwell consumption and allowed an extra click
+  without deliberate departure. It now consumes dwell at the release position;
+  a held expression must also relax before it can trigger another action.
+- The practice header replaced server feedback with a generic instruction.
+  Calibration/action feedback now remains visible, while practice readiness and
+  Windows-input status retain their dedicated indicators.
+
+Seven Python regressions and one browser regression were added. The reproduced
+failures were observed before their fixes. Final checks: **365 Python tests
+passed**, **75/75 browser behavior checks passed**, **83 JavaScript tests passed
+with one optional skip**, and **3/3 targeted visual checks passed**. Practice and
+facial-calibration screenshots were inspected at 820×620 and 1120×800. Native
+input was mocked and no webcam was opened for these checks. The independent
+reviewer could not start because the delegation tool rejected its configured
+model; the diff was reviewed directly instead. Physical accuracy and comfort
+remain unmeasured by this follow-up.
+
 ## Scope and research
 
 Audited camera observations, hand/head/combined arbitration, smoothing, calibration,

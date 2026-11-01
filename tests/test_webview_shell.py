@@ -11,6 +11,19 @@ ROOT = Path(__file__).resolve().parents[1]
 
 
 class WebViewShellTests(unittest.TestCase):
+    def test_native_file_access_creates_pin_without_enabling_screen_capture(self):
+        result=self.api.save_settings(self.app.token,{'files_enabled':True})
+        self.assertTrue(result['success'])
+        self.assertTrue(self.config.get('files_enabled'))
+        self.assertTrue(self.config.get('require_pin'))
+        self.assertFalse(self.config.get('remote_enabled'))
+    def test_export_uses_running_host_build_instead_of_renderer_label(self):
+        self.app.build_id='b'*32
+        self.app._submit=Mock(return_value={'success':True,'report':{}})
+        self.app.server.aircontrol.command=Mock(return_value=object())
+        self.api.aircontrol(self.app.token,'export_report',{'build_id':'forged'})
+        self.app.server.aircontrol.command.assert_called_once_with('export_report',{'build_id':'b'*32})
+
     def test_aircontrol_commands_and_frames_require_owned_desktop(self):
         self.app.window.get_current_url.return_value='https://attacker.invalid/'
         for method,args in ((self.api.aircontrol,('start',{})),(self.api.get_aircontrol_frame,())):
@@ -20,7 +33,7 @@ class WebViewShellTests(unittest.TestCase):
     def test_wireless_install_and_password_commands_require_owned_desktop(self):
         self.app.wireless_display.install=Mock()
         self.app.window.get_current_url.return_value='https://attacker.invalid/'
-        for method in (self.api.install_wireless_display,self.api.generate_password,self.api.prepare_trusted_pairing):
+        for method in (self.api.install_wireless_display,self.api.generate_password):
             with self.assertRaises(PermissionError):method(self.app.token)
         self.app.wireless_display.install.assert_not_called()
 
@@ -29,12 +42,6 @@ class WebViewShellTests(unittest.TestCase):
         self.assertTrue(result['success']);self.assertTrue(self.config.get('require_pin'))
         self.assertEqual(len(self.config.get('pin_code')),4)
         self.assertNotIn('pin_code',result['config'])
-
-    def test_tailscale_commands_restricted_to_owned_desktop_window(self):
-        self.assertTrue(hasattr(self.api,'request_tailscale'), 'Private Serve belongs to the native bridge')
-        self.app.window.get_current_url.return_value='https://attacker.invalid/'
-        for method,args in ((self.api.request_tailscale,(True,)),(self.api.refresh_tailscale,()),(self.api.open_tailscale_help,('windows',))):
-            with self.assertRaises(PermissionError): method(self.app.token,*args)
 
     def setUp(self):
         self.module = importlib.import_module('gui.webview_window')
@@ -101,6 +108,7 @@ class WebViewShellTests(unittest.TestCase):
         self.assertIsNone(server.resolve('/desktop/secret/server.key'))
         self.assertIsNone(server.resolve('/desktop/wrong/index.html'))
         self.assertEqual(server.resolve('/desktop/secret/index.html'), ROOT / 'gui/web/index.html')
+        self.assertEqual(server.resolve('/desktop/secret/aircontrol-view.js'), ROOT / 'gui/web/aircontrol-view.js')
 
     def test_desktop_preferences_use_shared_theme_values_and_persist(self):
         preferences = {'theme': 'ink', 'appearance': 'light', 'motion': 'reduced', 'contrast': 'increased'}
@@ -109,12 +117,11 @@ class WebViewShellTests(unittest.TestCase):
         self.assertTrue(result['success'])
         self.assertEqual(self.app._preferences(), preferences)
 
-    def test_http_and_https_qr_codes_are_distinct_and_both_match_selected_addresses(self):
-        self.app.server.https_site = object()
+    def test_pairing_exposes_one_local_http_address_and_qr(self):
         pairing = self.app._pairing()
-        self.assertIn('qr_http', pairing)
-        self.assertIn('qr_https', pairing)
-        self.assertNotEqual(pairing['qr_http'], pairing['qr_https'])
+        self.assertEqual(set(pairing), {'http_url', 'qr'})
+        self.assertTrue(pairing['http_url'].startswith('http://192.168.1.12:8765/'))
+        self.assertTrue(pairing['qr'])
 
     def test_saved_settings_are_reported_truthfully_when_phone_sync_fails(self):
         self.app.server_loop = Mock()
@@ -129,11 +136,6 @@ class WebViewShellTests(unittest.TestCase):
         self.assertIn('warning', result)
         self.assertEqual(self.config.get('scroll_speed'), 1.7)
 
-    def test_failed_https_enable_restores_previous_setting(self):
-        self.app.server.enable_https = lambda: asyncio.sleep(0)
-        result = self.api.request_https(self.app.token, True)
-        self.assertFalse(result['success'])
-        self.assertFalse(self.config.get('https_enabled'))
 
 
 if __name__ == '__main__':

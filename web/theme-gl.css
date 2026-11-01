@@ -1,0 +1,12 @@
+/* Canvas for the generative backdrop (theme-gl.js). Decorative: never receives input. */
+#th-gl {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: -1;
+  pointer-events: none;
+  display: block;
+  background: var(--th-bg, transparent);
+}
+html:not([data-gl="on"]) #th-gl { display: none; }

@@ -11,7 +11,6 @@ import time
 import asyncio
 import math
 import hmac
-from urllib.parse import urlsplit
 from contextlib import suppress
 from aiohttp import web
 
@@ -38,6 +37,8 @@ class ConnectedClient:
         self.held_keys = set()
         self.text_field_id = ''
         self.text_revision = ''
+        self.text_write_id = 0
+        self.text_write_field_id = ''
 
 
 class TouchHelmServer:
@@ -55,14 +56,6 @@ class TouchHelmServer:
         self.volume_monitor_task = None
         self.desktop_monitor_task = None
         self.desktop_services = DesktopServices()
-        self.secure_pairing = None
-        self.https_site = None
-        from server.tailscale_pairing import TailscalePairingManager
-        self.tailscale = TailscalePairingManager(config)
-        self.tailscale_site = None
-        self.tailscale_origin = None
-        self.tailscale_status = {'state':'unchecked','ready':False,'url':None,'message':'Check Tailscale from the desktop.'}
-        self._handoffs = {}
         self._pin_failures = []
         self._pin_blocked_until = 0.
         self._displays = {}
@@ -75,13 +68,15 @@ class TouchHelmServer:
             notify=self._remote_state_changed, before_control=self._remote_acquire_input,
             control_allowed=lambda:not (getattr(self,'aircontrol',None) and self.aircontrol.owns_input))
         self._remote_tasks = {}
+        from server.file_http import FileHTTP
+        self.files=FileHTTP(self)
         from server.text_sync import FocusedTextService
         self.text_service = FocusedTextService()
         self._text_tasks = {}
         from server.aircontrol.service import AirControlService
         from server.aircontrol.overlay import AirOverlay
         from server.aircontrol.voice import VoiceController
-        from server.secure_pairing import private_storage_root
+        from server.private_storage import private_storage_root
         self.aircontrol=AirControlService(self.input_ctrl,self.desktop_services.displays,
             folder=private_storage_root()/'aircontrol',acquire=self._air_acquire,release=self._air_release)
         self.aircontrol.voice=VoiceController(self.input_ctrl,allowed=lambda:self.aircontrol.owns_input and self.aircontrol.state=='active')
@@ -139,6 +134,12 @@ class TouchHelmServer:
             state={'available':False,'message':'Enable a host PIN in desktop Settings to sync focused PC text.'}
         elif self.remote.blocks_input(client):
             state={'available':False,'message':'Another phone owns Remote control. PC text sync is paused.'}
+        if (data['action']=='write' and state.get('available')
+                and state.get('field_id')==data.get('field_id') and state.get('text')==data.get('text')):
+            client.text_write_id=data.get('request_id',0)
+            client.text_write_field_id=state['field_id']
+        if state.get('available') and state.get('field_id')==client.text_write_field_id:
+            state={**state,'acknowledged_write':client.text_write_id}
         client.text_field_id=state.get('field_id','') if state.get('available') else ''
         client.text_revision=state.get('revision','') if state.get('available') else ''
         with suppress(ConnectionError,RuntimeError):
@@ -148,6 +149,7 @@ class TouchHelmServer:
         task=self._text_tasks.pop(client.ws,None)
         if task and not task.done():task.cancel()
         client.text_field_id=client.text_revision=''
+        client.text_write_id=0;client.text_write_field_id=''
 
     def _remote_state_changed(self, state):
         owner = self.remote.owner
@@ -169,10 +171,10 @@ class TouchHelmServer:
             self._release_client_input(client)
         self.laser_client.hide()
 
-    async def _remote_request(self, client, data, secure):
+    async def _remote_request(self, client, data):
         if self.aircontrol.owns_input and data.get('type') in ('remote_start','remote_config') and data.get('mode',self.remote.mode)=='control':
             await client.ws.send_json({'type':'remote_result','success':False,'message':'AirControl owns PC input. Switch to Phone mode on the desktop to take control.'});return
-        result = await self.remote.request(client, data, secure)
+        result = await self.remote.request(client, data, local=getattr(client,'local_lan',False))
         if client.authenticated and not client.ws.closed:
             with suppress(ConnectionError, RuntimeError): await client.ws.send_json(result)
 
@@ -180,6 +182,8 @@ class TouchHelmServer:
         await self.remote.stop('Stopped from the desktop.')
 
     async def remote_settings_changed(self):
+        if not self.config.get('files_enabled') or not self.config.get('require_pin'):
+            for client in self.clients.values():self.files.revoke(client)
         if not self.config.get('remote_enabled') or not self.config.get('require_pin'):
             await self.remote.stop('Remote screen access disabled on the desktop.')
         await self.broadcast({'type':'config_sync','config':self.config.public_data()})
@@ -359,6 +363,7 @@ class TouchHelmServer:
         self._pin_failures.clear()
         self._pin_blocked_until = 0.
         clients = list(self.clients.items())
+        for _,client in clients:self.files.revoke(client)
         authorized = not self.config.get("require_pin", False)
         # Revoke every session before yielding to a socket. One disconnected
         # device must not leave the remaining clients authorized with an old PIN.
@@ -407,6 +412,8 @@ class TouchHelmServer:
                                    "brightness": self.input_ctrl.get_brightness(),
                                    "config": self.config.public_data(),
                                    'input_owner':'aircontrol' if self.aircontrol.owns_input else 'phone'})
+        ticket=self.files.ticket(client)
+        if ticket:await client.ws.send_json({'type':'files_ticket','ticket':ticket})
         return True
 
     def _release_client_input(self, client):
@@ -514,7 +521,7 @@ class TouchHelmServer:
             "scroll_speed": self.config.get("scroll_speed", 1.0),
             "invert_scroll": self.config.get("invert_scroll", False),
             "laser_color": self.config.get("laser_color", "red"),
-            "theme": self.config.get("theme", "cyber")
+            "theme": self.config.get("theme", "aurora")
         }, headers={"Access-Control-Allow-Origin": "*"})
 
     async def handle_config(self, request):
@@ -533,7 +540,7 @@ class TouchHelmServer:
                 data = await request.json()
                 if not isinstance(data, dict):
                     raise ValueError("Settings must be an object")
-                if any(key in data for key in ('port','https_port','https_enabled','tailscale_enabled','tailscale_owned_host','remote_enabled')):
+                if any(key in data for key in ('port','remote_enabled','files_enabled')):
                     raise ValueError("Changing the port requires a server restart")
                 pin_setting_changed = any(k in data and self.config.get(k) != data[k]
                                           for k in ("require_pin", "pin_code"))
@@ -548,12 +555,16 @@ class TouchHelmServer:
         return web.json_response(self.config.public_data(), headers=headers)
 
     async def handle_ws(self, request):
-        ws = web.WebSocketResponse(heartbeat=15.0)
+        ws = web.WebSocketResponse(heartbeat=15.0, max_msg_size=4*1024*1024)
         await ws.prepare(request)
 
         remote_ip = request.remote or "unknown"
+        from server.local_network import local_request
+        return await self._serve_client(ws,remote_ip,lan=local_request(request),origin=f'{request.scheme}://{request.host}')
+
+    async def _serve_client(self,ws,remote_ip,lan=False,origin=None):
         client = ConnectedClient(ws, remote_ip)
-        client.remote_secure = self.request_origin(request).startswith('https://')
+        client.local_lan=lan;client.origin=origin
         self.clients[ws] = client
         self._notify_client_change()
         self._log_event("Device connected", remote_ip)
@@ -592,6 +603,7 @@ class TouchHelmServer:
                         client.device_name = str(data.get("device_name", "TouchHelm Client"))[:40]
                         authorized = not self.config.get("require_pin", False) or self._pin_matches(data.get("pin"))
                         if not authorized:
+                            self.files.revoke(client)
                             self._cancel_text_request(client)
                             if self.remote.owner is client: await self.remote.stop('Authentication revoked.')
                             self._cancel_desktop_requests(client)
@@ -611,6 +623,11 @@ class TouchHelmServer:
                     if not client.authenticated:
                         continue
 
+                    if msg_type=='files_ticket':
+                        ticket=self.files.ticket(client)
+                        await ws.send_json({'type':'files_ticket','ticket':ticket})
+                        continue
+
                     if not self.aircontrol.owns_input and self.aircontrol.native_down:self.aircontrol._release_buttons()
 
                     if self.aircontrol.owns_input and not msg_type.startswith('remote_') and msg_type not in ('ping','get_desktop_state','get_apps','get_media_library','get_displays','get_volume','get_brightness','get_system_status','get_presentation_details'):
@@ -623,11 +640,11 @@ class TouchHelmServer:
                         previous = self._remote_tasks.get(ws)
                         if msg_type in ('remote_stop', 'remote_pause'):
                             if previous and not previous.done(): previous.cancel()
-                            await self._remote_request(client, data, client.remote_secure)
+                            await self._remote_request(client, data)
                         elif previous and not previous.done():
                             await ws.send_json({'type':'remote_result','success':False,'message':'Remote request is still running.'})
                         else:
-                            task=asyncio.create_task(self._remote_request(client,data,client.remote_secure))
+                            task=asyncio.create_task(self._remote_request(client,data))
                             self._remote_tasks[ws]=task
                         continue
                     if msg_type == 'remote_input':
@@ -851,6 +868,7 @@ class TouchHelmServer:
                     pass
 
         finally:
+            self.files.revoke(client)
             self._cancel_text_request(client)
             task=self._remote_tasks.pop(ws,None)
             if task and not task.done():task.cancel()
@@ -874,146 +892,13 @@ class TouchHelmServer:
         if data is None:return web.Response(status=404)
         return web.Response(body=data,content_type='image/png',headers={'Cache-Control':'no-store','X-Content-Type-Options':'nosniff'})
 
-    async def handle_pairing(self,request):
-        if not self._http_authorized(request):return web.Response(status=401)
-        info={};certificate_available=False
-        if self.secure_pairing:
-            try:
-                info=self.secure_pairing.public_info()
-                certificate_available=True
-            except (OSError,ValueError):
-                info={'message':'The public pairing certificate is unavailable. Retry HTTPS setup on the desktop.'}
-        return web.json_response(dict(info,enabled=bool(self.https_site),certificate_available=certificate_available,
-                                      https_port=self.config.get('https_port',8766), https_url=self.local_https_origin(request)+'/' if self.https_site and self.local_https_origin(request) else None,
-                                      tailscale={key:value for key,value in self.tailscale_status.items() if key != 'host'}))
-
-    def local_https_origin(self, request):
-        host = urlsplit(f'http://{request.host}').hostname
-        if host not in get_local_ip_addresses()+['localhost','127.0.0.1','::1']: return None
-        return f'https://{"["+host+"]" if ":" in host else host}:{self.config.get("https_port",8766)}'
-
-    def _is_tailscale_request(self, request):
-        local = request.transport.get_extra_info('sockname') if request.transport else None
-        return bool(self.tailscale_origin and local and local[0]=='127.0.0.1' and local[1]==8767
-                and request.remote=='127.0.0.1' and request.host==urlsplit(self.tailscale_origin).netloc)
-
-    def request_origin(self, request):
-        if self._is_tailscale_request(request):
-            return self.tailscale_origin
-        return f'{request.scheme}://{request.host}'
-
     @web.middleware
     async def _private_transport(self, request, handler):
-        local = request.transport.get_extra_info('sockname') if request.transport else None
-        if local and local[1]==8767:
-            if (not self.tailscale_origin or self.request_origin(request)!=self.tailscale_origin
-                    or not self.config.get('require_pin')): return web.Response(status=403)
-        if request.headers.get('Origin') and request.headers['Origin'] != self.request_origin(request):
+        from server.local_network import local_request
+        if not local_request(request):return web.Response(status=403,text='Connect directly to the PC on your local Wi-Fi.')
+        if request.headers.get('Origin') and request.headers['Origin'] != f'{request.scheme}://{request.host}':
             return web.Response(status=403)
         return await handler(request)
-
-    async def handle_certificate(self,request):
-        if not self._http_authorized(request):return web.Response(status=401)
-        if self.secure_pairing is None:return web.Response(status=404)
-        try:
-            data=self.secure_pairing.public_certificate_der()
-        except (OSError,ValueError):
-            return web.Response(status=404)
-        return web.Response(body=data,content_type='application/x-x509-ca-cert',headers={'Content-Disposition':'attachment; filename="touchhelm-ca.crt"','Cache-Control':'no-store'})
-
-    async def handle_handoff(self,request):
-        if not self._http_authorized(request):return web.Response(status=401)
-        if request.headers.get('Origin') and request.headers['Origin'] != self.request_origin(request):return web.Response(status=403)
-        if request.method not in ('GET','POST'):
-            return web.Response(status=405,headers={'Allow':'GET, POST'})
-        now=time.monotonic()
-        self._handoffs={key:value for key,value in self._handoffs.items() if value['expires']>now}
-        if request.method=='GET':
-            origin=self.request_origin(request)
-            if not origin.startswith('https://'):return web.Response(status=400)
-            if origin==self.tailscale_origin and not self._is_tailscale_request(request):return web.Response(status=403)
-            if origin==self.tailscale_origin and not self._pin_matches(request.headers.get('X-TouchHelm-Pin')):return web.Response(status=401)
-            value=self.consume_handoff(request.query.get('token',''),request.remote,origin)
-            return web.json_response(value) if value is not None else web.Response(status=404)
-        if not self.https_site and not self.tailscale_origin:return web.json_response({'error':'Enable HTTPS on the desktop first.'},status=409)
-        try:
-            data=await request.json()
-            if not isinstance(data,dict) or not isinstance(data.get('draft',''),str) or len(data.get('draft',''))>10000:raise ValueError('Draft exceeds transfer limit')
-            local_target=self.local_https_origin(request) if self.https_site else None
-            target=data.get('target_origin') or local_target
-            if not target or target not in (local_target,self.tailscale_origin):raise ValueError('Invalid destination')
-            if target==self.tailscale_origin and not self._pin_matches(request.headers.get('X-TouchHelm-Pin')):return web.Response(status=401)
-            baseline=data.get('live_baseline','')
-            if not isinstance(baseline,str) or len(baseline)>10000:raise ValueError('Invalid baseline')
-            allowed={'theme','appearance','motion','contrast','newline_mode','haptics','effects','live_typing','pc_text_sync'}
-            preferences=data.get('preferences',{})
-            if not isinstance(preferences,dict):raise ValueError('Invalid preferences')
-            preferences={key:value for key,value in preferences.items() if key in allowed and type(value) in (str,bool) and len(str(value))<=32}
-            if len(self._handoffs)>=32:raise ValueError('Too many pending transfers')
-            token=secrets.token_urlsafe(32)
-            self._handoffs[token]={'expires':now+60,'ip':request.remote,'target':target,'cross_transport':target==self.tailscale_origin,'data':{'draft':data.get('draft',''),'live_baseline':baseline,'preferences':preferences}}
-            return web.json_response({'token':token,'target_origin':target,'expires_in':60})
-        except (ValueError,TypeError):return web.Response(status=400)
-
-    def consume_handoff(self,token,remote_ip,target_origin=None):
-        value=self._handoffs.get(token)
-        if not value or value['expires']<=time.monotonic():
-            self._handoffs.pop(token,None);return None
-        if target_origin is not None and value['target']!=target_origin:return None
-        if value.get('cross_transport') and target_origin != value['target']:return None
-        if not value.get('cross_transport') and value['ip']!=remote_ip:return None
-        self._handoffs.pop(token,None)
-        return value['data']
-
-    async def refresh_tailscale(self, force=False):
-        state=await asyncio.to_thread(self.tailscale.inspect,force)
-        if state['ready'] and self.config.get('require_pin') and self.config.get('tailscale_enabled'):
-            self.tailscale_origin=state['url'].rstrip('/')
-            if not self.tailscale_site:
-                try:
-                    site=web.TCPSite(self.runner,'127.0.0.1',8767);await site.start();self.tailscale_site=site
-                except Exception:
-                    self.tailscale_origin=None
-                    state=dict(state,ready=False,url=None,state='unavailable',message='The private backend could not start. Check port 8767 and restart TouchHelm.')
-        else:
-            await self.stop_tailscale_backend()
-            if state['ready']:state=dict(state,ready=False,url=None,state='setup_required')
-        self.tailscale_status=state
-        return state
-
-    async def enable_tailscale(self):
-        state=await asyncio.to_thread(self.tailscale.inspect,True)
-        if state['state'] not in ('setup_required','ready'):raise RuntimeError(state['message'])
-        self.tailscale_origin=f'https://{state["host"]}:8443'
-        try:
-            if not self.tailscale_site:
-                site=web.TCPSite(self.runner,'127.0.0.1',8767);await site.start();self.tailscale_site=site
-            await asyncio.to_thread(self.tailscale.enable)
-        except Exception:
-            await self.stop_tailscale_backend();raise
-        return await self.refresh_tailscale(True)
-
-    async def disable_tailscale(self):
-        await asyncio.to_thread(self.tailscale.disable)
-        await self.stop_tailscale_backend()
-        return await self.refresh_tailscale(True)
-
-    async def stop_tailscale_backend(self):
-        if self.tailscale_site:await self.tailscale_site.stop()
-        self.tailscale_site=None;self.tailscale_origin=None;self._handoffs.clear()
-
-    async def enable_https(self):
-        if self.https_site:return
-        from server.secure_pairing import SecurePairingManager
-        from server.discovery import get_local_ip_addresses
-        if self.secure_pairing is None:self.secure_pairing=SecurePairingManager()
-        context=await asyncio.to_thread(self.secure_pairing.prepare,get_local_ip_addresses()+['localhost','127.0.0.1'])
-        site=web.TCPSite(self.runner,'0.0.0.0',int(self.config.get('https_port',8766)),ssl_context=context)
-        await site.start();self.https_site=site
-
-    async def disable_https(self):
-        if self.https_site:await self.https_site.stop()
-        self.https_site=None;self._handoffs.clear()
 
     async def handle_desktop_preview(self,request):
         root=Path(__file__).resolve().parents[1]/'gui'/'web'
@@ -1021,7 +906,7 @@ class TouchHelmServer:
         if relative=='index.html':
             from gui.webview_window import render_preview_html
             return web.Response(text=render_preview_html(),content_type='text/html')
-        if relative.startswith(('themes/','icons/')) or relative in ('themes.js','themes.css','theme-effects.js','theme-effects.css'):
+        if relative.startswith(('themes/','icons/')) or relative in ('themes.js','themes.css','theme-scenes.js','theme-gl.js','theme-gl.css','motion.js','motion.css'):
             root=Path(WEB_DIR)
         candidate=(root/relative).resolve()
         if not candidate.is_relative_to(root.resolve()) or candidate.suffix not in ('.html','.js','.css','.svg','.png','.webp'):return web.Response(status=404)
@@ -1055,14 +940,12 @@ class TouchHelmServer:
         self.app.router.add_get('/sw.js', self.handle_worker)
         self.app.router.add_get('/api/version', self.handle_version)
         self.app.router.add_get('/api/assets/{asset_id}',self.handle_asset)
-        self.app.router.add_get('/api/pairing',self.handle_pairing)
-        self.app.router.add_get('/api/pairing/certificate',self.handle_certificate)
-        self.app.router.add_route('*','/api/pairing/handoff',self.handle_handoff)
         self.app.router.add_get('/preview/desktop/',self.handle_desktop_preview)
         self.app.router.add_get('/preview/desktop/{path:.*}',self.handle_desktop_preview)
         self.app.router.add_get("/api/info", self.handle_info)
         self.app.router.add_route("*", "/api/config", self.handle_config)
         self.app.router.add_get("/ws", self.handle_ws)
+        self.files.routes(self.app)
 
         # Static assets
         self.app.router.add_static("/", WEB_DIR, show_index=False)
@@ -1072,13 +955,12 @@ class TouchHelmServer:
         await self.runner.setup()
         self.site = web.TCPSite(self.runner, "0.0.0.0", port)
         await self.site.start()
-        if self.config.get('https_enabled',False):await self.enable_https()
-        if self.config.get('tailscale_enabled',False):await self.refresh_tailscale(True)
         self.volume_monitor_task = asyncio.create_task(self._volume_monitor_loop())
         self.desktop_monitor_task = asyncio.create_task(self._desktop_monitor_loop())
         print(f"TouchHelm Server listening on port {port}")
 
     async def stop(self):
+        await self.files.close()
         await self.aircontrol.close()
         text_tasks=list(self._text_tasks.values())
         for task in text_tasks:task.cancel()
@@ -1089,8 +971,6 @@ class TouchHelmServer:
         await asyncio.gather(*self._remote_tasks.values(),return_exceptions=True)
         self._remote_tasks.clear()
         await self.remote.stop('Host stopped.')
-        await self.stop_tailscale_backend()
-        await self.disable_https()
         if self.desktop_monitor_task:
             self.desktop_monitor_task.cancel()
             with suppress(asyncio.CancelledError):

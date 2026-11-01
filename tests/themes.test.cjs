@@ -33,9 +33,9 @@ function setup(saved={},blockedStorage=false){
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,'../web/themes.js'),'utf8'),{window:win,document:doc,URL,Promise,console,localStorage:win.localStorage});
   return {themes:win.TouchHelmThemes,root,head,body,storage,media,doc,win};
 }
-test('registry contains exactly seven complete locally bundled theme families',()=>{
+test('registry contains exactly five complete locally bundled theme families',()=>{
   const {themes}=setup();
-  assert.deepEqual(Object.keys(themes.registry),['bloom','resonance','companion','clay','glass','soft','ink']);
+  assert.deepEqual(Object.keys(themes.registry),['aurora','bloom','resonance','constellation','ink']);
   for(const theme of Object.values(themes.registry)){
     assert.ok(theme.label&&theme.description);
     assert.match(theme.stylesheet,/^\/themes\/[a-z]+\.css$/);
@@ -43,13 +43,13 @@ test('registry contains exactly seven complete locally bundled theme families',(
 });
 test('legacy palettes migrate with their correct appearance',()=>{
   const {themes}=setup();
-  for(const [old,id,appearance] of [['cyber','glass','dark'],['oled','glass','dark'],['matrix','bloom','dark'],['nordic','soft','dark'],['light','clay','light']]){
+  for(const [old,id,appearance] of [['cyber','aurora','dark'],['oled','constellation','dark'],['matrix','bloom','dark'],['nordic','constellation','dark'],['light','aurora','light'],['glass','aurora','dark'],['soft','constellation','light'],['clay','bloom','light'],['companion','resonance','light']]){
     assert.deepEqual(JSON.parse(JSON.stringify(themes.migrate(old))),{id,appearance});
   }
 });
 test('unknown IDs cannot resolve inherited object names or stylesheet paths',()=>{
   const {themes}=setup();
-  for(const id of ['constructor','__proto__','toString','../../private'])assert.equal(themes.migrate(id).id,'glass');
+  for(const id of ['constructor','__proto__','toString','../../private'])assert.equal(themes.migrate(id).id,'aurora');
 });
 test('apply loads only the active family and stores preferences per device',()=>{
   const {themes,root,head,storage}=setup();
@@ -65,9 +65,9 @@ test('apply loads only the active family and stores preferences per device',()=>
   assert.equal(storage.get('touchhelm_appearance'),'light');
 });
 test('nonpersistent previews do not overwrite saved preferences',()=>{
-  const {themes,storage}=setup({touchhelm_theme:'soft',touchhelm_appearance:'dark'});
-  themes.apply('companion',{appearance:'light'},false);
-  assert.equal(storage.get('touchhelm_theme'),'soft');
+  const {themes,storage}=setup({touchhelm_theme:'constellation',touchhelm_appearance:'dark'});
+  themes.apply('resonance',{appearance:'light'},false);
+  assert.equal(storage.get('touchhelm_theme'),'constellation');
   assert.equal(storage.get('touchhelm_appearance'),'dark');
 });
 test('system appearance and motion respond to changed accessibility preferences',()=>{
@@ -97,17 +97,17 @@ test('picker creates semantic choices and reports appearance settings safely',()
   themes.mountPicker(body,(...args)=>chosen.push(args));
   const flatten=n=>[n,...n.children.flatMap(flatten)];
   const nodes=flatten(body),choices=nodes.filter(n=>n.dataset.themeId);
-  assert.equal(choices.length,7);assert.ok(choices.every(n=>n.tagName==='BUTTON'));
-  choices.find(n=>n.dataset.themeId==='clay').emit('click');
-  assert.equal(chosen.at(-1)[0],'clay');
+  assert.equal(choices.length,5);assert.ok(choices.every(n=>n.tagName==='BUTTON'));
+  choices.find(n=>n.dataset.themeId==='constellation').emit('click');
+  assert.equal(chosen.at(-1)[0],'constellation');
   const appearance=nodes.find(n=>n.id==='th-picker-appearance');
   assert.equal(appearance.tagName,'SELECT');appearance.value='dark';appearance.emit('change');
   assert.equal(chosen.at(-1)[1].appearance,'dark');
 });
 test('invalid stored settings normalize and blocked storage never prevents switching',()=>{
   const {themes,root}=setup({touchhelm_theme:'not-a-theme',touchhelm_appearance:'bad',touchhelm_motion:'bad'});
-  assert.equal(themes.state.id,'glass');
-  assert.equal(themes.apply('unknown',{},false).id,'glass');
+  assert.equal(themes.state.id,'aurora');
+  assert.equal(themes.apply('unknown',{},false).id,'aurora');
   assert.ok(['light','dark'].includes(root.dataset.appearance));
   const blocked=setup({},true);
   assert.equal(blocked.themes.apply('bloom',{appearance:'light'}).id,'bloom');
@@ -129,7 +129,7 @@ test('every material supplies readable light and dark text and primary controls'
     const x=luminance(a),y=luminance(b);return (Math.max(x,y)+.05)/(Math.min(x,y)+.05);
   };
   const failures=[];
-  for(const id of ['bloom','resonance','companion','clay','glass','soft','ink']){
+  for(const id of ['aurora','bloom','resonance','constellation','ink']){
     const css=fs.readFileSync(path.join(__dirname,`../web/themes/${id}.css`),'utf8');
     for(const appearance of ['light','dark']){
       const section=css.match(new RegExp(`\\[data-appearance="${appearance}"\\] \\{([^}]+)\\}`))[1];
@@ -183,7 +183,7 @@ async function runVisualBatch(){
     await phone.goto(url+'/index.html?preview=1');await desktop.goto(url+'/preview/desktop/?preview=1');
     await phone.waitForFunction(()=>window.touchhelm?.isConnected&&window.TouchHelmDemo&&window.TouchHelmThemes);
     await desktop.waitForFunction(()=>window.TouchHelmDesktopPreview&&document.getElementById('pairingQR').src.startsWith('data:'));
-    const defaults={bloom:'light',resonance:'dark',companion:'light',clay:'light',glass:'dark',soft:'light',ink:'light'};
+    const defaults={aurora:'dark',bloom:'light',resonance:'dark',constellation:'dark',ink:'light'};
     for(const [theme,appearance]of Object.entries(defaults)){
       for(const page of [phone,desktop])await page.evaluate(async({theme,appearance})=>{window.TouchHelmThemes.apply(theme,{appearance,motion:'reduced',contrast:'standard'},false);await window.TouchHelmThemes.ready;await document.fonts.ready;},{theme,appearance});
       for(const tab of ['Trackpad','Presenter','Media','Keyboard','Apps']){

@@ -7,7 +7,7 @@ actions. Saved explicit mode choices remain intact. Face tracking
 measures pose and optional expressions; it does not recognize your identity or
 provide Windows sign-in.
 
-![Desktop mode chooser with sample data](images/aircontrol-home.png)
+![AirControl daily workspace with synthetic tracking state](images/aircontrol-daily-workspace.png)
 
 *Interface preview, with synthetic state. No camera image or native input is used
 in this picture.*
@@ -43,6 +43,64 @@ in this picture.*
 The Start action remains separate from enabling control. Changing a camera,
 monitor, mode or saved profile requires calibration/practice again.
 
+## Daily workspace and practice tasks
+
+The persistent header reports whether PC input is off, on, or paused. The setup
+progression and readiness message explain the next step. **Change setup** stops
+the current session before exposing camera, monitor and mode choices; select
+**Start camera** explicitly to begin the new setup.
+
+Use **Session** for the camera and ordinary action dock. **Practice** lets you
+inspect exercises while a session is active; **Start exercise** deliberately
+returns to non-injecting practice. Choose Click three targets, Drag to a
+destination, Scroll to the Destination, or Free practice. A successful exercise click
+can satisfy activation practice; completing all exercises is optional. Resize
+pauses the current attempt without counting a miss. Wait for the practice area
+to update, then choose **Resume exercise**. Drag and Scroll restore their
+required simulated action on resume; an early drag drop can be retried by
+returning to the source. Pause/Resume exercise does not enable PC control.
+
+![Simulated target-based practice](images/aircontrol-daily-practice.png)
+
+Head drag/scroll exercises select their simulated action. Hand/Combined scroll
+practice uses the two-finger gesture.
+
+**How to practice scrolling in Head & Face mode:** choose *Scroll to the
+Destination* and select Start exercise. Move the pointer onto the **Scroll down**
+button at the bottom of the practice area and rest it there. The button fills
+while you hold still; when it is full the page scrolls and the prompt at the top
+says so. Slide the pointer off the button to stop. **Scroll up** brings the page
+back. Resting on **Done scrolling**, **Pause** or **Stop** does what its name says,
+and the prompt warns you when the pointer is on one of them. The exercise is done
+when the progress bar under the heading is full. In Hand and Combined modes the
+prompt instead describes the two-finger gesture. Personal expression calibration is under
+**Personal settings**, while the session remains in practice. Ordinary free
+practice remains available after calibration.
+
+**Diagnostics** shows measured delivery/update rate, inference, frame age,
+rolling median/p95 frame-to-input latency, interruptions, and worker resources.
+Unavailable values say Not measured. Latency retains at most 600 samples;
+completed exercise history retains at most 100 results. **Reset measurements**
+preserves the camera, calibration and current task. **Export report** downloads
+an explicit JSON summary without images, landmarks, facial expression samples,
+field contents, application titles, device identifiers or local paths. No report
+is uploaded. Measurements do not establish recognition accuracy.
+
+## Head-only scrolling
+
+In calibrated Head & Face practice or active control, select **Scroll** in the
+panel or floating dock. Head movement then steers a virtual cursor while the
+Windows cursor stays at its entry location. Dwell on **Up** or **Down** to scroll;
+moving away stops immediately. **Done** / **Return to pointer** returns to
+ordinary pointing. Move away before dwelling to click again, and relax a held
+expression before using it again.
+
+Scrolling cannot also click, drag, move the Windows cursor, or request automatic
+dictation. Pause, Stop, Recenter, physical takeover, tracking loss, stale frames,
+monitor changes and worker/desktop failure clear active scrolling. Practice uses
+an in-stage dock and sends no native input. During the Scroll exercise this mode
+is selected for you; its document is simulated.
+
 ## Everyday controls
 
 | Input | Result |
@@ -77,6 +135,23 @@ physical pixels). Higher steadiness reduces jitter; lower values follow small
 movements more closely. Existing smoothing choices are preserved; fresh Head
 profiles use 60% smoothing.
 
+**Head & Face edges and corners.** The pointer follows your head one-to-one near the
+middle of the screen. Past the middle half of its travel the pointer speeds up
+smoothly (up to twice as fast) so the edge is reached after about 15° of turning
+sideways and 12° of nodding, instead of 18° with the plain mapping, and looking
+up or down moves the pointer a little farther than the same turn sideways. Turning
+further than that keeps the pointer pinned exactly on the edge or corner, so
+Minimize, Maximize and Close in a top corner can be hit by turning slightly past
+them and holding. The filter is made calmer in step with the speed-up, so a held
+pose near an edge is as steady as one in the middle. If you still need to turn too
+far, lower **Head movement range**.
+
+After a hand pinch releases, the pointer stays at the click or drop location.
+Further hand movement continues from that position, with the movement range
+mapped toward the screen edges. Recenter or a tracking interruption clears this
+temporary adjustment. If you release at a movement boundary, move inward and
+back to reach that edge again.
+
 ## Head-only clicks and dragging
 
 ![Head dwell action dock with sample state](images/aircontrol-head-actions.png)
@@ -96,7 +171,9 @@ profiles use 60% smoothing.
    destination, then settle again to drop. The cursor ring and panel show
    **Drag held**. **Release drag**, Pause, Stop and tracking loss also release it.
 5. Right-click and double-click are one-shot selections; after use they return to
-   ordinary left-click. Drag also returns to left-click after dropping. If dwell
+   ordinary left-click. Drag also returns to left-click after dropping. After
+   **Release drag**, move away before dwelling to click again. If an expression
+   was holding the drag, relax it before using it again. If dwell
    was disabled in your saved profile, explicitly choosing a dwell action enables
    it for the current session; it does not silently rewrite that saved choice.
 
@@ -144,7 +221,8 @@ recognition confidence.*
   dictation, copy/paste/undo, app switching, Windows keyboard, media or presentation
   navigation. Duplicate/conflicting assignments are rejected. This remaps known
   inputs; it does not train arbitrary new poses.
-- To assign an expression, open **Practice** in Head/Combined mode. Hold a relaxed
+- To assign an expression, enter practice in Head/Combined mode, then open
+  **Personal settings**. Hold a relaxed
   face for about one second and choose **Capture relaxed face**. Select Smile,
   Left/Right wink or Raised eyebrows, hold it for about one second and choose
   **Capture expression**. Then select an action and **Use this action**. It applies
@@ -155,6 +233,9 @@ recognition confidence.*
   stops the camera for recalibration.
   Ordinary two-eye blinks stay inactive. Simultaneous assigned expressions cancel
   until released. Head mode still needs dwell or a calibrated click expression.
+  A wink requires valid readings from both eyes; missing opposite-eye data
+  cannot be treated as an open eye. Missing unrelated expression channels do not
+  change the threshold used for a valid expression.
 - Settings adjust preferred hand, sensitivity, smoothing, pinch close/release
   thresholds, hold/cooldown, dwell timing, head range, camera mirroring and landmarks.
   The two pinch thresholds provide hysteresis: release must be above close.

@@ -9,7 +9,7 @@
   --th-text:#f8f8f5; --th-muted:#c3c7cc; --th-accent:#f1f3f0; --th-on-accent:#14181e;
   --th-border:#969ca4; --th-danger:#ffb4be; --th-success:#b8d5c4;
 }
-:root[data-theme="ink"] { --th-radius:6px; --th-key-radius:4px; --th-pad-radius:9px; --th-shadow:none; }
+:root[data-theme="ink"] { --th-radius:6px; --th-key-radius:4px; --th-pad-radius:9px; --th-shadow:none; --th-gl-a:var(--th-bg); --th-gl-b:var(--th-bg); --th-panel-a:var(--th-panel); --th-surface-a:var(--th-surface); --th-bar-a:var(--th-bg); --th-pad-a:var(--th-bg); }
 :root[data-theme="ink"] :is(.touch-surface,.laser-surface) { border:1.5px solid var(--th-border); background:var(--th-bg); }
 :root[data-theme="ink"] :is(.touch-surface,.laser-surface)::before,:root[data-theme="ink"] :is(.touch-surface,.laser-surface)::after { display:none; }
 :root[data-theme="ink"] .trackpad-hints strong { font-weight:650; }

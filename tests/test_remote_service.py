@@ -6,6 +6,15 @@ from server.remote_service import RemoteService, absolute_point, private_sdp
 
 
 class RemoteTests(unittest.IsolatedAsyncioTestCase):
+    async def test_disabled_desktop_permission_does_not_report_a_lost_https_connection(self):
+        self.config['remote_enabled']=False
+        response=await self.service.request(self.client,{'type':'remote_start','mode':'view'},True)
+        self.assertFalse(response['success'])
+        self.assertIn('off',response['message'])
+        self.assertIn('Pair your phone',response['message'])
+        self.assertNotIn('HTTPS',response['message'])
+        self.worker.start.assert_not_awaited()
+
     async def test_aircontrol_winning_during_config_preserves_video_in_view_mode(self):
         result=await self.start();self.service.state='live'
         allowed=[True];self.service.control_allowed=lambda:allowed[0]

@@ -61,14 +61,6 @@ function fixture(overrides = {}) {
   return { client, messages, element, document, listeners, context };
 }
 
-test('secure browser context is required before motion or wake-lock activation',async()=>{
-  const {client,context,element}=fixture();context.window.isSecureContext=false;context.window.DeviceOrientationEvent={};
-  let gyro=0,wake=0;client.enableGyro=()=>gyro++;client.btnGyro=element();client.btnWakeLock=element();client.wakeLockRequested=true;
-  context.navigator.wakeLock={request:async()=>{wake++;return {release:async()=>{},addEventListener(){}};}};
-  await client.toggleGyro();await client.requestWakeLock();
-  assert.equal(gyro,0);assert.equal(wake,0);assert.equal(client.btnWakeLock.attrs['aria-pressed'],'false');assert.match(client.uiFeedback.textContent,/https|secure/i);
-});
-
 test('successful Send and Clear return focus to the text field without changing live packets', () => {
   const { client, messages, document } = fixture();
   client.bindKeyboardControls();
@@ -203,19 +195,15 @@ test('selected navigation tab exposes its selected state', () => {
   client.navTabs[0].attrs['data-view'] = 'viewTrackpad';
   client.navTabs[1].attrs['data-view'] = 'viewMedia';
   client.views = [Object.assign(element(), { id: 'viewTrackpad' }), Object.assign(element(), { id: 'viewMedia' })];
-  client.releaseDragLock = client.disableGyro = () => {};
+  client.releaseDragLock = () => {};
   client.switchView('viewMedia');
   assert.equal(client.navTabs[0].attrs['aria-selected'], 'false');
   assert.equal(client.navTabs[1].attrs['aria-selected'], 'true');
 });
 
-test('wake-lock and fullscreen capability failures are visible with accurate toggle state', async () => {
+test('fullscreen capability failures are visible', async () => {
   const { client, element } = fixture();
-  client.btnWakeLock = element();
   client.btnFullscreen = element();
-  await client.toggleWakeLock();
-  assert.match(client.uiFeedback.textContent, /awake|wake|https/i);
-  assert.equal(client.btnWakeLock.attrs['aria-pressed'], 'false');
   await client.toggleFullscreen();
   assert.match(client.uiFeedback.textContent, /fullscreen/i);
 });
@@ -231,20 +219,6 @@ test('pairing rejects unsupported addresses visibly and accepts a full PC URL', 
   assert.equal(client.connectToHost(), true);
   assert.equal(client.host, '192.168.1.10:8765');
   assert.equal(client.settingHost.validation, '');
-});
-
-test('Air Mouse capability errors are visible and its pressed state follows the sensor listener', async () => {
-  const { client, context, element } = fixture({ alert() {} });
-  client.btnGyro = element();
-  await client.toggleGyro();
-  assert.match(client.uiFeedback.textContent, /air mouse|sensor|gyroscope/i);
-  assert.equal(client.btnGyro.attrs['aria-pressed'], 'false');
-  context.window.DeviceOrientationEvent = function () {};
-  context.window.addEventListener = context.window.removeEventListener = () => {};
-  await client.toggleGyro();
-  assert.equal(client.btnGyro.attrs['aria-pressed'], 'true');
-  await client.toggleGyro();
-  assert.equal(client.btnGyro.attrs['aria-pressed'], 'false');
 });
 
 test('synthetic touches on disabled remote buttons do not invoke their action', () => {
@@ -389,7 +363,7 @@ test('confirmed new server UI preserves the draft before loading its versioned a
   client.buildId = 'old-build';
   client.typeInput.value = 'unsent draft'; client.liveTextValue = 'already sent';
   client.chkRealtimeTyping.checked = false;
-  client.releaseDragLock = client.stopLaser = client.disableGyro = () => {};
+  client.releaseDragLock = client.stopLaser = () => {};
   assert.equal(typeof client.checkServerVersion, 'function');
   assert.equal(await client.checkServerVersion(), true);
   assert.equal(new URL(replacement).searchParams.get('build'), 'new-build');
@@ -419,7 +393,7 @@ test('restoring a draft does not erase the update-loop guard when an old worker 
     setItem: (key, value) => saved.set(key, value), removeItem: key => saved.delete(key) },
     fetch: async () => ({ ok: true, json: async () => ({ build: 'new-build' }) }) });
   context.window.location = { host: 'pc:8765', origin: 'http://pc:8765', href: 'http://pc:8765/', replace() { reloads++; } };
-  client.buildId = 'old-build'; client.releaseDragLock = client.stopLaser = client.disableGyro = () => {};
+  client.buildId = 'old-build'; client.releaseDragLock = client.stopLaser = () => {};
   client.typeInput.value = 'keep';
   await client.checkServerVersion();
   client.restoreSession();

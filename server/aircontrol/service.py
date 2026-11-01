@@ -8,11 +8,14 @@ import statistics
 import time
 
 from .engine import GestureEngine,number,physical_point,tracked
-from .profiles import ProfileStore,default_profile,validate_profile,ACTION_LABELS,GESTURE_LABELS
+from .profiles import ProfileStore,validate_profile,ACTION_LABELS,GESTURE_LABELS
 from .process import CameraWorker
 from .setup import AirControlSetup
 from .expressions import levels,measure,learn
-from .hud import HEAD_ACTIONS,regions
+from .hud import HEAD_ACTIONS,HEAD_SCROLL_ACTIONS,regions,practice_regions
+from .practice import PracticeSession
+from .metrics import SessionMetrics,bounded
+from .glide import CursorGlide
 
 class AirControlService:
     def __init__(self,input_controller,displays,*,folder,setup=None,worker_factory=CameraWorker,
@@ -29,25 +32,40 @@ class AirControlService:
         self.overlay=overlay;self.voice=voice;self.worker=None;self.task=None;self.lock=asyncio.Lock()
         self.state='ready' if self.setup.snapshot().get('ready') else 'setup_required'
         self.message='Choose Start camera. Calibration and practice do not control the PC.'
-        self.preview='';self.frame={};self.last_frame=0.;self.last_sequence=-1;self.last_point=None
+        self.preview='';self.frame={};self.last_frame=0.;self.last_sequence=-1
+        self.glide=CursorGlide(lambda x,y:self.input.set_physical_cursor_pos(x,y),probe=lambda:self.input.get_physical_cursor_pos())
         self.owns_input=False;self.calibrated=False;self.practice_frames=0;self.practice_actions=0
         self.native_down=False
         self.press_point=None;self.press_at=0.
         self.samples=deque(maxlen=15);self.face_samples=deque(maxlen=15);self.calibration_points={};self.display=None
         self.latencies=deque(maxlen=600);self.times=deque(maxlen=90);self.actions=deque(maxlen=8)
+        self.metrics=SessionMetrics(self.latencies)
+        self.metrics.stop(time.monotonic())
+        self.last_usage={}
         self.started=0.;self._voice_task=None;self._closing=False
         self.expression_neutral=False;self.expression_seen=set();self.expression_candidate='';self.expression_since=0.
         self.expression_baseline=None
         self.geometry_checked=0.
         self.stable_since=None;self.stable_frames=0
         self.observations=0;self.rejected_observations=0;self.observation_age=None;self.last_error=''
+        self.practice=PracticeSession();self.practice_viewport=(640,480)
+
+    @property
+    def last_point(self):
+        """Where AirControl last put the Windows cursor (it trails the engine point while gliding)."""
+        return self.glide.last
+
+    @last_point.setter
+    def last_point(self,point):
+        if point is None:self.glide.halt()
+        else:self.glide.set_last(point)
 
     def snapshot(self,*,frame=False):
         setup=self.setup.snapshot()
         state=self.state
         if not self.worker and setup['ready'] and state=='setup_required':state='ready'
         fresh=time.monotonic()-self.last_frame<=.25
-        result={'state':state,'message':self.message,'setup':setup,'camera_active':self.worker is not None,
+        result={'state':state,'message':self.message,'activation':self.activation_readiness(),'setup':setup,'camera_active':self.worker is not None,
             'owns_input':self.owns_input,'profile':copy.deepcopy(self.profile),'calibrated':self.calibrated,
             'calibration_ready':fresh and (tracked(self.frame.get('hand') or {}) if self.profile['mode']=='hand' else tracked(self.frame.get('face') or {}) and (self.frame.get('face') or {}).get('count')==1),
             'profiles':copy.deepcopy(self.profiles),
@@ -65,7 +83,9 @@ class AirControlService:
             'tracking_details':{'hand':self.frame.get('hand_status',''),'face':self.frame.get('face_status',''),
                 'processing_delayed':self.observation_age is not None and self.observation_age>.25,'last_error':self.last_error},
             'point':self.engine.point,'tracking':not self.engine.lost and fresh,'display':self.display,
-            'dwell_action':self.engine.dwell_action,'dragging':self.engine.held,
+            'dwell_action':self.engine.dwell_action,'dragging':self.engine.held,'head_scroll':self.engine.head_scroll,
+            'practice':self.practice.snapshot(time.monotonic()),
+            'scroll_regions':practice_regions(getattr(self,'practice_viewport',(640,480)),scrolling=self.engine.head_scroll) if self.state=='practicing' else [],
             'actions':list(self.actions),'action_catalog':ACTION_LABELS,'gesture_catalog':GESTURE_LABELS,
             'metrics':{'fps':round((len(self.times)-1)/(self.times[-1]-self.times[0]),1) if fresh and len(self.times)>1 and self.times[-1]>self.times[0] else None,
                 'median_latency_ms':round(statistics.median(self.latencies),1) if self.latencies else None,
@@ -73,14 +93,49 @@ class AirControlService:
                 'inference_target_fps':self.frame.get('inference_target_fps'),'frame_age_ms':round(self.observation_age*1000,1) if self.observation_age is not None else None,
                 'observations':self.observations,'rejected_observations':self.rejected_observations},
             'voice':self.voice.snapshot() if self.voice else {'message':'Dictation is available from the desktop on Windows.'}}
+        result['metrics'].update(self.metrics.snapshot(time.monotonic()))
         if self.worker:
             usage=self.worker.stats()
-            if isinstance(usage,dict):result['metrics'].update(usage)
+            if isinstance(usage,dict):
+                self.last_usage={k:usage[k] for k,limit in [('cpu_percent',100),('memory_mb',1048576)] if bounded(usage.get(k),limit)}
+                result['metrics'].update(self.last_usage)
         if frame:result.update(preview=self.preview,hand_points=self.frame.get('hand_points',[]),face_points=self.frame.get('face_points',[]),seq=self.last_sequence)
         return result
 
-    def _release_buttons(self):
-        self.engine.reset()
+    def activation_readiness(self,*,now=None):
+        """Local, side-effect-free guidance shared with the Enable guard."""
+        now=time.monotonic() if now is None else now
+        checks=[
+            (not self.worker,'camera_off','Start the camera to begin calibration.'),
+            (self.owns_input,'already_active','PC control is already enabled.'),
+            (not self.calibrated,'calibration_required','Capture your comfortable neutral position first.'),
+            (self.state!='practicing' or self.practice_frames<15 or not self.practice_actions,'practice_required','Complete calibration and test a click in practice first.'),
+            (self.engine.lost or not 0<=now-self.last_frame<=.25,'tracking_required','Hold a steady tracked pose before enabling control.'),
+            (self._neutral_blocked(),'release_gesture','Release the practice gesture and return to pointing, then enable PC control with a neutral pose.'),
+            (self.stable_since is None or self.stable_frames<5 or now-self.stable_since<.2,'steady_required','Hold a steady tracked pose for a moment before enabling control.'),
+            (not self.display,'monitor_required','No monitor is available. Refresh monitors and restart calibration.')]
+        for blocked,code,message in checks:
+            if blocked:return {'ready':False,'code':code,'message':message}
+        return {'ready':True,'code':'ready','message':'Ready to enable PC control. Your phone will return to View.'}
+
+    def _neutral_blocked(self,*,resuming=False):
+        gesture=self.engine.gesture;action=self.profile['bindings'].get(gesture,'none')
+        return (self.engine.held or self.engine.head_scroll or self.engine.scroll_expression_blocked or
+            gesture=='conflict' or bool(gesture and action!='none' and not (resuming and action=='resume')))
+
+    def _require_activation(self):
+        if self._closing:raise ValueError('AirControl is stopping.')
+        if not self._desktop_ready():raise ValueError('Unlock Windows before enabling PC control.')
+        readiness=self.activation_readiness()
+        if not readiness['ready']:raise ValueError(readiness['message'])
+
+    def _restore_practice_action(self):
+        if self.profile['mode']=='head' and self.practice.status=='running':
+            if self.practice.name=='drag':self.engine.select_dwell('drag')
+            elif self.practice.name=='scroll':self.engine.set_head_scroll(True)
+
+    def _release_buttons(self,*,consume_dwell=False):
+        self.engine.reset(consume_dwell=consume_dwell)
         if self.native_down:
             try:self.input.mouse_up('left')
             except Exception:pass
@@ -88,6 +143,8 @@ class AirControlService:
         self.last_point=None
 
     def pause(self,message='Paused. Resume explicitly when ready.',state='paused'):
+        if state=='tracking_lost':self.metrics.mark_lost()
+        self.practice.interrupt(time.monotonic())
         if self._voice_task and not self._voice_task.done():self._voice_task.cancel()
         self.stable_since=None;self.stable_frames=0;self.samples.clear();self.face_samples.clear()
         self._release_buttons();self.state=state;self.message=message
@@ -106,7 +163,8 @@ class AirControlService:
             self.pause('Tracking lost. Hold a neutral pose, then Resume.','tracking_lost')
 
     async def _stop(self):
-        self._release_buttons()
+        self.metrics.stop(time.monotonic())
+        self._release_buttons();self.glide.close()
         if self._voice_task and not self._voice_task.done():self._voice_task.cancel()
         if self.task and self.task is not asyncio.current_task():
             self.task.cancel()
@@ -117,6 +175,7 @@ class AirControlService:
         if worker:await asyncio.to_thread(worker.stop)
         self.preview='';self.frame={};self.samples.clear();self.face_samples.clear();self.times.clear();self.last_frame=0
         self.calibrated=False;self.calibration_points={};self.practice_frames=0;self.practice_actions=0
+        self.practice.start('free',time.monotonic())
         self.stable_since=None;self.stable_frames=0
         if self.owns_input:
             self.owns_input=False
@@ -131,6 +190,52 @@ class AirControlService:
             if self._closing:raise RuntimeError('AirControl is stopping')
             if action=='setup':self.setup.start()
             elif action=='cancel_setup':self.setup.cancel()
+            elif action=='reset_measurements':
+                self.metrics.reset(time.monotonic());self.practice.clear_history()
+                if not self.worker:self.metrics.stop(time.monotonic())
+            elif action=='export_report':
+                rect=self.display['rect'] if self.display else {}
+                report=self.metrics.report(at=time.monotonic(),mode=self.profile['mode'],display_size=[rect.get('width'),rect.get('height')],
+                    results=list(self.practice.results),build_id=data.get('build_id',''))
+                if self.worker:
+                    usage=self.worker.stats()
+                    if isinstance(usage,dict):
+                        for key,limit in [('cpu_percent',100),('memory_mb',1048576)]:
+                            if bounded(usage.get(key),limit):report['metrics'][key]=usage[key]
+                else:report['metrics'].update(self.last_usage)
+                return {'success':True,'report':report}
+            elif action=='practice_viewport':
+                previous=self.practice.viewport
+                self.practice.set_viewport(data.get('width'),data.get('height'),data.get('revision',0))
+                self.practice_viewport=self.practice.viewport
+                if previous!=self.practice_viewport and self.state=='practicing':
+                    self.engine.reset(consume_dwell=True)
+                    self._restore_practice_action()
+                    self.practice.interrupt(time.monotonic())
+            elif action in ('practice_start','practice_reset','practice_pause','practice_resume'):
+                if not self.worker or not self.calibrated:raise ValueError('Calibrate before starting a practice exercise.')
+                if action!='practice_pause' and 'viewport_revision' in data and (type(data['viewport_revision']) is not int or data['viewport_revision']!=self.practice.revision):
+                    raise ValueError('Practice area changed. Wait for the area to update, then try again.')
+                if action=='practice_start':
+                    name=data.get('name','click')
+                    if name not in ('free','click','drag','scroll'):raise ValueError('Choose a supported practice exercise.')
+                    if self.state!='practicing':
+                        self.pause('Practice exercises send no Windows input.','practicing')
+                        if self.owns_input:
+                            self.owns_input=False
+                            if self.release:await self.release()
+                            if self.overlay:self.overlay.hide()
+                    self.engine.reset(consume_dwell=True);self.practice.start(name,time.monotonic())
+                    self._restore_practice_action()
+                elif self.state!='practicing':raise ValueError('Return to practice before changing the exercise.')
+                elif action=='practice_reset':
+                    self.engine.reset(consume_dwell=True);self.practice.start(self.practice.name,time.monotonic())
+                    self._restore_practice_action()
+                elif action=='practice_pause':
+                    self.engine.reset(consume_dwell=True);self.practice.interrupt(time.monotonic())
+                else:
+                    self.practice.resume(time.monotonic());self._restore_practice_action()
+                self.message='Practice exercise: '+self.practice.name+'. Windows input is off.'
             elif action=='start':
                 if not self._desktop_ready():raise ValueError('Unlock Windows and return to the normal desktop before starting the camera.')
                 profile=validate_profile(data.get('profile',self.profile))
@@ -144,8 +249,11 @@ class AirControlService:
                 self.calibrated=False;self.calibration_points={};self.practice_frames=self.practice_actions=0
                 self.expression_neutral=False;self.expression_seen.clear();self.expression_candidate='';self.expression_since=0.
                 self.expression_baseline=None
+                self.practice.start('free',time.monotonic());self.practice.clear_history()
                 self.observations=0;self.rejected_observations=0;self.observation_age=None;self.last_error=''
                 self.latencies.clear();self.last_sequence=-1;self.started=time.monotonic()
+                self.metrics.reset(self.started)
+                self.last_usage={}
                 self.worker=self.worker_factory(self.setup)
                 try:await asyncio.to_thread(self.worker.start,profile)
                 except Exception:
@@ -161,36 +269,58 @@ class AirControlService:
                     if self.release:await self.release()
                     if self.overlay:self.overlay.hide()
             elif action=='enable':
-                if not self._desktop_ready():raise ValueError('Unlock Windows before enabling PC control.')
-                if not self.worker or not self.calibrated or self.practice_frames<15 or not self.practice_actions:raise ValueError('Complete calibration and test a click in practice first')
-                if self.engine.lost or time.monotonic()-self.last_frame>.25:raise ValueError('Hold a steady tracked pose before enabling control')
-                if not self._stable():raise ValueError('Hold a steady tracked pose for a moment before enabling control')
-                if self.engine.held or self.engine.gesture and self.profile['bindings'].get(self.engine.gesture,'none')!='none':raise ValueError('Release the practice gesture, then enable PC control with a neutral pointing pose.')
-                if not self.display:raise ValueError('No monitor is available')
+                self._require_activation();display=copy.deepcopy(self.display)
                 current=await self.displays()
-                if not any(d.get('id')==self.display['id'] and d.get('rect')==self.display['rect'] for d in current.get('displays',[])):raise ValueError('Monitor geometry changed. Restart camera calibration.')
-                self._release_buttons();self.owns_input=True
+                self._require_activation()
+                if self.display!=display or not any(d.get('id')==display['id'] and d.get('rect')==display['rect'] for d in current.get('displays',[])):raise ValueError('Monitor geometry changed. Restart camera calibration.')
+                self._release_buttons()
                 try:
                     if self.acquire:await self.acquire()
+                    self._require_activation()
+                    if self.display!=display:raise ValueError('Monitor changed. Restart camera calibration.')
                 except BaseException:
                     self.owns_input=False
                     if self.release:await self.release()
                     raise
-                self.state='active'
+                self.owns_input=True;self.state='active'
                 self.message='AirControl is active. Ctrl+Alt+Space pauses or resumes.'
                 self.store.save(self.profile)
                 self.profiles[self.profile['name']]=copy.deepcopy(self.profile)
             elif action=='pause':
                 if self.worker:self.pause()
+            elif action in HEAD_SCROLL_ACTIONS:
+                if not self.worker or not self.calibrated or self.profile['mode']!='head' or self.state not in ('active','practicing'):
+                    raise ValueError('Calibrate Head & Face, then use Scroll in practice or active control.')
+                if self.state=='active' and not self._desktop_ready():
+                    self.pause('Unlock Windows before using head scrolling.','tracking_lost')
+                    raise ValueError(self.message)
+                if action=='head_scroll':
+                    if not self.engine.head_scroll:
+                        self._release_buttons(consume_dwell=True);self.engine.set_head_scroll(True)
+                        if self.state=='active':self.last_point=self.input.get_physical_cursor_pos()
+                    self.message='Head scroll: dwell on Up or Down. Done returns to pointing.'
+                elif not self.engine.head_scroll:raise ValueError('Choose Scroll before scrolling or returning to pointing.')
+                elif action=='scroll_done':
+                    self.engine.set_head_scroll(False);self.message='Pointing restored. Move away before dwelling to click.'
+                elif self.state=='active':
+                    if time.monotonic()-self.last_frame>.25 or not self.display or not self.input.monitor_matches(self.display):
+                        self.pause('Tracking or monitor changed. Resume when ready.','tracking_lost');raise ValueError(self.message)
+                    if self.glide.diverged(12):
+                        self.pause('Physical mouse took over. Resume when ready.');raise ValueError(self.message)
+                    self.input.scroll(0,2 if action=='scroll_up' else -2,scroll_speed=1,invert=False)
+                elif action in ('scroll_up','scroll_down'):
+                    self.practice.consume([{'kind':'scroll','dy':2 if action=='scroll_up' else -2}],self.engine.point or (.5,.5),time.monotonic())
             elif action in HEAD_ACTIONS:
                 if not self.worker or not self.calibrated or self.profile['mode']!='head' or self.state not in ('active','practicing'):
                     raise ValueError('Calibrate Head & Face, then use its practice or active action dock.')
                 dropping=self.engine.held and action=='dwell_drag'
-                if self.engine.held:self._release_buttons()
+                if self.engine.held:self._release_buttons(consume_dwell=True)
                 selected='left_click' if dropping else HEAD_ACTIONS[action]
                 self.engine.select_dwell(selected)
                 self.message='Drag released. Dwell returns to Left click.' if dropping else 'Dwell action: '+('Drag — settle to hold, move, then settle to drop.' if action=='dwell_drag' else ACTION_LABELS[selected])
-            elif action=='release_drag':self._release_buttons();self.message='Drag released. Dwell returns to Left click.'
+            elif action=='release_drag':
+                self._release_buttons(consume_dwell=True)
+                self.message='Drag released. Move away before dwelling to click again.'
             elif action=='resume':self.resume()
             elif action=='recenter':
                 if not self.worker:raise ValueError('Start the camera first')
@@ -198,7 +328,7 @@ class AirControlService:
                 if self.profile['mode']!='hand':
                     face=self.frame.get('face') or {}
                     if not face or time.monotonic()-self.last_frame>.25:raise ValueError('Face tracking is not ready')
-                    self.profile['calibration']['head_neutral']=[number(face.get('yaw')),number(face.get('pitch'))]
+                    self.profile['calibration']['head_neutral']=self._head_neutral(face)
                     self.engine.profile['calibration']=copy.deepcopy(self.profile['calibration'])
                 if self.owns_input:self.pause('Recentered. Hold a neutral pose and Resume.')
                 else:self.pause('Recentered. Continue with the practice cursor; Windows input is off.',
@@ -260,7 +390,16 @@ class AirControlService:
         if not self.display:raise ValueError('Monitor changed. Stop the camera and recalibrate for the available monitor.')
         if self.engine.lost or time.monotonic()-self.last_frame>.25:raise ValueError('Wait for stable tracking before resuming')
         if not self._stable():raise ValueError('Hold a steady tracked pose for a moment before resuming')
+        if self._neutral_blocked(resuming=True):raise ValueError('Release your expression and hold a neutral pose before resuming.')
         self._release_buttons();self.engine.hud_blocked=True;self.state='active';self.message='AirControl resumed.'
+
+    def _head_neutral(self,face):
+        # One pose sample carries tracking noise; average the recent steady ones so
+        # Recenter does not bake a random offset into the neutral position.
+        values=[s['face'] for s in self.face_samples if s.get('face')]
+        if len(values)>=5 and all(statistics.pstdev([number(v.get(c)) for v in values])<=3 for c in ('yaw','pitch')):
+            return [statistics.mean(number(v.get(c)) for v in values) for c in ('yaw','pitch')]
+        return [number(face.get('yaw')),number(face.get('pitch'))]
 
     def calibrate(self,target,*,quick=False):
         if type(quick) is not bool or quick and (self.profile['mode']!='hand' or target!='center'):raise ValueError('Quick setup captures the hand center only')
@@ -322,9 +461,14 @@ class AirControlService:
         self.samples.append(self.frame)
         if face and tracked(face) and face.get('count')==1:self.face_samples.append(self.frame)
         else:self.face_samples.clear()
-        self.engine.hud_regions=regions(self.display,active=self.state=='active') if self.owns_input and self.profile['mode']=='head' else []
+        self.engine.hud_regions=(regions(self.display,active=self.state=='active',scrolling=self.engine.head_scroll)
+            if self.owns_input and self.profile['mode']=='head' else
+            practice_regions(getattr(self,'practice_viewport',(640,480)),scrolling=self.engine.head_scroll) if self.state=='practicing' else [])
         events=self.engine.step(frame,paused=self.state in ('paused','tracking_lost'))
+        self.metrics.observe(at=now,tracked=not self.engine.lost,capture_fps=frame.get('capture_fps'),
+            inference_ms=frame.get('inference_ms'),frame_age_ms=max(0,now-stamp)*1000)
         if self.engine.lost:
+            self.practice.interrupt(now)
             self.stable_since=None;self.stable_frames=0;self.samples.clear();self.times.clear()
             if self.state=='active':self.pause('Tracking lost. Reacquire your pose, then Resume.','tracking_lost')
             return
@@ -333,9 +477,14 @@ class AirControlService:
         self.stable_frames+=1
         if self.state=='practicing':
             self.practice_frames+=1
+            accepted=self.practice.accepted_clicks
+            misses=self.practice.misses
+            self.practice.consume(events,self.engine.point,now)
+            if self.practice.name=='drag' and self.practice.misses>misses and not self.engine.held:
+                self._restore_practice_action()
             clicks=[e for e in events if e['kind']=='button' and e['action']=='down' or
                 e['kind']=='action' and e['action'] in ('left_click','right_click','double_click')]
-            self.practice_actions+=len(clicks)
+            self.practice_actions+=len(clicks) if self.practice.name=='free' else self.practice.accepted_clicks-accepted
             for event in clicks:self.actions.appendleft('Practice: '+('Left press / drag' if event['kind']=='button' else ACTION_LABELS[event['action']]))
             e=(frame.get('face') or {}).get('expressions',{})
             left=number(e.get('eyeBlinkLeft'));right=number(e.get('eyeBlinkRight'))
@@ -351,7 +500,11 @@ class AirControlService:
                     try:self.resume()
                     except ValueError:pass
                 elif event['kind']=='hud_dwell' and self.overlay:self.overlay.dwell(event.get('x',0),event.get('y',0),self.display)
-                elif event['kind']=='hud_action' and self.overlay:self.overlay.callback(event['action'])
+                elif event['kind']=='hud_action':
+                    if not self.owns_input and event['action']=='scroll_done':self.engine.set_head_scroll(False)
+                    elif not self.owns_input and event['action']=='pause':self.engine.reset(consume_dwell=True);self.practice.interrupt(now)
+                    elif not self.owns_input and event['action']=='stop':asyncio.create_task(self.command('stop'))
+                    elif self.owns_input and self.overlay:self.overlay.callback(event['action'])
             return
         try:
             if not self._desktop_ready():
@@ -361,18 +514,17 @@ class AirControlService:
                 self.geometry_checked=now
                 if not self.input.monitor_matches(self.display):
                     self.pause('Monitor layout changed. Stop the camera and recalibrate.','tracking_lost');self.display=None;return
-            if self.last_point is not None:
-                actual=self.input.get_physical_cursor_pos()
-                if math.hypot(actual[0]-self.last_point[0],actual[1]-self.last_point[1])>12:
-                    self.pause('Physical mouse took over. Resume when ready.');return
+            if self.glide.diverged(12):
+                self.pause('Physical mouse took over. Resume when ready.');return
             for event in events:
                 if self.state!='active':break
                 kind=event['kind']
+                if self.engine.head_scroll and kind not in ('scroll','hud_action'):continue
                 if kind=='pointer':
-                    self.last_point=physical_point(self.display['rect'],event['x'],event['y'])
-                    self.input.set_physical_cursor_pos(*self.last_point)
-                    self.latencies.append((time.monotonic()-stamp)*1000)
+                    self.glide.retarget(physical_point(self.display['rect'],event['x'],event['y']))
+                    self.metrics.record_latency((time.monotonic()-stamp)*1000)
                 elif kind=='button':
+                    self.glide.settle()
                     if event['action']=='down':
                         self.input.mouse_down(event['button']);self.native_down=True
                         self.press_point=self.last_point;self.press_at=now
@@ -381,7 +533,7 @@ class AirControlService:
                         if (self.press_point and self.last_point and now-self.press_at<=.5
                                 and math.dist(self.press_point,self.last_point)<12 and not self.engine.gesture):self._auto_dictate()
                 elif kind=='scroll':self.input.scroll(0,max(-2,min(2,event['dy'])),scroll_speed=1,invert=False)
-                elif kind=='action':self._action(event['action'])
+                elif kind=='action':self.glide.settle();self._action(event['action'])
                 elif kind=='hud_action' and self.overlay:self.overlay.callback(event['action'])
         except Exception as error:
             self.last_error=type(error).__name__+': '+str(error)[:180]
@@ -402,7 +554,7 @@ class AirControlService:
             if self.voice and (not self._voice_task or self._voice_task.done()):self._voice_task=asyncio.create_task(self.voice.dictate(explicit=True))
         elif action=='recenter':
             face=self.frame.get('face') or {}
-            if face:self.profile['calibration']['head_neutral']=[number(face.get('yaw')),number(face.get('pitch'))];self.engine.profile['calibration']=copy.deepcopy(self.profile['calibration'])
+            if face:self.profile['calibration']['head_neutral']=self._head_neutral(face);self.engine.profile['calibration']=copy.deepcopy(self.profile['calibration'])
             self.pause('Recentered. Resume when ready.')
         elif action in ('play_pause','next_track','previous_track'):self.input.media_action({'play_pause':'playpause','next_track':'nexttrack','previous_track':'prevtrack'}[action])
         elif action in ('next_slide','previous_slide'):self.input.key_tap('right' if action=='next_slide' else 'left')
@@ -410,19 +562,30 @@ class AirControlService:
             keys={'copy':('ctrl','c'),'paste':('ctrl','v'),'undo':('ctrl','z'),'switch_app':('alt','tab'),'keyboard':('win','ctrl','o')}.get(action)
             if keys:self.input.hotkey(*keys)
 
+    def _check_glide(self):
+        error,self.glide.error=self.glide.error,None
+        if error:
+            self.last_error=type(error).__name__+': '+str(error)[:180]
+            self.pause('Windows input is unavailable on this desktop. Resume in a normal signed-in session.','tracking_lost')
+        elif self.glide.taken_over and self.state=='active':
+            self.pause('Physical mouse took over. Resume when ready.')
+
     async def _loop(self):
         try:
+            self.glide.start()
             while self.worker:
                 if not self._desktop_ready():
+                    self.metrics.mark_lost()
                     await self._stop();self.message='Windows is locked or showing a secure desktop. Camera stopped. Unlock, then choose Start camera.';return
                 item=self.worker.latest()
                 if item:
                     if item.get('type')=='observation':self.observe(item)
                     elif item.get('type')=='error':
+                        self.metrics.mark_lost()
                         message=item.get('message','Camera unavailable');await self._stop();self.state='unavailable';self.message=message;return
                 if not self.last_frame and time.monotonic()-self.started>25:
                     await self._stop();self.state='unavailable';self.message='No camera observations arrived. Check the selected camera and privacy permissions.';return
-                self.watchdog()
+                self._check_glide();self.watchdog()
                 if self.state!='active' and self.native_down:self._release_buttons()
                 if self.overlay:self.overlay.update(self.snapshot())
                 await asyncio.sleep(.016)

@@ -87,7 +87,11 @@ def hand_state(result,choice,previous,*,image_size=(1,1)):
     if not candidates:return None,previous,[]
     if previous:candidates.sort(key=lambda c:math.hypot(c[2][0]-previous[0],c[2][1]-previous[1]))
     points,category,center,palm,pose=candidates[0]
-    return {'x':max(0.,min(1.,points[8].x)),'y':max(0.,min(1.,points[8].y)),
+    # Aim with the knuckle centre (mean of the four finger bases), not the index fingertip:
+    # the fingertip is one of the pinching fingers, so it slides toward the thumb while a
+    # click forms, and its 4-point mean also halves the landmark noise of any single point.
+    knuckles=[points[i] for i in (5,9,13,17)]
+    return {'x':max(0.,min(1.,sum(p.x for p in knuckles)/4)),'y':max(0.,min(1.,sum(p.y for p in knuckles)/4)),
         # Handedness is a left/right classification, not hand-presence quality.
         # The SDK already applied configured detection/presence/tracking gates.
         'tracked':True,'handedness_score':category.score,

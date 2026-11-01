@@ -1,0 +1,91 @@
+/* Phone screens: one reading plane over the theme scene, one heading voice, grouped sections and a tab bar
+   whose active pill grows from the icon. Loaded after every component sheet; values come from the shared tokens in themes.css. */
+
+/* Content views sit on a calm scrim so text never competes with the scene. The trackpad keeps the full scene. */
+:root[data-theme] .view:not(#viewTrackpad) { background:var(--th-scrim); }
+
+/* Top bar */
+:root[data-theme] .top-bar { padding-inline:var(--th-space-4); gap:var(--th-space-2); }
+:root[data-theme] .brand { gap:var(--th-space-3); }
+:root[data-theme] .brand-text { font-family:var(--th-font-display); font-size:var(--th-fs-lg); font-weight:650; letter-spacing:var(--th-track-tight); }
+:root[data-theme] .status-pill { position:relative; isolation:isolate; border-radius:18px; padding-inline:var(--th-space-3); font-size:var(--th-fs-xs); font-weight:600; background:transparent; }
+:root[data-theme] .status-pill::before { content:""; position:absolute; inset:6px 0; z-index:-1; border-radius:16px; background:var(--th-level-2); border:1px solid var(--th-line); transition:background-color var(--th-dur-state) var(--th-ease); }
+:root[data-theme] .status-pill:hover { background:transparent; }
+:root[data-theme] .status-pill:hover::before { background:var(--th-level-3); }
+:root[data-theme] .status-pill .status-ping, :root[data-theme] #statusPing { color:var(--th-muted); font-weight:500; font-variant-numeric:tabular-nums; }
+
+/* Page rhythm: 20px between groups, 16px gutters, room under the last group. */
+:root[data-theme] :is(.console-page,.remote-shell) { padding:var(--th-space-5) var(--th-space-4) var(--th-space-8); gap:var(--th-space-5); }
+:root[data-theme] .files-workspace { --files-gap:var(--th-space-5); padding:var(--th-space-5) var(--th-space-4) var(--th-space-8); }
+
+/* One heading voice for every screen title and for the live title of what the PC is showing. */
+:root[data-theme] :is(.section-toolbar h1,.files-heading h1,.remote-heading h2,.desktop-context h1) {
+  font-family:var(--th-font-display); font-size:var(--th-fs-2xl); line-height:var(--th-lh-tight); font-weight:650; letter-spacing:var(--th-track-tight); color:var(--th-text); margin:0;
+}
+:root[data-theme] .section-toolbar h1 .ui-icon { width:22px; height:22px; color:var(--th-accent); }
+:root[data-theme] .section-toolbar h2 { font-family:var(--th-font-display); font-size:var(--th-fs-lg); line-height:var(--th-lh-snug); font-weight:620; letter-spacing:var(--th-track-snug); }
+:root[data-theme] .pad-heading h1 { font-family:var(--th-font-display); font-size:var(--th-fs-lg); font-weight:650; letter-spacing:var(--th-track-tight); }
+:root[data-theme] .pad-heading span { font-size:var(--th-fs-xs); color:var(--th-muted); }
+:root[data-theme] :is(.files-heading p,.context-app,.context-status,.catalog-status,#mediaArtist,.slide-context) { color:var(--th-muted); font-size:var(--th-fs-sm); line-height:var(--th-lh-body); }
+:root[data-theme] .context-app { margin-bottom:var(--th-space-2); font-weight:500; }
+:root[data-theme] .slide-context strong { color:var(--th-text); font-size:var(--th-fs-md); font-weight:600; font-variant-numeric:tabular-nums; }
+:root[data-theme] .desktop-context { padding:0 0 var(--th-space-5); border-bottom:1px solid var(--th-line); }
+:root[data-theme] .playback-time { color:var(--th-muted); font-size:var(--th-fs-xs); font-variant-numeric:tabular-nums; }
+
+/* Grouped sections: one level-1 plane per group, hairline edge, no shadow. */
+:root[data-theme] :is(.laser-card,.timer-details,.detail-drawer,.shortcut-details,.pc-audio-panel,.remote-mode-card) {
+  background:var(--th-level-1); border:1px solid var(--th-line); border-radius:14px; box-shadow:none;
+}
+:root[data-theme] .pc-audio-panel { margin:var(--th-space-4) var(--th-space-4) 0; padding:var(--th-space-3) var(--th-space-4); }
+:root[data-theme] .catalog-list { background:var(--th-level-1); border:1px solid var(--th-line); border-radius:14px; padding-inline:var(--th-space-3); overflow:hidden; }
+:root[data-theme] .catalog-list:empty { display:none; }
+:root[data-theme] .catalog-list > :last-child, :root[data-theme] .catalog-list > :last-child .catalog-item { border-bottom:0; }
+:root[data-theme] :is(.catalog-item,.app-row) { border-color:var(--th-line); }
+:root[data-theme] .catalog-item:hover { background:transparent; }
+:root[data-theme] .catalog-text strong, :root[data-theme] .catalog-text b { font-weight:600; letter-spacing:var(--th-track-snug); }
+:root[data-theme] .search-field { border-radius:12px; background:var(--th-level-2); border-color:var(--th-line); }
+:root[data-theme] .search-field:focus-within { border-color:var(--th-accent-line); background:var(--th-level-1); }
+:root[data-theme] .remote-mode-card { padding:var(--th-space-4); min-height:92px; }
+:root[data-theme] .remote-mode-card:hover { background:var(--th-level-2); }
+
+/* Bottom nav: labels a step larger, a pill that grows out of the active icon, the label follows in weight. */
+:root[data-theme] .bottom-nav { padding:var(--th-space-1) var(--th-space-1) max(var(--th-space-1),env(safe-area-inset-bottom)); }
+:root[data-theme] .bottom-nav .nav-tab,
+:root[data-theme] .bottom-nav .nav-tab.active { isolation:isolate; gap:3px; background:transparent; box-shadow:none; border-radius:12px; color:var(--th-muted); }
+:root[data-theme] .bottom-nav .nav-tab.active { color:var(--th-accent); }
+:root[data-theme] .bottom-nav .nav-tab > svg { width:22px; height:22px; transition:translate var(--th-dur-view) var(--th-ease); }
+:root[data-theme] .bottom-nav .nav-label { font-size:11px; line-height:13px; font-weight:550; color:var(--th-muted); letter-spacing:0; transition:color var(--th-dur-state) var(--th-ease); }
+:root[data-theme] .bottom-nav .nav-tab.active .nav-label { color:var(--th-text); font-weight:650; }
+:root[data-theme] .bottom-nav .nav-tab::after { top:calc(50% - 22px); bottom:auto; width:46px; height:28px; border-radius:14px; z-index:-1; background:var(--th-accent-soft); scale:.45 1; }
+:root[data-theme] .bottom-nav .nav-tab.active::after { scale:1 1; }
+:root[data-theme] .bottom-nav .nav-tab:not(.active):hover { background:transparent; color:var(--th-text); }
+:root[data-theme] .bottom-nav .nav-tab:active:not(.active) { background:transparent; }
+:root[data-theme] .bottom-nav .nav-tab:active:not(.active)::after { opacity:.6; scale:.8 1; background:var(--th-level-3); }
+:root[data-theme][data-contrast="increased"] .bottom-nav .nav-tab::after { background:transparent; border:2px solid var(--th-accent); }
+@media (max-width:360px) { :root[data-theme] .bottom-nav .nav-label { font-size:10px; } :root[data-theme] .bottom-nav .nav-tab::after { width:40px; } }
+
+/* Dialogs: a level-1 sheet on a deeper scrim, generous header. */
+:root[data-theme] .modal-card { border-radius:16px; border-color:var(--th-line); }
+:root[data-theme] .modal-header { padding:var(--th-space-2) var(--th-space-3) var(--th-space-2) var(--th-space-5); border-color:var(--th-line); }
+:root[data-theme] .modal-title { font-family:var(--th-font-display); font-size:var(--th-fs-lg); font-weight:650; letter-spacing:var(--th-track-tight); }
+
+/* Theme the parts the browser draws. */
+:root[data-theme] ::selection { background:var(--th-accent-soft); color:var(--th-text); }
+:root[data-theme] :is(input,textarea) { caret-color:var(--th-accent); }
+:root[data-theme] .view { scrollbar-width:thin; scrollbar-color:var(--th-line-strong) transparent; }
+
+/* Motion: a view enters from the side its tab sits on, overlays rise into place, lists arrive in order.
+   Reduced motion is stopped globally in themes.css and ui.css. Fill is backwards only, so nothing is held after the run. */
+@keyframes th-view-in{from{opacity:0;transform:translateX(var(--th-nav-x,0))}to{opacity:1;transform:none}}
+@keyframes th-fade-in{from{opacity:0}to{opacity:1}}
+@keyframes th-rise-in{from{opacity:0;transform:translateY(10px) scale(.97)}to{opacity:1;transform:none}}
+@keyframes th-item-in{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:none}}
+.main-content[data-nav-dir=forward]{--th-nav-x:18px}
+.main-content[data-nav-dir=back]{--th-nav-x:-18px}
+:root[data-theme] .main-content[data-nav-dir] .view.active{animation:th-view-in var(--th-dur-view) var(--th-ease) backwards}
+:root[data-theme] .modal-backdrop.open{animation:th-fade-in var(--th-dur-state) var(--th-ease) backwards}
+:root[data-theme] .modal-backdrop.open .modal-card{animation:th-rise-in var(--th-dur-view) var(--th-ease) backwards}
+:root[data-theme] details[open]>:not(summary){animation:th-item-in var(--th-dur-state) var(--th-ease) backwards}
+:root[data-theme] #appsList>*{animation:th-item-in var(--th-dur-state) var(--th-ease) backwards}
+:root[data-theme] #appsList>:nth-child(2){animation-delay:30ms}:root[data-theme] #appsList>:nth-child(3){animation-delay:60ms}:root[data-theme] #appsList>:nth-child(4){animation-delay:90ms}
+:root[data-theme] #appsList>:nth-child(5){animation-delay:120ms}:root[data-theme] #appsList>:nth-child(6){animation-delay:150ms}:root[data-theme] #appsList>:nth-child(n+7){animation-delay:180ms}

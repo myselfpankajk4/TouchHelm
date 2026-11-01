@@ -7,7 +7,7 @@ from unittest.mock import AsyncMock,Mock
 from server.aircontrol.engine import GestureEngine
 from server.aircontrol.profiles import default_profile
 from server.aircontrol.service import AirControlService
-from test_aircontrol_head_actions import face
+from test_aircontrol_head_actions import face,aim
 
 
 class HeadServiceTests(unittest.IsolatedAsyncioTestCase):
@@ -46,6 +46,33 @@ class HeadServiceTests(unittest.IsolatedAsyncioTestCase):
         self.input.mouse_up.assert_called_once_with('left')
         self.assertEqual(self.service.engine.dwell_action,'left_click')
 
+    async def test_explicit_release_does_not_dwell_click_again_until_departure(self):
+        self.service.profile.update(smoothing=0,head_stability=0)
+        self.service.engine=GestureEngine(self.service.profile)
+        await self.service.command('dwell_drag')
+        self.observe(1);self.observe(2)
+        self.assertTrue(self.service.engine.held)
+        await self.service.command('release_drag')
+        actions=self.service.practice_actions
+        self.observe(2.1);self.observe(3.2);self.observe(4.2)
+        self.assertEqual(self.service.practice_actions,actions)
+        self.observe(4.3,yaw=8);self.observe(4.6,yaw=8);self.observe(5.6,yaw=8)
+        self.assertEqual(self.service.practice_actions,actions+1)
+
+    async def test_explicit_release_requires_held_expression_to_relax_before_rearming(self):
+        self.service.profile.update(expressions_calibrated=True,calibrated_expressions=['smile'])
+        self.service.profile['bindings'].update(pinch_index='none',smile='left_drag')
+        self.service.engine=GestureEngine(self.service.profile)
+        def smile(t,value):
+            frame=face(t,smile=value);frame['seq']=int(t*1000);self.service.observe(frame,now=t)
+        smile(1,.9);smile(1.5,.9)
+        self.assertTrue(self.service.engine.held)
+        await self.service.command('release_drag')
+        smile(1.6,.9);smile(2.2,.9)
+        self.assertFalse(self.service.engine.held)
+        smile(2.3,0);smile(2.4,.9);smile(3,.9)
+        self.assertTrue(self.service.engine.held)
+
     async def test_action_selection_rejects_camera_off_and_hand_mode(self):
         self.service.worker=None
         with self.assertRaises(ValueError):await self.service.command('dwell_drag')
@@ -60,6 +87,6 @@ class HeadServiceTests(unittest.IsolatedAsyncioTestCase):
         self.service.state='active';self.service.owns_input=True;self.service.overlay=Mock()
         self.service.input.get_physical_cursor_pos.side_effect=lambda:self.service.last_point or (500,400)
         for seq,t in enumerate([1,2]):
-            frame=face(t,(x-.5)*36,(y-.5)*36);frame['seq']=seq;self.service.observe(frame,now=t)
+            frame=face(t,*aim(x,y));frame['seq']=seq;self.service.observe(frame,now=t)
         self.service.overlay.callback.assert_called_once_with('dwell_right')
         self.input.click.assert_not_called();self.input.mouse_down.assert_not_called()

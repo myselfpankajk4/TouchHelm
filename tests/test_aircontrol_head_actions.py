@@ -13,6 +13,19 @@ def face(t, yaw=0., pitch=0., smile=0.):
             'mouthSmileRight':smile,'browInnerUp':0.}}}
 
 
+def aim(x,y,head_range=18.,sensitivity=1.):
+    """Head yaw/pitch (degrees) that puts the pointer at screen fraction (x, y), through the edge-reach mapping."""
+    reach=GestureEngine._reach
+    def pose(target,axis):
+        low,high=-1.,1.
+        for _ in range(60):
+            mid=(low+high)/2
+            if reach(None,mid,axis)[0]<target-.5:low=mid
+            else:high=mid
+        return (low+high)/2*head_range*2/sensitivity
+    return pose(x,0),pose(y,1)
+
+
 class HeadActionsTests(unittest.TestCase):
     def engine(self,**settings):
         p=default_profile(mode='head');p.update(settings)
