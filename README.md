@@ -1,107 +1,134 @@
 # TouchHelm
 
-**Your PC, at your fingertips.** Turn your phone into a Windows trackpad, keyboard, presentation remote, media controller, app launcher, file browser and live desktop viewer/controller. TouchHelm runs on your PC and serves its controls to the phone's browser over your local Wi-Fi. Scan the desktop QR code and enter the PIN; no phone app is needed and no internet is needed after setup.
+**Your PC, at your fingertips.** Use your phone as a Windows trackpad, keyboard, file browser, presentation remote, media controller and live desktop viewer. Or control the PC with its webcam through AirControl.
+
+TouchHelm runs on your Windows PC and opens in your phone's browser over local Wi-Fi. No phone app, VPN, manually trusted certificate or internet relay is needed.
+
+**[Download TouchHelm 2.2.3 for Windows](https://github.com/myselfpankajk4/TouchHelm/releases/download/v2.2.3/TouchHelm-2.2.3-setup-win-x64.exe)** · [All releases](https://github.com/myselfpankajk4/TouchHelm/releases) · [Setup and local Wi-Fi guide][local-guide]
+
+## Current interface
+
+<img src="docs/images/desktop.png" alt="TouchHelm 2.2.3 Windows control centre with phone and AirControl modes" width="1000">
 
 <p>
-  <img src="docs/images/desktop.png" alt="TouchHelm desktop pairing and connected-device panel" width="620">
-  <img src="docs/images/trackpad.png" alt="TouchHelm phone trackpad with compact typing dock" width="250">
+  <img src="docs/images/trackpad.png" alt="Phone trackpad with mouse buttons and typing dock" width="250">
+  <img src="docs/images/files.png" alt="Local PC folder browsing with Send, Receive and a collapsed transfer progress strip" width="250">
+  <img src="docs/images/remote.png" alt="Remote viewer with monitor selection, touch modes, quality controls and PC audio" width="250">
 </p>
 
-*Previews use synthetic QA device data and illustrate the interface rather than an active connection.*
+Screenshots captured from the **2.2.3 interface on 1 November 2026** using preview mode and synthetic fixtures. Devices, files, artwork, tracking measurements and remote video are examples; no personal files, live pairing credentials, camera image or PC capture are shown.
 
-## Install (Windows 10/11 x64)
+<details>
+<summary>More phone screens: Presenter, Media, Keyboard and Apps</summary>
 
-Download the latest `TouchHelm-<version>-setup-win-x64.exe` from the
-[Releases page](https://github.com/myselfpankajk4/TouchHelm/releases/latest) and run it. It installs
-to Installed apps with a Start Menu shortcut, an optional desktop shortcut and an uninstaller.
-Python, the screen/audio libraries and the isolated AirControl camera runtime and models are
-included; no Python, PATH change or pip command is needed. Setup reuses Windows' WebView2 and
-prepares it if missing (only that Microsoft runtime may need internet). Keep one installed copy:
-uninstall an older version before installing a new one. See [installer details](docs/WINDOWS_INSTALLER.md).
+<p>
+  <img src="docs/images/presenter.png" alt="Presentation remote with slide information, Previous and Next, and the laser surface" width="250">
+  <img src="docs/images/media.png" alt="Now Playing with artwork, timeline, playback controls and the PC audio option" width="250">
+</p>
+<p>
+  <img src="docs/images/keyboard.png" alt="Phone keyboard with Windows Start, modifiers, shortcut builder and Numpad tab" width="250">
+  <img src="docs/images/apps.png" alt="Searchable app launcher with running and pinned app states" width="250">
+</p>
 
-The installer is unsigned, so SmartScreen, firewall and camera prompts can appear.
+</details>
 
-## Pairing
+## Install and connect
 
-1. Keep the phone and PC on the same Wi-Fi (not a guest network with client isolation).
-2. Open TouchHelm on the PC, choose **Pair your phone** and scan the QR code.
-3. Enter the PC's four-digit PIN. The selectable address and **Copy URL** are an alternative to scanning.
-4. Pick a tab and control your PC.
+1. Download the installer above and run it on **Windows 10/11 x64**. It adds TouchHelm to Installed apps, a Start Menu shortcut, an optional desktop shortcut and an uninstaller.
+2. Put your phone and PC on the same reachable Wi-Fi. **Android Chrome** is the primary phone target; no phone installation is required.
+3. Open TouchHelm on the PC, choose **Pair your phone**, and scan the local QR code. You can also copy the displayed address into Chrome.
+4. Enter the PC PIN when prompted. Enable **File access** or **Screen and audio access** on the PC when you want those features; both require PIN protection.
+5. Choose a phone tab. Keep TouchHelm running on the PC; **Minimize to tray** keeps the connection available.
 
-Everything runs over local HTTP/WebSocket; Windows Firewall must allow TouchHelm on the private
-network. There is no HTTPS, certificate, VPN or internet relay. See [Local Wi-Fi and Files](docs/LOCAL_WIFI.md)
-and [pairing and text sync](docs/PAIRING.md).
+The installer bundles its own Python, application libraries, screen/audio providers and isolated AirControl camera runtime/models. No system Python, pip command or PATH change is required. Setup reuses Microsoft's WebView2 and downloads its bootstrapper automatically if that runtime is missing; this setup step may need internet. Pairing and normal controls, file transfers and media use the local network without internet service.
 
-## Features
+**Updating:** exit TouchHelm from its tray menu, then run the newer installer. Updates use the existing app entry and preserve settings; routine upgrades do not require uninstalling first. [Installer details][installer-guide]
 
-**AirControl:** choose **Control via phone** or **AirControl** at startup. Head & Face is the
-fresh-profile default; hand pointing uses the knuckle centre, and clicks anchor to where the
-pointer was just before the gesture was recognised. Defaults are pinch, middle pinch, two
-fingers, fist (pause) and palm (resume); extra gestures sit under "More gestures (advanced)".
-Calibration, a practice cursor, remappable profiles, a status HUD and Windows dictation are included.
-The camera starts only on **Start camera**. [Setup guide](docs/AIRCONTROL.md) ·
-[Verification](docs/AIRCONTROL_VERIFICATION.md) · [Accuracy research](docs/AIRCONTROL_ACCURACY_RESEARCH.md).
+The test installer is unsigned. Windows may display SmartScreen or publisher prompts; TouchHelm does not promise warning-free installation.
 
-**Remote:** Control PC or View PC with live monitor video, trackpad or direct touch, pinch zoom,
-keyboard/numpad, quality presets (Clear 1080p default, 1440p Detail) and optional PC audio over
-WebRTC on the local network. Streaming starts disabled and needs the host PIN. Media can stream
-**PC audio only**. The Cast phone to PC guide uses Windows Wireless Display; desktop Settings has
-its installer. [Remote guide](docs/REMOTE.md).
+## Seven phone tabs
 
-**Files:** browse, preview and transfer files between phone and PC after enabling File access
-once on the PC. [Details](docs/LOCAL_WIFI.md).
-
-**Typing:** live typing by default, with two-way sync for supported focused Windows fields
-(password and read-only fields are excluded).
-
-| Tab | What it does |
+| Tab | Features |
 | --- | --- |
-| **Trackpad** | Large movement surface, left/middle/right clicks, tap, hold-to-drag, two-finger scrolling and edge scrolling. |
-| **Remote** | Live PC viewing/control, monitor selection, zoom, native keys, optional system audio and a casting guide. |
-| **Files** | Browse the PC, preview, send and receive files. |
-| **Presenter** | Previous/next above a large laser surface, monitor selection, countdown and an optional PowerPoint slide/notes drawer. |
-| **Media** | Now Playing with artwork, metadata, timeline, seeking and supported repeat/shuffle/speed controls. |
-| **Keyboard** | Native press/release, F1-F24, symbols, navigation, modifiers and integrated Numpad. |
-| **Apps** | Real Windows icons and verified windows; open, focus, pin and close. |
+| **Trackpad** | Large pointer surface; tap to click, hold to drag, two-finger scrolling/right click, edge scrolling and explicit left/middle/right buttons. A compact typing dock keeps text entry beside the pointer controls. |
+| **Files** | Browse local drives and Windows folders; search, sort, switch list/grid views and load more entries. Preview supported images, audio/video and PDFs; send phone files to a chosen PC folder or receive PC files through Chrome. |
+| **Presenter** | Previous/next slide, a large coloured laser surface, monitor selection and countdown timer. Supported PowerPoint sessions expose deck/slide context, current/next previews, speaker notes and slide selection. |
+| **Media** | Now Playing, artwork, artist/album information, player selection, timeline/seek and supported playback, shuffle, repeat and speed controls. Listen to PC audio without streaming its screen. |
+| **Keyboard** | Letters, symbols, navigation, F1–F24, native press/release, latched modifiers, shortcut combinations, Windows Start and an integrated Numpad. Release held keys explicitly when needed. |
+| **Apps** | Search registered Windows apps, view available app icons and verified windows, launch/focus apps, pin favourites and request normal window closure so application save prompts remain available. |
+| **Remote** | View or control a PC monitor with live video, trackpad/direct touch, pan, pinch zoom, cursor feedback, Fit/Actual size, fullscreen, quality presets, native keys and optional PC audio. |
 
-Five generative themes, **Aurora** (default), **Bloom**, **Resonance**, **Constellation** and
-**Ink**, cover the phone and desktop, each with light/dark appearance, reduced motion and increased
-contrast. Preferences belong to each device. See [Themes](docs/THEMES.md).
+### Files and local media
 
-Open **`/preview.html`** on a running host for a preview board of tabs, themes and simulated states
-(it cannot send PC input).
+- **Browse:** Desktop, Downloads, Documents, Pictures, Music, Videos and available local drives. Breadcrumbs, folder search, sorting and list/grid views help navigate larger folders.
+- **Send to PC:** choose files using the phone's picker, select a destination, or create a new folder. Existing files are preserved; duplicate names receive a number.
+- **Receive:** save individual or selected files through Chrome downloads. Chrome manages the phone's download permission and save location.
+- **Preview:** supported images and media open inside Files. PDFs have one **Open PDF in Chrome** action and a Receive option. Supported audio/video can also open in a separate Chrome tab; the inline player pauses when you do this.
+- **Audio formats:** MP3, M4A, WAV, Ogg, FLAC and AAC/ADTS (`.aac`, `.adts`) are recognised. Video formats include MP4, WebM and MOV. Playback still depends on the file's codec and the phone browser; Receive is the fallback for unsupported files.
+- **Portrait video:** the full frame uses contain sizing, with native controls fitted above navigation. The player adjusts to viewport changes and expanded/collapsed transfer history.
+- **Transfers:** a mini progress strip expands on tap to show names, direction, detailed progress, history, Cancel and Retry. Progress updates do not open it automatically. Uploads/downloads stream in bounded chunks rather than loading an entire file into phone memory.
+- **Limits:** up to **16 GiB per file** and 32 files per phone selection/queue. File sessions expire after 30 minutes. These are implementation limits, not a claim that every phone has completed a 16 GiB transfer.
 
-## Source-development requirements
+File access follows the signed-in Windows user's permissions. Network shares, reparse redirects and cloud-only placeholders are restricted; TouchHelm does not download cloud-only files in the background. Disconnecting or revoking access ends the file session. [Files setup and limits][local-guide]
 
-These apply when running from the checkout. The Windows installer includes its
-own Python and application libraries; testers do not need the setup below.
+### Live typing and two-way PC text
 
-- **Host:** Windows 10/11, Python, Windows PowerShell, WebView2 Runtime and .NET Framework 4.6.2 or later. Python 3.13 is used in this workspace. Tkinter remains available for the classic rollback UI.
-- **Phone:** a modern browser on the same reachable local network as the PC. The UI supports phone, landscape, and desktop browser sizes.
-- **Network:** HTTP/WebSocket **8765** and discovery UDP **53317**. Allow the LAN host through Windows Firewall on your private network if prompted.
+Live typing is on by default for a new phone. Supported focused Windows fields can sync in both directions: focusing an editable PC field can raise the phone typing dock, PC edits appear on the phone, and phone edits update the active field. Selected Chrome autocomplete suggestions do not replace an ongoing phone draft.
 
-Node.js is needed only for development tests, not normal app use.
+Password and read-only fields are excluded. Support depends on the application's Windows accessibility information; this is not universal text-field access. Offline drafts remain local and require explicit Send after reconnecting. [Typing and pairing guide][typing-guide]
 
-## Run from source
+### Remote viewing, control and PC audio
 
-This repository is private. Clone it with a GitHub account that has access:
+Choose **Control PC** or **View PC**, select a monitor, and use trackpad or direct-touch interaction. Pinch to zoom, pan without clicking the PC, or enter fullscreen. Quality presets cap video at Saver 540p/15, Balanced 720p/30, Clear 1080p/30 or Detail 1440p/24; actual performance depends on hardware and the network.
+
+The **Hear PC audio on this phone** option in Media and PC audio in Remote share one controller. Audio-only mode captures the Windows output device without capturing the screen or granting pointer control. Playback starts after host confirmation; Unmute appears if Chrome requires another playback gesture.
+
+Windows lock, permission changes and disconnects release app-owned input. Switching phone tabs can keep the stream alive; backgrounding/locking the phone can pause it and require Resume. The casting guide covers compatible Windows Wireless Display setup; TouchHelm does not guarantee receiver compatibility. [Remote guide][remote-guide]
+
+## AirControl: use the PC webcam
+
+<img src="docs/images/aircontrol.png" alt="AirControl's non-injecting practice workspace with calibration, exercises and session controls" width="1000">
+
+Choose **AirControl** on the desktop for **Head & Face**, **Hand** or **Combined** control. Head & Face is the fresh-profile default. The camera starts only when you select **Start camera**.
+
+- Select a camera and monitor, calibrate, and practice with a simulated cursor before enabling PC control.
+- Head mode includes dwell-based left/right/double click, two-step drag/drop and a scrolling action dock. Personal expression calibration supports additional actions.
+- Hand mode uses knuckle-centred pointing, anchored clicks, pinch gestures, scrolling, and pause/resume gestures. Profiles and advanced gesture mappings are adjustable.
+- Practice includes click targets, drag/drop, scrolling and free movement. Practice sends no Windows mouse or keyboard input.
+- Session, Gesture mappings, Practice, Personal settings and Diagnostics separate setup from daily use. Pause/Stop, the floating HUD and tray controls provide escape routes.
+- Windows dictation and Voice Access guidance are available. Windows manages microphone/speech permissions.
+- Tracking runs in the isolated PC camera runtime. Reports contain bounded diagnostics and are exported only on request; they do not upload camera frames or field contents.
+
+Tracking quality depends on the webcam, lighting, pose and hardware. Physical camera and speech acceptance remain separate from simulated tests. [AirControl setup][air-guide] · [Practice and daily-use details][air-daily-guide]
+
+## Appearance and desktop controls
+
+Five themes—**Aurora** (default), **Bloom**, **Resonance**, **Constellation** and **Ink**—cover phone and desktop, with light/dark appearance and increased contrast. The generative themes offer Rich, Calm and Off effects; reduced-motion preferences take priority. Preferences are saved per device. Browser-dependent vibration feedback has its own test control. [Theme details][theme-guide]
+
+The desktop control centre includes mode selection, pairing, connected devices/activity, settings, diagnostics, remote Stop controls and minimise-to-tray. Camera, Files and screen/audio permissions remain explicit PC-side choices.
+
+## Connection, privacy and compatibility
+
+Controls and files use **local HTTP/WebSocket without TLS**. Screen and PC audio use **direct encrypted WebRTC** between verified local peers. Home Wi-Fi does not turn HTTP into end-to-end encryption; use a trusted private network. No internet relay, STUN/TURN fallback, mobile certificate or router port forwarding is configured.
+
+PIN protection, peer/Host/Origin checks, bounded work and disconnect cleanup guard access. Files and screen/audio start disabled and have separate PC permissions. Phone pages cannot grant themselves these permissions. Config, tokens and native helper data stay outside served assets.
+
+PowerPoint, Windows media sessions, app windows, volume and brightness expose different capabilities. Missing slide counts, playlists, seek/readback or other provider features remain unavailable. TouchHelm cannot unlock Windows, cross UAC, wake a powered-off PC or guarantee input to elevated applications. Hardware Fn functions and universal playlist access are not promised.
+
+## Run the released source
+
+The installer is the normal end-user path. Source development needs Windows, Python 3.13 and the Windows UI/runtime dependencies described in the guides. Node.js 20+ is needed only for browser development/tests.
 
 ```powershell
 git clone https://github.com/myselfpankajk4/TouchHelm.git
 cd TouchHelm
+git checkout v2.2.3
 .\run.bat
 ```
 
-On first launch, `run.bat` creates `.venv` and installs the pinned Python dependencies. Later launches use that environment and run the current source.
+This checks out the released source matching the screenshots. `run.bat` creates the source virtual environment and installs its pinned dependencies. Optional source-mode streaming/camera setup is documented in the Remote and AirControl guides; these components are bundled in the Windows installer.
 
-1. Keep the phone and PC on the same network.
-2. Scan the QR code in the TouchHelm desktop window.
-3. Open the link and enter a PIN if enabled.
-4. Select a tab and control your PC.
-
-The selectable PC address and **Copy URL** button provide an alternative to scanning. Keep the host running; **Minimize to tray** hides its window without disconnecting the phone.
-
-### Manual setup
+For a manually prepared source environment:
 
 ```powershell
 python -m venv .venv
@@ -109,117 +136,45 @@ python -m venv .venv
 .\.venv\Scripts\python.exe main.py
 ```
 
-Enable PIN pairing, run without the desktop window, or choose the classic desktop:
+`main.py --pin <four-digits>`, `--headless` and `--classic-ui` select PIN protection, headless hosting and the Tk fallback. Settings are stored in the checkout's ignored `config.json` for source mode, or `%LOCALAPPDATA%\TouchHelm` for the installed app. The normal ports are HTTP/WebSocket **8765** and discovery UDP **53317**.
 
-```powershell
-.\.venv\Scripts\python.exe main.py --pin 1234
-.\.venv\Scripts\python.exe main.py --headless
-.\.venv\Scripts\python.exe main.py --classic-ui
-```
-
-Use your own four-digit PIN; `1234` is an example. Changing/enabling a PIN revokes phone authorization and releases held inputs.
-
-### Updates
-
-Pull changes, then launch `run.bat` again. The single-instance launcher restores the current window when source and startup settings match. Changed source requests graceful shutdown and starts the new build after ownership is released. It reports failure if that handoff cannot finish safely. The QR carries the current browser build; the phone checks on open/focus and refreshes a confirmed changed build while keeping its draft.
-
-Browser preferences and saved update drafts migrate from the former app name. This workspace's **TouchHelm (Latest)** shortcut points to the source launcher and uses the TouchHelm icon. For a host started before v2, quit that older host once before using the new single-instance lifecycle.
-
-## App compatibility
-
-Details depend on what each desktop application exposes:
-
-| Integration | Available behavior |
-| --- | --- |
-| **PowerPoint** | Deck title, slide count/title, slideshow state, direct COM commands, on-demand current/next previews, notes and slide selection. |
-| **Other recognized presenter/browser/PDF windows** | Verified presentation-window context and guarded keyboard fallback. Generic browser windows are rejected; unavailable slide counts/previews remain unavailable. |
-| **Windows media sessions** | Player selection, artwork, metadata, state/timeline, seek bounds, and supported playback/seek/shuffle/repeat/rate commands. |
-| **Windows Media Player** | Selectable queue when a running instance exposes it through COM. |
-| **Volume/brightness** | Native volume keys request the Windows flyout. TouchHelm overlays use measured readback. Missing readback stays unavailable; brightness depends on monitor/driver support. |
-
-Windows media sessions provide no universal playlist API. TouchHelm does not scan Music/Videos folders in this flow. App windows use registered or executable identity; uncertain matches are not labeled Running. Windows may refuse foreground activation. Launch counts record successful requests, not proof that an app finished opening. Elevated applications can reject ordinary native input; hardware Fn functions are not promised.
-
-## Settings and privacy
-
-Local settings are saved automatically in `config.json`, which is excluded from Git. `config.example.json` is a clean reference without a personal hostname or enabled PIN. Launch history in `.touchhelm_usage.json` is also excluded.
-
-| Setting | Default | Range/values |
-| --- | --- | --- |
-| Port | `8765` | 1–65535; restart to change listening port |
-| Pointer sensitivity | `1.3` | 0.4–3.5 |
-| Pointer acceleration | `1.25` | 1.0–2.5 |
-| Scroll speed | `1.0` | 0.3–2.5 |
-| Natural scrolling | Off | On/off |
-| PIN required | Off | Four ASCII digits when enabled |
-| Laser color | Red | Red, green, blue, amber |
-| Theme | Aurora | Aurora, Bloom, Resonance, Constellation, Ink; device-local |
-| Live typing | On for a new device | Device-local opt-out; offline drafts require explicit Send |
-| Theme effects | Rich | Rich / Calm / Off; system reduced motion wins |
-
-Traffic uses HTTP/WebSocket on the local Wi-Fi only; screen and audio use encrypted WebRTC between verified local peers. Tokens and settings are kept in a restricted per-user folder outside served assets.
-
-An enabled PIN gates input, context/catalog queries, settings and private artwork/icons. Asset URLs contain opaque IDs; authentication uses headers. App/media commands use registered catalog IDs. The privileged desktop bridge belongs only to the owned local desktop window and has no phone HTTP command route.
-
-## Development and verification
-
-The host uses Python/aiohttp, an owned WebView2 desktop shell (with Tk rollback), and Win32 input. The phone uses plain HTML/CSS/JavaScript. A lazy hidden PowerShell bridge provides COM/WinRT context; slow provider work runs outside the input event loop and returns bounded failure states.
-
-### Safe Python regressions
-
-After installing `requirements.txt`, run on Windows:
+### Development checks
 
 ```powershell
 .\.venv\Scripts\python.exe -m unittest discover -s tests -p "test_*.py"
-```
-
-### Browser checks
-
-With Node.js 20 or later:
-
-```powershell
 npm ci
 npm test
 npx playwright install chromium
 npm run test:browser
 ```
 
-`npm run test:visual` additionally writes screenshots to `tests/artifacts/`. `PLAYWRIGHT_MODULE` and `CHROMIUM_EXECUTABLE` can select an existing installation. No Codex runtime is required.
-
-These suites mock native effects so they do not type, click, launch apps, play media, change volume/brightness, or lock the PC. **`test_touchhelm.py` is an older manual native-action script, not a safe regression suite.** Do not run it for unattended verification.
-
-Physical phone gestures, live PowerPoint/player integration, and native feedback still need a device smoke test. See [BUGFIX_REPORT.md](BUGFIX_REPORT.md) for evidence and limitations.
-
-## Project layout
-
-```text
-main.py                    Desktop/headless entry point
-run.bat                    Source launcher and first-run setup
-gui/webview_window.py      Owned WebView2 bridge, pairing, devices, tray
-gui/web/                   Shared themed desktop interface
-gui/app_window.py          Classic Tk rollback interface
-server/web_server.py       HTTP/WebSocket and authentication
-server/windows_input.py    Native input, volume and brightness
-server/aircontrol/         Isolated webcam worker, gestures, ownership, HUD and speech
-server/desktop_services.py Async catalog/context interface
-server/desktop_bridge.ps1  COM/WinRT providers
-server/osd_overlay.py      Desktop feedback
-server/build_version.py    Content-derived browser versions
-server/instance_control.py Latest-source restore/restart lifecycle
-server/private_storage.py  Restricted per-user storage for tokens and settings
-server/asset_store.py      Bounded opaque artwork/icon cache
-web/                       Phone controls, generative themes, PWA assets
-tests/                     Safe regressions and previews
-docs/images/               README interface previews
-```
-
-The browser is the only phone entry point; there is no phone app.
+`npm run test:visual` captures UI screenshots. The regression harnesses mock native PC effects; physical phone, camera, PowerPoint/player and Windows integration still need participating-user checks. `test_touchhelm.py` is a legacy manual native-action script, not an unattended regression suite.
 
 ## Troubleshooting
 
-- **Cannot connect:** check the displayed address, reachable network, running host, and private-network firewall permission. Guest Wi-Fi/client isolation may block access.
-- **Old UI:** launch TouchHelm (Latest) and scan the current QR. Changed source uses the graceful single-instance restart. Quit a pre-v2 host once if it is still running.
-- **No media/presentation details:** open the application on the PC; unavailable fields depend on provider support.
-- **Vibration missing:** use Settings → Test vibration. An accepted API request is not proof of a physical pulse; browser support, user activation and phone settings matter.
-- **Phone screen turns off:** change the phone's screen timeout; the page cannot keep it awake over plain HTTP.
+- **Cannot connect:** keep the host running, use its current address, allow private-network firewall access and avoid guest-network client isolation.
+- **Files or screen/audio unavailable:** enable that specific permission on the PC and pair with its PIN. Phone settings cannot enable it.
+- **Old interface:** reload Chrome and reconnect to the current host. Source build changes use the single-instance handoff and browser version checks.
+- **A file will not play:** browser codecs differ. Try Open in Chrome or Receive; ensure cloud files are available offline on the PC first.
+- **PC audio is silent:** enable PC screen/audio access, play something through the Windows output device and use Unmute if requested.
+- **The phone locks or goes to the background:** the browser may suspend media/transfers. Return, reconnect and retry or Resume. Plain HTTP does not provide automatic screen-awake support.
 
-This is a private development repository. No public release or open-source license is currently declared.
+## Guides
+
+These links target the documented **2.2.3 release**:
+
+- [Local Wi-Fi, Files, permissions and transfer limits][local-guide]
+- [Windows installation, updating and uninstalling][installer-guide]
+- [Pairing and two-way text synchronization][typing-guide]
+- [Remote viewing, control and system audio][remote-guide]
+- [AirControl setup and gestures][air-guide]
+- [AirControl practice, diagnostics and daily use][air-daily-guide]
+- [Themes and effects][theme-guide]
+
+[local-guide]: https://github.com/myselfpankajk4/TouchHelm/blob/v2.2.3/docs/LOCAL_WIFI.md
+[installer-guide]: https://github.com/myselfpankajk4/TouchHelm/blob/v2.2.3/docs/WINDOWS_INSTALLER.md
+[typing-guide]: https://github.com/myselfpankajk4/TouchHelm/blob/v2.2.3/docs/PAIRING.md
+[remote-guide]: https://github.com/myselfpankajk4/TouchHelm/blob/v2.2.3/docs/REMOTE.md
+[air-guide]: https://github.com/myselfpankajk4/TouchHelm/blob/v2.2.3/docs/AIRCONTROL.md
+[air-daily-guide]: https://github.com/myselfpankajk4/TouchHelm/blob/v2.2.3/docs/AIRCONTROL_DAILY_USE_RELEASE.md
+[theme-guide]: https://github.com/myselfpankajk4/TouchHelm/blob/v2.2.3/docs/THEMES.md
